@@ -5,6 +5,6 @@ Priority: optional
 Architecture: @ARCH@
 Maintainer: @MAINTAINER@
 Depends: libc6
-Description: Astro Ai Processor desktop astrophotography processor
- Astro Ai Processor is a desktop application for astrophotography processing
+Description: Astro AI Processor desktop astrophotography processor
+ Astro AI Processor is a desktop application for astrophotography processing
  with tools such as levels, curves, denoise, mosaic and analysis.

@@ -2,7 +2,7 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Astro Ai Processor (venv)",
+      "name": "Astro AI Processor (venv)",
       "type": "debugpy",
       "request": "launch",
       "program": "${workspaceFolder}/Astro Ai Processor.py",

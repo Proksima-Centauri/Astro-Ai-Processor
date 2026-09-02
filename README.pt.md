@@ -1,4 +1,4 @@
-# Astro Ai Processor
+# Astro AI Processor
 
 Aplicativo desktop para processamento de astrofotografia em Python (PyQt5 + OpenCV + NumPy).
 

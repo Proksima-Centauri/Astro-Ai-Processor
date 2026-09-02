@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
 
-SOURCE_DIR="${REPO_ROOT}/dist/Astro Ai Processor"
+SOURCE_DIR="${REPO_ROOT}/dist/Astro AI Processor"
 OUTPUT_DIR="${REPO_ROOT}/dist"
 INSTALLER_NAME="Astro-Ai-Processor-Installer-Linux"
 PYTHON_BIN=""
@@ -17,7 +17,7 @@ Usage:
   ./packaging/linux/build-gui-installer.sh [options]
 
 Options:
-  --source DIR         Path to one-dir app bundle (default: dist/Astro Ai Processor)
+  --source DIR         Path to one-dir app bundle (default: dist/Astro AI Processor)
   --output-dir DIR     Output directory for installer (default: dist)
   --name NAME          Installer executable name
   -h, --help           Show help
@@ -62,9 +62,9 @@ else
   exit 1
 fi
 
-if [[ ! -x "${SOURCE_DIR}/Astro Ai Processor" || ! -d "${SOURCE_DIR}/_internal" ]]; then
+if [[ ! -x "${SOURCE_DIR}/Astro AI Processor" || ! -d "${SOURCE_DIR}/_internal" ]]; then
   echo "Error: source bundle not valid: ${SOURCE_DIR}" >&2
-  echo "Expected executable 'Astro Ai Processor' and '_internal' directory." >&2
+  echo "Expected executable 'Astro AI Processor' and '_internal' directory." >&2
   exit 1
 fi
 
@@ -78,7 +78,7 @@ mkdir -p "${OUTPUT_DIR}"
   --distpath "${OUTPUT_DIR}" \
   --workpath "/tmp/opencode/pyinstaller-work" \
   --specpath "/tmp/opencode/pyinstaller-spec" \
-  --add-data "${SOURCE_DIR}:Astro Ai Processor" \
+  --add-data "${SOURCE_DIR}:Astro AI Processor" \
   "${SCRIPT_DIR}/gui_installer.py"
 
 echo "Built clickable installer: ${OUTPUT_DIR}/${INSTALLER_NAME}"

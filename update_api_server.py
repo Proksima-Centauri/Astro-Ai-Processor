@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Simple update API server for Astro Ai Processor.
+"""Simple update API server for Astro AI Processor.
 
 Endpoints:
 - GET  /health

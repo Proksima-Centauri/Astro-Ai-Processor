@@ -5,22 +5,22 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
 
 PACKAGE_NAME="astro-ai-processor"
-APP_NAME="Astro Ai Processor"
+APP_NAME="Astro AI Processor"
 VERSION="0.1.0"
 ARCH="amd64"
-MAINTAINER="Astro Ai Processor Team <support@example.com>"
-SOURCE_DIR="${REPO_ROOT}/dist/Astro Ai Processor"
+MAINTAINER="Astro AI Processor Team <support@example.com>"
+SOURCE_DIR="${REPO_ROOT}/dist/Astro AI Processor"
 OUTPUT_DIR="${REPO_ROOT}/dist"
 
 print_help() {
   cat <<'EOF'
-Build Debian package (.deb) for Astro Ai Processor
+Build Debian package (.deb) for Astro AI Processor
 
 Usage:
   ./packaging/deb/build-deb.sh [options]
 
 Options:
-  --source DIR         Path to one-dir bundle (contains "Astro Ai Processor" and "_internal").
+  --source DIR         Path to one-dir bundle (contains "Astro AI Processor" and "_internal").
   --output-dir DIR     Directory for generated .deb (default: ./dist).
   --version VERSION    Debian package version (default: 0.1.0).
   --arch ARCH          Package architecture (default: amd64).
@@ -68,8 +68,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ ! -x "${SOURCE_DIR}/Astro Ai Processor" || ! -d "${SOURCE_DIR}/_internal" ]]; then
-  echo "Error: source directory must contain executable 'Astro Ai Processor' and '_internal'." >&2
+if [[ ! -x "${SOURCE_DIR}/Astro AI Processor" || ! -d "${SOURCE_DIR}/_internal" ]]; then
+  echo "Error: source directory must contain executable 'Astro AI Processor' and '_internal'." >&2
   echo "Received: ${SOURCE_DIR}" >&2
   exit 1
 fi

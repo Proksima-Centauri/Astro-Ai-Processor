@@ -1,4 +1,4 @@
-# Astro Ai Processor
+# Astro AI Processor
 
 Python ile yazilmis masaustu astrofotografi duzenleme uygulamasi (PyQt5 + OpenCV + NumPy).
 

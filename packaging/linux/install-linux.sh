@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP_NAME="Astro Ai Processor"
+APP_NAME="Astro AI Processor"
 APP_ID="astro-ai-processor"
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -17,13 +17,13 @@ UNINSTALL=0
 
 print_help() {
   cat <<'EOF'
-Astro Ai Processor Linux installer
+Astro AI Processor Linux installer
 
 Usage:
   ./packaging/linux/install-linux.sh [options]
 
 Options:
-  --source DIR         Path to extracted one-dir app bundle (contains "Astro Ai Processor" and "_internal").
+  --source DIR         Path to extracted one-dir app bundle (contains "Astro AI Processor" and "_internal").
   --install-dir DIR    Target install directory (default: ~/.local/opt/astro-ai-processor).
   --desktop-dir DIR    Directory for .desktop entry (default: ~/.local/share/applications).
   --no-desktop         Do not create/update .desktop launcher.
@@ -39,27 +39,27 @@ resolve_source_dir() {
   fi
 
   local candidates=(
-    "${SCRIPT_DIR}/../../dist/Astro Ai Processor"
-    "${SCRIPT_DIR}/../../Astro Ai Processor"
-    "$(pwd)/Astro Ai Processor"
+    "${SCRIPT_DIR}/../../dist/Astro AI Processor"
+    "${SCRIPT_DIR}/../../Astro AI Processor"
+    "$(pwd)/Astro AI Processor"
   )
 
   local candidate
   for candidate in "${candidates[@]}"; do
-    if [[ -x "${candidate}/Astro Ai Processor" && -d "${candidate}/_internal" ]]; then
+    if [[ -x "${candidate}/Astro AI Processor" && -d "${candidate}/_internal" ]]; then
       SOURCE_DIR="${candidate}"
       return
     fi
   done
 
   echo "Error: could not find app bundle automatically." >&2
-  echo "Use --source with a directory that contains 'Astro Ai Processor' and '_internal'." >&2
+  echo "Use --source with a directory that contains 'Astro AI Processor' and '_internal'." >&2
   exit 1
 }
 
 validate_source_dir() {
-  if [[ ! -x "${SOURCE_DIR}/Astro Ai Processor" ]]; then
-    echo "Error: ${SOURCE_DIR} does not contain executable 'Astro Ai Processor'." >&2
+  if [[ ! -x "${SOURCE_DIR}/Astro AI Processor" ]]; then
+    echo "Error: ${SOURCE_DIR} does not contain executable 'Astro AI Processor'." >&2
     exit 1
   fi
   if [[ ! -d "${SOURCE_DIR}/_internal" ]]; then
@@ -85,7 +85,7 @@ write_launcher() {
   cat > "${launcher_path}" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
-exec "${INSTALL_DIR}/Astro Ai Processor" "\$@"
+exec "${INSTALL_DIR}/Astro AI Processor" "\$@"
 EOF
   chmod +x "${launcher_path}"
 }
@@ -177,7 +177,7 @@ fi
 
 mkdir -p "$(dirname "${INSTALL_DIR}")"
 cp -a "${SOURCE_DIR}" "${INSTALL_DIR}"
-chmod +x "${INSTALL_DIR}/Astro Ai Processor"
+chmod +x "${INSTALL_DIR}/Astro AI Processor"
 
 write_launcher
 

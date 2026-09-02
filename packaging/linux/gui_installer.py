@@ -9,10 +9,10 @@ from pathlib import Path
 from tkinter import BooleanVar, StringVar, Tk, filedialog, messagebox, ttk
 
 
-APP_NAME = "Astro Ai Processor"
-APP_DISPLAY_NAME = "Astro Ai Processor"
+APP_NAME = "Astro AI Processor"
+APP_DISPLAY_NAME = "Astro AI Processor"
 APP_ID = "astro-ai-processor"
-BUNDLE_DIR_NAME = "Astro Ai Processor"
+BUNDLE_DIR_NAME = "Astro AI Processor"
 
 
 def source_candidates() -> list[Path]:
@@ -118,7 +118,7 @@ class InstallerUI:
 
         ttk.Label(
             frame,
-            text="Instalator Astro Ai Processor",
+            text="Instalator Astro AI Processor",
             font=("Sans", 14, "bold"),
         ).grid(row=0, column=0, columnspan=3, sticky="w")
 
@@ -158,7 +158,7 @@ class InstallerUI:
         if src is None:
             messagebox.showerror(
                 "Blad",
-                "Nie znaleziono paczki aplikacji. Instalator musi miec dostep do folderu 'Astro Ai Processor'.",
+                "Nie znaleziono paczki aplikacji. Instalator musi miec dostep do folderu 'Astro AI Processor'.",
             )
             return
 

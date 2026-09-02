@@ -1,4 +1,4 @@
-# Astro Ai Processor
+# Astro AI Processor
 
 Python (PyQt5 + OpenCV + NumPy) de tsukurareta asutoro fotogurafi henshu no desukutoppu apuri desu.
 

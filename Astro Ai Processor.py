@@ -86,6 +86,10 @@ LOCAL_AI_DOWNLOAD_SOURCES = {
     "qwen2.5-0.5b-instruct.Q4_K_M.gguf": "https://huggingface.co/bartowski/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/Qwen2.5-0.5B-Instruct-Q4_K_M.gguf",
 }
 APP_VERSION = "1.0.0"
+LOCAL_AI_DEFAULT_N_CTX = 3072
+LOCAL_AI_DEFAULT_MAX_TOKENS = 900
+LOCAL_AI_DEFAULT_TEMPERATURE = 0.2
+LOCAL_AI_DEFAULT_TOP_P = 0.92
 
 
 def parse_version(version: str):
@@ -690,7 +694,7 @@ except ImportError:
 from deep_sky_catalog import DEEP_SKY_CATALOG
 
 I18N = {
-    "app_title": {"pl": "Astro Ai Processor v1.0.0", "en": "Astro Ai Processor v1.0.0"},
+    "app_title": {"pl": "Astro AI Processor v1.0.0", "en": "Astro AI Processor v1.0.0"},
     "action_open": {"pl": "Otwórz", "en": "Open"},
     "action_save": {"pl": "Zapisz", "en": "Save"},
     "action_save_as": {"pl": "Zapisz jako...", "en": "Save As..."},
@@ -981,13 +985,13 @@ def ensure_linux_desktop_entry() -> None:
             startup_wm_class = os.path.splitext(os.path.basename(sys.executable))[0]
         else:
             exec_cmd = f'python3 "{os.path.abspath(__file__)}"'
-            startup_wm_class = "Astro Ai Processor"
+            startup_wm_class = "Astro AI Processor"
 
         desktop_entry = "\n".join([
             "[Desktop Entry]",
             "Type=Application",
             "Version=1.0",
-            "Name=Astro Ai Processor",
+            "Name=Astro AI Processor",
             f"Exec={exec_cmd}",
             f"Icon={target_icon}",
             "Terminal=false",
@@ -7502,6 +7506,7 @@ class AIAssistantPanel(QFrame):
             message,
             payload,
             model_file=getattr(self.app, "local_ai_model_file", ""),
+            processor_cores=getattr(self.app, "processor_cores", None),
         )
         self.ai_worker.finished_signal.connect(self.on_ai_finished)
         self.ai_worker.start()
@@ -8714,7 +8719,9 @@ def build_local_ai_system_prompt() -> str:
         f"Nazywasz się {AI_ASSISTANT_NAME}. "
         "Jesteś ekspertem od analizy zdjęć astronomicznych. Otrzymujesz tylko metadane i wyniki analizy w formacie JSON. "
         "Nie interpretuj surowych pikseli obrazu ani nie zakładaj dodatkowych danych poza tym, co jest w payload. "
-        "Odpowiadaj krótko i naturalnie po polsku. "
+        "Odpowiadaj naturalnie po polsku i dbaj o poprawna odmiane wyrazow. "
+        "Pisz zwiezle, ale pelnymi zdaniami, bez urywania odpowiedzi. "
+        "Jesli temat jest szeroki, zacznij od konkretnej odpowiedzi i dopiero potem dopisz krotkie doprecyzowanie. "
         "Na powitanie daj krótki komunikat bez podsumowywania payload. "
         "Jeśli użytkownik pyta o filtr 3D FLY, najpierw opieraj odpowiedź o lokalną instrukcję 3d_fly_help.md. "
         "Jesli uzytkownik prosi o ASE, NIE generuj kodu od razu. "
@@ -8785,7 +8792,7 @@ def build_local_ai_missing_model_message() -> str:
 class LocalAIAssistant:
     _instances = {}
 
-    def __init__(self, model_path: str, n_ctx: int = 2048, n_threads: int = None):
+    def __init__(self, model_path: str, n_ctx: int = LOCAL_AI_DEFAULT_N_CTX, n_threads: int = None):
         if not LLAMA_CPP_AVAILABLE or Llama is None:
             raise RuntimeError("Brak biblioteki llama-cpp-python. Zainstaluj zaleznosc i uruchom ponownie aplikacje.")
         self.model_path = str(model_path or "").strip()
@@ -8798,12 +8805,12 @@ class LocalAIAssistant:
             model_path=self.model_path,
             n_ctx=self.n_ctx,
             n_threads=self.n_threads,
-            n_batch=256,
+            n_batch=512,
             verbose=False,
         )
 
     @classmethod
-    def get(cls, model_path: str, n_ctx: int = 2048, n_threads: int = None):
+    def get(cls, model_path: str, n_ctx: int = LOCAL_AI_DEFAULT_N_CTX, n_threads: int = None):
         key = (os.path.abspath(str(model_path or "")), int(max(512, n_ctx)), int(max(1, n_threads if n_threads is not None else min(8, max(1, os.cpu_count() or 4)))))
         instance = cls._instances.get(key)
         if instance is None:
@@ -8811,7 +8818,7 @@ class LocalAIAssistant:
             cls._instances[key] = instance
         return instance
 
-    def ask(self, prompt: str, context: dict = None, max_tokens: int = 420, temperature: float = 0.25, json_response: bool = False) -> str:
+    def ask(self, prompt: str, context: dict = None, max_tokens: int = LOCAL_AI_DEFAULT_MAX_TOKENS, temperature: float = LOCAL_AI_DEFAULT_TEMPERATURE, json_response: bool = False) -> str:
         payload = context if isinstance(context, dict) else {}
         response_mode_hint = (
             "Jesli potrzebny jest wynik sterujacy, zwroc tylko poprawny JSON. "
@@ -8823,14 +8830,14 @@ class LocalAIAssistant:
             f"SYSTEM:\n{build_local_ai_system_prompt()}\n\n"
             f"{response_mode_hint}\n"
             f"USER:\n{str(prompt or '').strip()}\n\n"
-            f"KONTEKST JSON:\n{json.dumps(payload, ensure_ascii=False, indent=2)}\n\n"
+            f"KONTEKST JSON:\n{json.dumps(payload, ensure_ascii=False, separators=(',', ':'))}\n\n"
             "ODPOWIEDZ:"
         )
         output = self._llm(
             full_prompt,
             max_tokens=int(max(64, max_tokens)),
             temperature=float(max(0.0, min(1.2, temperature))),
-            top_p=0.95,
+            top_p=float(max(0.5, min(1.0, LOCAL_AI_DEFAULT_TOP_P))),
             stop=["\nSYSTEM:", "\nUSER:"],
             echo=False,
         )
@@ -8845,23 +8852,35 @@ class LocalAIAssistant:
 class LocalAIWorker(QThread):
     finished_signal = pyqtSignal(str, str, object)
 
-    def __init__(self, message: str, payload: dict, model_file: str = ""):
+    def __init__(self, message: str, payload: dict, model_file: str = "", processor_cores: int = None):
         super().__init__()
         self.message = str(message or "")
         self.payload = payload if isinstance(payload, dict) else {}
         self.model_file = str(model_file or "")
+        self.processor_cores = int(max(1, processor_cores)) if processor_cores else None
 
     def run(self):
         try:
             model_path = resolve_local_ai_model_path(self.model_file)
             if not model_path:
                 raise RuntimeError(build_local_ai_missing_model_message())
-            assistant = LocalAIAssistant.get(model_path=model_path, n_ctx=2048)
-            result = assistant.ask(self.message, self.payload)
+            assistant = LocalAIAssistant.get(
+                model_path=model_path,
+                n_ctx=LOCAL_AI_DEFAULT_N_CTX,
+                n_threads=self.processor_cores,
+            )
+            result = assistant.ask(
+                self.message,
+                self.payload,
+                max_tokens=LOCAL_AI_DEFAULT_MAX_TOKENS,
+                temperature=LOCAL_AI_DEFAULT_TEMPERATURE,
+            )
             meta = {
                 "model_path": model_path,
                 "engine": "llama.cpp",
-                "n_ctx": 2048,
+                "n_ctx": LOCAL_AI_DEFAULT_N_CTX,
+                "n_threads": assistant.n_threads,
+                "max_tokens": LOCAL_AI_DEFAULT_MAX_TOKENS,
             }
             self.finished_signal.emit(result, "", meta)
         except Exception as e:
@@ -10837,7 +10856,7 @@ class PreferencesDialog(QDialog):
         self.processor_info = QLabel("WybĂłr wpĹ‚ywa na sesje ONNX i obciÄ…ĹĽenie CPU podczas filtrĂłw AI.")
         self.processor_info.setWordWrap(True)
         processor_layout.addWidget(self.processor_info, 2, 1)
-        tabs.addTab(processor_tab, "Procesor")
+        tabs.addTab(processor_tab, "Processor")
 
         appearance_tab = QWidget()
         appearance_layout = QGridLayout(appearance_tab)
@@ -18254,7 +18273,7 @@ class AstroApp(QMainWindow):
         super().__init__()
         self.setAcceptDrops(True)
 
-        self.setWindowTitle(f"Astro Ai Processor v{APP_VERSION}")
+        self.setWindowTitle(f"Astro AI Processor v{APP_VERSION}")
 
         icon_path = get_app_icon_path()
 
@@ -20619,7 +20638,7 @@ class AstroApp(QMainWindow):
                     pass
 
     def _update_ui_language(self):
-        self.setWindowTitle(self.tr("app_title", "Astro Ai Processor v1.0.0"))
+        self.setWindowTitle(self.tr("app_title", "Astro AI Processor v1.0.0"))
 
         action_map = [
             ("action_open", "action_open", "Open"),
@@ -25855,8 +25874,8 @@ def main():
             pass
     app = QApplication(sys.argv)
     ensure_linux_desktop_entry()
-    app.setApplicationName("Astro Ai Processor")
-    app.setApplicationDisplayName("Astro Ai Processor")
+    app.setApplicationName("Astro AI Processor")
+    app.setApplicationDisplayName("Astro AI Processor")
     app_icon_path = get_app_icon_path()
     if app_icon_path:
         app_icon = QIcon(app_icon_path)
