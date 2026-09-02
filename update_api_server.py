@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Simple update API server for Astro Ai Plus.
+"""Simple update API server for Astro Ai Processor.
 
 Endpoints:
 - GET  /health
 - POST /updates
-- GET  /updates/latest?app_id=astro-ai-plus&target_os=linux
+- GET  /updates/latest?app_id=astro-ai-processor&target_os=linux
 - POST /updates/decision
 
 Optional auth:
@@ -215,7 +215,7 @@ def run() -> None:
     server = ThreadingHTTPServer((HOST, PORT), Handler)
     print(f"Update API listening on http://{HOST}:{PORT}")
     print("Health: /health")
-    print("Latest: /updates/latest?app_id=astro-ai-plus&target_os=linux")
+    print("Latest: /updates/latest?app_id=astro-ai-processor&target_os=linux")
     server.serve_forever()
 
 

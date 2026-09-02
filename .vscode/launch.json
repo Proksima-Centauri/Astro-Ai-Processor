@@ -2,10 +2,10 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Astro Ai Plus (venv)",
+      "name": "Astro Ai Processor (venv)",
       "type": "debugpy",
       "request": "launch",
-      "program": "${workspaceFolder}/Astro Ai Plus.py",
+      "program": "${workspaceFolder}/Astro Ai Processor.py",
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
       "python": "/home/jozef/Documents/repos/Astro Ai/Plus/.venv/bin/python",

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Astro Ai Processor
+Comment=Astrophotography processing application
+Exec=astro-ai-processor %F
+Icon=/opt/astro-ai-processor/_internal/assets/favicon.ico
+Terminal=false
+Categories=Graphics;Photography;Science;
+StartupNotify=true

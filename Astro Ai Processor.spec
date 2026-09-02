@@ -1,8 +1,10 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+from PyInstaller.utils.hooks import collect_submodules
+
 
 a = Analysis(
-    ['Astro Ai Plus.py'],
+    ['Astro Ai Processor.py'],
     pathex=[],
     binaries=[],
     datas=[
@@ -11,7 +13,7 @@ a = Analysis(
         ('assets/favicon.ico', '.'),
         ('3d_fly_help.md', '.'),
     ],
-    hiddenimports=[],
+    hiddenimports=collect_submodules('processing'),
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -26,7 +28,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='Astro Ai Plus',
+    name='Astro Ai Processor',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -46,5 +48,5 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='Astro Ai Plus',
+    name='Astro Ai Processor',
 )

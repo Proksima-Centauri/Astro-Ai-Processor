@@ -1,4 +1,4 @@
-# Astro Ai Plus
+# Astro Ai Processor
 
 Python (PyQt5 + OpenCV + NumPy) de tsukurareta asutoro fotogurafi henshu no desukutoppu apuri desu.
 
@@ -19,11 +19,11 @@ pip install -r requirements.txt
 ## Kido
 
 ```bash
-python3 "Astro Ai Plus.py"
+python3 "Astro Ai Processor.py"
 ```
 
 ## Juyo fairu
 
-- `Astro Ai Plus.py` - mein apuri.
+- `Astro Ai Processor.py` - mein apuri.
 - `deep_sky_catalog.py` - lokaal DSO katarogu.
 - `3d_fly_help.md` - 3D FLY gaido.

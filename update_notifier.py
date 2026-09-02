@@ -9,14 +9,14 @@ Use cases:
 API contract (example):
 - POST {api_url}/updates
   body: {
-    "app_id": "astro-ai-plus",
+    "app_id": "astro-ai-processor",
     "target_os": "linux",
     "version": "1.4.0",
     "changes": ["New star shrink", "3D FLY fixes"],
     "update_url": "https://..."
   }
 
-- GET {api_url}/updates/latest?app_id=astro-ai-plus&target_os=linux
+- GET {api_url}/updates/latest?app_id=astro-ai-processor&target_os=linux
   response: {
     "version": "1.4.0",
     "changes": ["New star shrink", "3D FLY fixes"],
@@ -25,7 +25,7 @@ API contract (example):
 
 - POST {api_url}/updates/decision (optional)
   body: {
-    "app_id": "astro-ai-plus",
+    "app_id": "astro-ai-processor",
     "target_os": "linux",
     "current_version": "1.3.0",
     "offered_version": "1.4.0",
@@ -192,7 +192,7 @@ def run_simple_gui() -> int:
     frame.pack(fill="both", expand=True)
 
     api_var = tk.StringVar(value="https://twoje-api.pl")
-    app_var = tk.StringVar(value="astro-ai-plus")
+    app_var = tk.StringVar(value="astro-ai-processor")
     os_var = tk.StringVar(value=normalize_os())
     version_var = tk.StringVar(value="1.0.0")
     current_var = tk.StringVar(value="1.0.0")

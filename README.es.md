@@ -1,4 +1,4 @@
-# Astro Ai Plus
+# Astro Ai Processor
 
 Aplicacion de escritorio para procesado de astrofotografia, creada con Python (PyQt5 + OpenCV + NumPy).
 
@@ -43,7 +43,7 @@ pip install -r requirements.txt
 ## Ejecucion
 
 ```bash
-python3 "Astro Ai Plus.py"
+python3 "Astro Ai Processor.py"
 ```
 
 ## Configuracion
@@ -99,7 +99,7 @@ Problemas comunes:
 
 ## Estructura del proyecto
 
-- `Astro Ai Plus.py` - archivo principal de la aplicacion.
+- `Astro Ai Processor.py` - archivo principal de la aplicacion.
 - `deep_sky_catalog.py` - catalogo local de objetos de cielo profundo.
 - `3d_fly_help.md` - manual detallado de 3D FLY.
 - `requirements.txt` - dependencias Python.

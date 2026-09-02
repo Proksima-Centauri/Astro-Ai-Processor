@@ -1,4 +1,4 @@
-# Astro Ai Plus
+# Astro Ai Processor
 
 Desktop aplikatsiia dlia obrobky astrofotohrafii na Python (PyQt5 + OpenCV + NumPy).
 
@@ -19,11 +19,11 @@ pip install -r requirements.txt
 ## Zapusk
 
 ```bash
-python3 "Astro Ai Plus.py"
+python3 "Astro Ai Processor.py"
 ```
 
 ## Vazhlyvi faily
 
-- `Astro Ai Plus.py` - holovnyi zastosunok.
+- `Astro Ai Processor.py` - holovnyi zastosunok.
 - `deep_sky_catalog.py` - lokalnyi kataloh DSO.
 - `3d_fly_help.md` - instruktsiia 3D FLY.

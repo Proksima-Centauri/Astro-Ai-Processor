@@ -1,4 +1,4 @@
-# Astro Ai Plus
+# Astro Ai Processor
 
 Python ile yazilmis masaustu astrofotografi duzenleme uygulamasi (PyQt5 + OpenCV + NumPy).
 
@@ -19,11 +19,11 @@ pip install -r requirements.txt
 ## Calistirma
 
 ```bash
-python3 "Astro Ai Plus.py"
+python3 "Astro Ai Processor.py"
 ```
 
 ## Onemli dosyalar
 
-- `Astro Ai Plus.py` - ana uygulama.
+- `Astro Ai Processor.py` - ana uygulama.
 - `deep_sky_catalog.py` - yerel DSO katalogu.
 - `3d_fly_help.md` - 3D FLY kilavuzu.

@@ -1,4 +1,4 @@
-# Astro Ai Plus
+# Astro Ai Processor
 
 Desktopowa aplikacja do obrobki astrofotografii napisana w Pythonie (PyQt5 + OpenCV + NumPy).
 
@@ -46,8 +46,46 @@ pip install -r requirements.txt
 ## Uruchomienie
 
 ```bash
-python3 "Astro Ai Plus.py"
+python3 "Astro Ai Processor.py"
 ```
+
+## Instalator paczki Linux (z `.desktop`)
+
+Jesli budujesz/rozpakowujesz paczke one-dir (`dist/Astro Ai Processor/`), mozesz zainstalowac aplikacje do profilu uzytkownika i automatycznie utworzyc launcher:
+
+```bash
+chmod +x packaging/linux/install-linux.sh
+./packaging/linux/install-linux.sh --source "dist/Astro Ai Processor" --force
+```
+
+Skrypt instaluje do `~/.local/opt/astro-ai-processor` i tworzy `~/.local/share/applications/astro-ai-processor.desktop`.
+
+## Instalator graficzny Linux (1 klik dla uzytkownika)
+
+Dla koncowego uzytkownika nie jest potrzebny terminal.
+
+1. Ty budujesz pojedynczy plik instalatora:
+
+```bash
+chmod +x packaging/linux/build-gui-installer.sh
+./packaging/linux/build-gui-installer.sh --source "dist/Astro Ai Processor"
+```
+
+2. Udostepniasz plik `dist/Astro-Ai-Processor-Installer-Linux`.
+3. Uzytkownik klika instalator, wybiera folder, opcjonalnie zaznacza checkbox `Utworz skrot .desktop na pulpicie` i klika `Zainstaluj`.
+
+Instalator automatycznie dodaje tez wpis menu aplikacji w `~/.local/share/applications`.
+
+## Budowanie paczki Debian (.deb)
+
+Aby zbudowac paczke Debian z paczki one-dir:
+
+```bash
+chmod +x packaging/deb/build-deb.sh
+./packaging/deb/build-deb.sh --source "dist/Astro Ai Processor" --version "0.1.0"
+```
+
+Plik wynikowy pojawi sie jako `dist/astro-ai-processor_<wersja>_amd64.deb`.
 
 ## Konfiguracja
 
@@ -102,7 +140,7 @@ Najczestsze problemy:
 
 ## Struktura projektu
 
-- `Astro Ai Plus.py` - glowny plik aplikacji.
+- `Astro Ai Processor.py` - glowny plik aplikacji.
 - `deep_sky_catalog.py` - lokalny katalog obiektow DSO.
 - `3d_fly_help.md` - instrukcja filtra 3D FLY.
 - `requirements.txt` - zaleznosci Python.

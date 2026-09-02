@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="assets/favicon.ico" alt="Astro Ai Plus icon" width="120" />
+  <img src="assets/favicon.ico" alt="Astro Ai Processor icon" width="120" />
 </p>
 
-# Astro Ai Plus
+# Astro Ai Processor
 
 Desktop astrophotography processing application built with Python (PyQt5 + OpenCV + NumPy).
 
@@ -50,8 +50,46 @@ pip install -r requirements.txt
 ## Run
 
 ```bash
-python3 "Astro Ai Plus.py"
+python3 "Astro Ai Processor.py"
 ```
+
+## Linux bundle installer (.desktop support)
+
+If you build/extract the one-dir package (`dist/Astro Ai Processor/`), you can install it to the user profile and generate a launcher:
+
+```bash
+chmod +x packaging/linux/install-linux.sh
+./packaging/linux/install-linux.sh --source "dist/Astro Ai Processor" --force
+```
+
+This installs to `~/.local/opt/astro-ai-processor` and creates `~/.local/share/applications/astro-ai-processor.desktop`.
+
+## Linux GUI installer (one-click for end users)
+
+End users do not need terminal commands.
+
+1. Build a single-file GUI installer:
+
+```bash
+chmod +x packaging/linux/build-gui-installer.sh
+./packaging/linux/build-gui-installer.sh --source "dist/Astro Ai Processor"
+```
+
+2. Distribute `dist/Astro-Ai-Processor-Installer-Linux`.
+3. User double-clicks installer, selects install folder, optionally enables `Create .desktop shortcut on Desktop`, then clicks `Install`.
+
+The installer also creates the application menu entry in `~/.local/share/applications`.
+
+## Debian package build (.deb)
+
+To build a Debian package from the one-dir bundle:
+
+```bash
+chmod +x packaging/deb/build-deb.sh
+./packaging/deb/build-deb.sh --source "dist/Astro Ai Processor" --version "0.1.0"
+```
+
+Result file is generated as `dist/astro-ai-processor_<version>_amd64.deb`.
 
 ## Configuration
 
@@ -106,7 +144,7 @@ Common issues:
 
 ## Project structure
 
-- `Astro Ai Plus.py` - main app file.
+- `Astro Ai Processor.py` - main app file.
 - `deep_sky_catalog.py` - offline deep-sky object catalog.
 - `3d_fly_help.md` - detailed 3D FLY manual.
 - `requirements.txt` - Python dependencies.
