@@ -1,0 +1,9 @@
+{
+  "app_id": "astro-ai-processor",
+  "target_os": "linux",
+  "version": "1.0.0",
+  "changes": [
+    "Rebrand App as \"Astro Ai Processor\""
+  ],
+  "update_url": "https://drive.google.com/drive/u/1/folders/1s4XkRskpAWJmtwl79NrnGvS3FNp3Fa06"
+}
