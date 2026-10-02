@@ -1,9 +1,9 @@
 {
   "app_id": "astro-ai-processor",
   "target_os": "linux",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "changes": [
-    "Test update."
+    "Test update.(linux)"
   ],
   "update_url": ""
 }
