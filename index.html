@@ -836,9 +836,9 @@
         <h3 id="txtCompare1Title">Porownanie AI - deepSNR</h3>
         <p id="txtCompare1Body">Przesun suwak, aby porownac obraz przed i po odszumianiu AI.</p>
         <div class="compare-box" data-compare>
-          <img class="compare-layer" src="assets/website/deep-snr/veli.png" alt="Porownanie deepSNR przed obrobka">
+          <img class="compare-layer" src="assets/website/deep-snr/ngc281/ngc281.png" alt="Porownanie deepSNR przed obrobka">
           <div class="compare-after-wrap">
-            <img class="compare-layer" src="assets/website/deep-snr/veli_denoised.png" alt="Porownanie deepSNR po obrobce AI">
+            <img class="compare-layer" src="assets/website/deep-snr/ngc281/ngc281_denoised.png" alt="Porownanie deepSNR po obrobce AI">
           </div>
           <div class="compare-divider" aria-hidden="true"></div>
           <span class="compare-tag before" data-before-tag>Przed</span>
@@ -854,14 +854,31 @@
         <h3 id="txtCompare2Title">Porownanie AI - Star Shrink</h3>
         <p id="txtCompare2Body">Sprawdz, jak funkcja Star Shrink zmniejsza gwiazdy i poprawia czytelnosc obiektu.</p>
         <div class="compare-box" data-compare>
-          <img class="compare-layer" src="assets/website/star-shrink/veli.png" alt="Porownanie przed funkcja Star Shrink">
+          <img class="compare-layer" src="assets/website/star-shrink/ngc281/ngc281.png" alt="Porownanie przed funkcja Star Shrink">
           <div class="compare-after-wrap">
-            <img class="compare-layer" src="assets/website/star-shrink/veli_shrinked.png" alt="Porownanie po funkcji Star Shrink">
+            <img class="compare-layer" src="assets/website/star-shrink/ngc281/ngc_281_shrinked.png" alt="Porownanie po funkcji Star Shrink">
           </div>
           <div class="compare-divider" aria-hidden="true"></div>
           <span class="compare-tag before" data-before-tag>Przed</span>
           <span class="compare-tag after" data-after-tag>Po AI</span>
           <input class="compare-slider" type="range" min="0" max="100" value="50" aria-label="Suwak porownania Star Shrink">
+        </div>
+      </article>
+    </section>
+
+    <section class="compare-stage">
+      <article class="compare card">
+        <h3 id="txtCompare3Title">Porownanie - korekcja tla</h3>
+        <p id="txtCompare3Body">Przesun suwak, aby porownac oryginalny obraz z obrazem po korekcji tla.</p>
+        <div class="compare-box" data-compare>
+          <img class="compare-layer" src="assets/website/background-exctaction/ngc281/ngc281.png" alt="NGC 281 przed korekcja tla">
+          <div class="compare-after-wrap">
+            <img class="compare-layer" src="assets/website/background-exctaction/ngc281/ngc281_gradientcorected.png" alt="NGC 281 po korekcji tla">
+          </div>
+          <div class="compare-divider" aria-hidden="true"></div>
+          <span class="compare-tag before" data-before-tag>Przed</span>
+          <span class="compare-tag after" id="txtTagCorrected">Po korekcji</span>
+          <input class="compare-slider" type="range" min="0" max="100" value="50" aria-label="Suwak porownania korekcji tla">
         </div>
       </article>
     </section>
@@ -1070,15 +1087,18 @@
         txtCompare1Body: "Przesun suwak, aby porownac obraz przed i po odszumianiu AI.",
         txtCompare2Title: "Porownanie AI - Star Shrink",
         txtCompare2Body: "Sprawdz, jak funkcja Star Shrink zmniejsza gwiazdy i poprawia czytelnosc obiektu.",
+        txtCompare3Title: "Porownanie - korekcja tla",
+        txtCompare3Body: "Przesun suwak, aby porownac oryginalny obraz z obrazem po korekcji tla.",
         txtTagBefore: "Przed",
         txtTagAfter: "Po AI",
+        txtTagCorrected: "Po korekcji",
         txtRoadmapTitle: "Roadmapa rozwoju",
-        txtRoadmapBody: "Graficzna os czasu projektu (z gory na dol). Na ten moment zawiera 1 punkt.",
-        txtRoadmapItem1Title: "Nowa strona produktu",
-        txtRoadmapItem1Body: "Uruchomienie strony z filmem intro, porownaniem AI i przyciskami pobierania.",
+        txtRoadmapBody: "Graficzna os czasu projektu.",
+        txtRoadmapItem1Title: "Uruchomienie Projektu",
+        txtRoadmapItem1Body: "Powstaje Strona Inetrnetowa z możliwością pobrania programu.",
         txtRoadmapSoon: "Wkrotce",
-        txtRoadmapItem2Title: "Kolejny etap rozwoju",
-        txtRoadmapItem2Body: "Miejsce na nastepny kamien milowy projektu Astro AI Processor.",
+        txtRoadmapItem2Title: "Wersja online",
+        txtRoadmapItem2Body: "Dostępna będzie wersja online programu.",
         txtFlyTitle: "Podglad efektu 3D FLY",
         txtFlyBody: "Zobacz, jak wyglada finalna animacja wygenerowana narzedziem 3D FLY.",
         txtDownloadTitle: "Gotowe do pobrania i uruchomienia",
@@ -1130,8 +1150,11 @@
         txtCompare1Body: "Move the slider to compare the image before and after AI denoise.",
         txtCompare2Title: "AI comparison - Star Shrink",
         txtCompare2Body: "See how Star Shrink reduces stars and improves object readability.",
+        txtCompare3Title: "Comparison - background extraction",
+        txtCompare3Body: "Move the slider to compare the original image with the background-corrected result.",
         txtTagBefore: "Before",
         txtTagAfter: "After AI",
+        txtTagCorrected: "Corrected",
         txtRoadmapTitle: "Development roadmap",
         txtRoadmapBody: "Visual project timeline (top to bottom). At this moment it contains one milestone.",
         txtRoadmapItem1Title: "New product website",

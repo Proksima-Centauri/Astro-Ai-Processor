@@ -1,0 +1,62 @@
+name: Build Windows
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          python - <<'PY'
+          from pathlib import Path
+
+          src = Path("requirements.txt")
+          dst = Path("requirements.windows-ci.txt")
+          lines = []
+          for raw in src.read_text(encoding="utf-8").splitlines():
+              line = raw.strip()
+              if not line or line.startswith("#"):
+                  continue
+              if line.lower().startswith("llama-cpp-python"):
+                  continue
+              lines.append(raw)
+          dst.write_text("\n".join(lines) + "\n", encoding="utf-8")
+          print(f"Prepared {dst} with {len(lines)} entries")
+          PY
+          python -m pip install -r requirements.windows-ci.txt
+          python -m pip install pyinstaller
+
+      - name: Build app with PyInstaller
+        run: pyinstaller --noconfirm --clean "Astro Ai Processor.spec"
+
+      - name: Package build output
+        shell: pwsh
+        run: |
+          $source = "dist/Astro AI Processor"
+          if (!(Test-Path $source)) { throw "Build output not found: $source" }
+          New-Item -ItemType Directory -Force -Path "dist/windows" | Out-Null
+          Compress-Archive -Path "$source/*" -DestinationPath "dist/windows/Astro-AI-Processor-windows.zip" -Force
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Astro-AI-Processor-windows
+          path: dist/windows/Astro-AI-Processor-windows.zip
+          if-no-files-found: error

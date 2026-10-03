@@ -10,4 +10,6 @@ onnxruntime==1.20.1
 PyQt5==5.15.11
 pyserial==3.5
 scikit-image==0.24.0
+scipy==1.14.1
+pykrige==1.7.2
 llama-cpp-python==0.2.90

@@ -128,27 +128,32 @@ class ColorProcessor:
         if not isinstance(hsl_params, dict):
             return image
 
+        hue_cfg = hsl_params.get("Hue", {}) if isinstance(hsl_params.get("Hue", {}), dict) else {}
+        sat_cfg = hsl_params.get("Saturation", {}) if isinstance(hsl_params.get("Saturation", {}), dict) else {}
+        lum_cfg = hsl_params.get("Luminance", {}) if isinstance(hsl_params.get("Luminance", {}), dict) else {}
+
+        adjustments = []
+        for name, (center, spread) in ColorProcessor._HSL_COLOR_BANDS.items():
+            hue_shift = float(hue_cfg.get(name, 0.0))
+            sat_delta = float(sat_cfg.get(name, 0.0)) / 100.0
+            lum_delta = float(lum_cfg.get(name, 0.0)) / 100.0
+            if abs(hue_shift) > 1e-6 or abs(sat_delta) > 1e-6 or abs(lum_delta) > 1e-6:
+                adjustments.append((name, center, spread, hue_shift, sat_delta, lum_delta))
+
+        if not adjustments:
+            return image
+
         hsv = cv2.cvtColor((image * 255.0).astype(np.uint8), cv2.COLOR_BGR2HSV).astype(np.float32)
         hue = hsv[:, :, 0] * 2.0
         sat = hsv[:, :, 1] / 255.0
         val = hsv[:, :, 2] / 255.0
 
-        hue_cfg = hsl_params.get("Hue", {}) if isinstance(hsl_params.get("Hue", {}), dict) else {}
-        sat_cfg = hsl_params.get("Saturation", {}) if isinstance(hsl_params.get("Saturation", {}), dict) else {}
-        lum_cfg = hsl_params.get("Luminance", {}) if isinstance(hsl_params.get("Luminance", {}), dict) else {}
-
-        for name, (center, spread) in ColorProcessor._HSL_COLOR_BANDS.items():
+        for _name, center, spread, hue_shift, sat_delta, lum_delta in adjustments:
             mask = ColorProcessor._gaussian_mask_for_hue(hue, center, spread)
-
-            hue_shift = float(hue_cfg.get(name, 0.0))
             if abs(hue_shift) > 1e-6:
                 hue = (hue + mask * (hue_shift * 0.5)) % 360.0
-
-            sat_delta = float(sat_cfg.get(name, 0.0)) / 100.0
             if abs(sat_delta) > 1e-6:
                 sat = np.clip(sat * (1.0 + sat_delta * mask), 0.0, 1.0)
-
-            lum_delta = float(lum_cfg.get(name, 0.0)) / 100.0
             if abs(lum_delta) > 1e-6:
                 val = np.clip(val * (1.0 + lum_delta * mask), 0.0, 1.0)
 
@@ -157,6 +162,96 @@ class ColorProcessor:
         hsv[:, :, 2] = val * 255.0
         bgr = cv2.cvtColor(hsv.astype(np.uint8), cv2.COLOR_HSV2BGR).astype(np.float32) / 255.0
         return ColorProcessor._clip01(bgr)
+
+    @staticmethod
+    def _build_star_core_mask(gray: np.ndarray) -> np.ndarray:
+        blurred = cv2.GaussianBlur(gray, (0, 0), 1.2)
+        median = float(np.median(blurred))
+        std = float(np.std(blurred))
+        p995 = float(np.percentile(blurred, 99.5))
+        threshold = max(p995, median + 2.6 * std)
+        core = (blurred >= threshold).astype(np.uint8)
+        if int(core.sum()) == 0:
+            threshold = float(np.percentile(blurred, 99.8))
+            core = (blurred >= threshold).astype(np.uint8)
+        if int(core.sum()) == 0:
+            return core
+        kernel = np.ones((3, 3), dtype=np.uint8)
+        core = cv2.morphologyEx(core, cv2.MORPH_OPEN, kernel, iterations=1)
+        return core
+
+    @classmethod
+    def _apply_star_correction(cls, image: np.ndarray, basic_params: dict | None) -> np.ndarray:
+        if not isinstance(basic_params, dict):
+            return image
+
+        aberration = float(np.clip(basic_params.get("star_aberration", 0.0), 0.0, 1.0))
+        shape = float(np.clip(basic_params.get("star_shape", 0.0), 0.0, 1.0))
+        halo_reduction = float(np.clip(basic_params.get("star_halo_reduction", 0.0), 0.0, 1.0))
+        if aberration <= 1e-6 and shape <= 1e-6 and halo_reduction <= 1e-6:
+            return image
+
+        gray = (
+            image[:, :, 0] * 0.114
+            + image[:, :, 1] * 0.587
+            + image[:, :, 2] * 0.299
+        ).astype(np.float32)
+        core = cls._build_star_core_mask(gray)
+        if int(core.sum()) == 0:
+            return image
+
+        out = image.copy()
+
+        if halo_reduction > 1e-6:
+            halo_radius = int(np.clip(round(2 + halo_reduction * 8), 2, 10))
+            inner_radius = max(1, halo_radius // 2)
+            halo_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (halo_radius * 2 + 1, halo_radius * 2 + 1))
+            inner_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (inner_radius * 2 + 1, inner_radius * 2 + 1))
+            halo_outer = cv2.dilate(core, halo_kernel, iterations=1)
+            halo_inner = cv2.dilate(core, inner_kernel, iterations=1)
+            halo_ring = np.clip(halo_outer.astype(np.float32) - halo_inner.astype(np.float32), 0.0, 1.0)
+
+            if float(np.max(halo_ring)) > 0.0:
+                halo_mask = cv2.GaussianBlur(halo_ring, (0, 0), max(0.8, halo_radius * 0.45))
+                background_sigma = max(2.4, halo_radius * 0.95)
+                reduction_strength = 0.25 + 0.5 * halo_reduction
+                for channel in range(3):
+                    ch = out[:, :, channel]
+                    smooth_bg = cv2.GaussianBlur(ch, (0, 0), background_sigma)
+                    halo_component = np.clip(ch - smooth_bg, 0.0, 1.0)
+                    out[:, :, channel] = np.clip(
+                        ch - halo_component * reduction_strength * halo_mask,
+                        0.0,
+                        1.0,
+                    )
+
+        if aberration > 1e-6:
+            fringe_radius = int(np.clip(round(1 + aberration * 3), 1, 4))
+            fringe_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (fringe_radius * 2 + 1, fringe_radius * 2 + 1))
+            fringe_outer = cv2.dilate(core, fringe_kernel, iterations=1).astype(np.float32)
+            fringe_inner = core.astype(np.float32)
+            fringe_ring = np.clip(fringe_outer - fringe_inner, 0.0, 1.0)
+            if float(np.max(fringe_ring)) > 0.0:
+                fringe_mask = cv2.GaussianBlur(fringe_ring, (0, 0), 0.7 + 0.8 * aberration)
+                fringe_weight = np.clip(fringe_mask * (0.55 * aberration), 0.0, 1.0)
+                luma = (
+                    out[:, :, 0] * 0.114
+                    + out[:, :, 1] * 0.587
+                    + out[:, :, 2] * 0.299
+                ).astype(np.float32)
+                out[:, :, 0] = out[:, :, 0] * (1.0 - fringe_weight) + luma * fringe_weight
+                out[:, :, 2] = out[:, :, 2] * (1.0 - fringe_weight) + luma * fringe_weight
+
+        if shape > 1e-6:
+            shape_radius = int(np.clip(round(1 + shape * 2), 1, 3))
+            shape_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (shape_radius * 2 + 1, shape_radius * 2 + 1))
+            selected = cv2.dilate(core, shape_kernel, iterations=1).astype(np.float32)
+            shape_mask = cv2.GaussianBlur(selected, (0, 0), 0.8 + shape)
+            shape_mask = np.clip(shape_mask * shape, 0.0, 1.0)
+            eroded = cv2.erode(out, np.ones((3, 3), dtype=np.uint8), iterations=1)
+            out = out * (1.0 - shape_mask[:, :, None]) + eroded * shape_mask[:, :, None]
+
+        return cls._clip01(out)
 
     @classmethod
     def apply_camera_raw_and_hsl(
@@ -192,18 +287,17 @@ class ColorProcessor:
 
         img = cls._clip01(img)
 
-        hsv = cv2.cvtColor((img * 255.0).astype(np.uint8), cv2.COLOR_BGR2HSV).astype(np.float32)
-        sat = hsv[:, :, 1] / 255.0
-
         saturation = float(params.get("saturation", 0.0))
         vibrance = float(params.get("vibrance", 0.0))
-        if abs(saturation) > 1e-6:
-            sat = np.clip(sat * (1.0 + saturation), 0.0, 1.0)
-        if abs(vibrance) > 1e-6:
-            sat = np.clip(sat + (1.0 - sat) * vibrance * 0.7, 0.0, 1.0)
-
-        hsv[:, :, 1] = sat * 255.0
-        img = cv2.cvtColor(hsv.astype(np.uint8), cv2.COLOR_HSV2BGR).astype(np.float32) / 255.0
+        if abs(saturation) > 1e-6 or abs(vibrance) > 1e-6:
+            hsv = cv2.cvtColor((img * 255.0).astype(np.uint8), cv2.COLOR_BGR2HSV).astype(np.float32)
+            sat = hsv[:, :, 1] / 255.0
+            if abs(saturation) > 1e-6:
+                sat = np.clip(sat * (1.0 + saturation), 0.0, 1.0)
+            if abs(vibrance) > 1e-6:
+                sat = np.clip(sat + (1.0 - sat) * vibrance * 0.7, 0.0, 1.0)
+            hsv[:, :, 1] = sat * 255.0
+            img = cv2.cvtColor(hsv.astype(np.uint8), cv2.COLOR_HSV2BGR).astype(np.float32) / 255.0
 
         texture = float(params.get("texture", 0.0))
         clarity = float(params.get("clarity", 0.0))
@@ -232,6 +326,8 @@ class ColorProcessor:
                 searchWindowSize=21,
             )
             img = img_u8.astype(np.float32) / 255.0
+
+        img = cls._apply_star_correction(cls._clip01(img), params)
 
         img = cls._apply_hsl(cls._clip01(img), hsl_params)
         img = cls._apply_ghs(cls._clip01(img), ghs_params)

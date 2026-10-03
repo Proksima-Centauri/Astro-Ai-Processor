@@ -1,6 +1,11 @@
-config
-astro_magic_config.json
 __pycache__/
-*.pyc
-build/
-dist/
+.pytest_cache/
+.venv/
+
+/build/
+/dist/
+/models/
+
+/config
+/astro_magic_config.json
+/update_api.db

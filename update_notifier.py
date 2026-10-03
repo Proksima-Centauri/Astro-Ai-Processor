@@ -36,6 +36,7 @@ API contract (example):
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import platform
 import re
@@ -77,7 +78,10 @@ def is_newer(latest: str, current: str) -> bool:
 
 def _http_json(url: str, method: str = "GET", payload: dict | None = None, token: str | None = None) -> dict:
     data = None
-    headers = {"Accept": "application/json"}
+    headers = {
+        "Accept": "application/json",
+        "User-Agent": "Astro-AI-Update-Notifier/1.0",
+    }
     if payload is not None:
         data = json.dumps(payload).encode("utf-8")
         headers["Content-Type"] = "application/json"
@@ -92,7 +96,113 @@ def _http_json(url: str, method: str = "GET", payload: dict | None = None, token
         return json.loads(raw)
 
 
+def _friendly_http_error(exc: urllib.error.HTTPError) -> str:
+    base = f"HTTP {exc.code}: {exc.reason}"
+    if exc.code == 405:
+        return (
+            f"{base}. Ten URL nie obsluguje metody {exc.get_method()}. "
+            "Dla Publish ustaw API URL na backend update API (np. http://127.0.0.1:8787), "
+            "a nie na statyczna strone GitHub Pages."
+        )
+    if exc.code == 401:
+        return f"{base}. Token jest nieprawidlowy lub nie ma uprawnien do zapisu."
+    if exc.code == 403:
+        return f"{base}. Brak uprawnien (albo limit API GitHub)."
+    if exc.code == 404:
+        return (
+            f"{base}. Endpoint nie istnieje. Sprawdz API URL i sciezke /updates/latest lub /updates."
+        )
+    return base
+
+
+def _is_github_pages_url(api_url: str) -> bool:
+    host = urllib.parse.urlparse(api_url).netloc.lower()
+    return host.endswith(".github.io")
+
+
+def _github_owner_repo_from_pages_url(api_url: str) -> tuple[str, str]:
+    parsed = urllib.parse.urlparse(api_url)
+    owner = parsed.netloc.split(".", 1)[0].strip()
+    repo = parsed.path.strip("/").split("/", 1)[0].strip()
+    if not owner or not repo:
+        raise ValueError("Dla GitHub Pages URL musi miec format https://<owner>.github.io/<repo>")
+    return owner, repo
+
+
+def _normalize_static_payload(payload: dict, app_id: str, target_os: str) -> dict:
+    payload_app_id = str(payload.get("app_id") or "").strip()
+    payload_os = normalize_os(str(payload.get("target_os") or "").strip().lower() or target_os)
+    wanted_os = normalize_os(target_os)
+
+    if payload_app_id and payload_app_id != app_id:
+        return {}
+    if payload_os not in {wanted_os, "any", "all"}:
+        return {}
+
+    changes = payload.get("changes") or []
+    if not isinstance(changes, list):
+        changes = [str(changes)]
+
+    return {
+        "version": str(payload.get("version") or "").strip(),
+        "changes": [str(c) for c in changes],
+        "update_url": str(payload.get("update_url") or "").strip(),
+    }
+
+
+def _publish_github_pages_latest(api_url: str, app_id: str, target_os: str, version: str, changes: list[str], update_url: str, token: str | None) -> dict:
+    if not token:
+        raise ValueError("Dla GitHub Pages (Publish) podaj Token z uprawnieniem Contents: write.")
+
+    owner, repo = _github_owner_repo_from_pages_url(api_url)
+    contents_api = f"https://api.github.com/repos/{owner}/{repo}/contents/updates/latest"
+    existing_sha = None
+
+    try:
+        existing = _http_json(contents_api, method="GET", token=token)
+        existing_sha = str(existing.get("sha") or "").strip() or None
+    except urllib.error.HTTPError as exc:
+        if exc.code != 404:
+            raise
+
+    metadata = {
+        "app_id": app_id,
+        "target_os": normalize_os(target_os),
+        "version": version,
+        "changes": changes,
+        "update_url": update_url,
+    }
+    content_b64 = base64.b64encode((json.dumps(metadata, indent=2, ensure_ascii=True) + "\n").encode("utf-8")).decode("ascii")
+
+    payload = {
+        "message": f"chore(update): publish {app_id} {version} ({normalize_os(target_os)})",
+        "content": content_b64,
+    }
+    if existing_sha:
+        payload["sha"] = existing_sha
+
+    response = _http_json(contents_api, method="PUT", payload=payload, token=token)
+    commit = response.get("commit") if isinstance(response, dict) else {}
+    commit_url = str((commit or {}).get("html_url") or "").strip()
+    return {
+        "ok": True,
+        "message": "Update metadata zapisane do GitHub Pages repo (updates/latest)",
+        "commit_url": commit_url,
+    }
+
+
 def publish_update(api_url: str, app_id: str, target_os: str, version: str, changes: list[str], update_url: str, token: str | None = None) -> dict:
+    if _is_github_pages_url(api_url):
+        return _publish_github_pages_latest(
+            api_url=api_url,
+            app_id=app_id,
+            target_os=target_os,
+            version=version,
+            changes=changes,
+            update_url=update_url,
+            token=token,
+        )
+
     payload = {
         "app_id": app_id,
         "target_os": normalize_os(target_os),
@@ -104,6 +214,10 @@ def publish_update(api_url: str, app_id: str, target_os: str, version: str, chan
 
 
 def fetch_latest_update(api_url: str, app_id: str, target_os: str, token: str | None = None) -> dict:
+    if _is_github_pages_url(api_url):
+        payload = _http_json(f"{api_url.rstrip('/')}/updates/latest", method="GET", token=token)
+        return _normalize_static_payload(payload, app_id=app_id, target_os=target_os)
+
     query = urllib.parse.urlencode({"app_id": app_id, "target_os": normalize_os(target_os)})
     return _http_json(f"{api_url.rstrip('/')}/updates/latest?{query}", method="GET", token=token)
 
@@ -243,6 +357,10 @@ def run_simple_gui() -> int:
             )
             set_result(json.dumps(result, indent=2, ensure_ascii=True))
             messagebox.showinfo("OK", "Update metadata sent.")
+        except urllib.error.HTTPError as exc:
+            msg = _friendly_http_error(exc)
+            set_result(f"ERROR: {msg}")
+            messagebox.showerror("Error", msg)
         except Exception as exc:
             set_result(f"ERROR: {exc}")
             messagebox.showerror("Error", str(exc))
@@ -257,6 +375,10 @@ def run_simple_gui() -> int:
                 token=token_var.get().strip() or None,
             )
             set_result("UPDATE_OPENED" if opened else "NO_UPDATE")
+        except urllib.error.HTTPError as exc:
+            msg = _friendly_http_error(exc)
+            set_result(f"ERROR: {msg}")
+            messagebox.showerror("Error", msg)
         except Exception as exc:
             set_result(f"ERROR: {exc}")
             messagebox.showerror("Error", str(exc))
