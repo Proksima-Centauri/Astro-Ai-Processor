@@ -359,76 +359,15 @@
       right: 10px;
     }
 
-    .compare-zoom-button {
-      position: absolute;
-      right: 10px;
-      bottom: 10px;
-      z-index: 7;
-      width: 38px;
-      height: 38px;
-      display: grid;
-      place-items: center;
-      border: 1px solid rgba(255, 255, 255, 0.4);
-      border-radius: 10px;
-      color: #ffffff;
-      background: rgba(6, 10, 20, 0.76);
-      font: inherit;
-      font-size: 1.3rem;
-      line-height: 1;
-      cursor: zoom-in;
-      backdrop-filter: blur(6px);
-    }
-
-    .compare-zoom-button:hover,
-    .compare-zoom-button:focus-visible {
-      background: rgba(59, 167, 255, 0.82);
-      outline: 2px solid #ffffff;
-      outline-offset: 2px;
-    }
-
-    .compare-zoom-dialog {
-      width: min(96vw, 1680px);
-      max-width: none;
-      max-height: 96vh;
-      padding: 16px;
-      border: 1px solid var(--line);
-      border-radius: 18px;
-      color: var(--text);
-      background: rgba(8, 9, 18, 0.98);
-      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.72);
-    }
-
-    .compare-zoom-dialog[open] {
-      display: grid;
-      grid-template-rows: auto auto minmax(0, 1fr);
-      gap: 12px;
-    }
-
-    .compare-zoom-dialog::backdrop {
-      background: rgba(2, 4, 10, 0.84);
-      backdrop-filter: blur(8px);
-    }
-
-    .compare-zoom-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 16px;
-    }
-
-    .compare-zoom-header h2 {
-      margin: 0;
-      font-size: clamp(1.05rem, 2.5vw, 1.5rem);
-    }
-
-    .compare-zoom-toolbar {
+    .compare-controls {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
       gap: 8px;
+      margin-top: 10px;
     }
 
-    .compare-zoom-toolbar button {
+    .compare-controls button {
       min-height: 38px;
       padding: 7px 11px;
       border: 1px solid var(--line);
@@ -439,12 +378,17 @@
       cursor: pointer;
     }
 
-    .compare-zoom-toolbar button:hover,
-    .compare-zoom-toolbar button:focus-visible,
-    .compare-zoom-toolbar button[aria-pressed="true"] {
+    .compare-controls button:hover,
+    .compare-controls button:focus-visible,
+    .compare-controls button[aria-pressed="true"] {
       background: rgba(59, 167, 255, 0.45);
       outline: 2px solid rgba(255, 255, 255, 0.85);
       outline-offset: 1px;
+    }
+
+    .compare-controls button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
     }
 
     .compare-zoom-level {
@@ -454,59 +398,38 @@
       text-align: center;
     }
 
-    .compare-zoom-help {
+    .compare-control-help {
       margin-left: auto;
       color: var(--muted);
       font-size: 0.82rem;
     }
 
-    .compare-zoom-close {
-      flex: 0 0 auto;
-      width: 40px;
-      height: 40px;
-      border: 1px solid var(--line);
-      border-radius: 10px;
-      color: var(--text);
-      background: rgba(173, 194, 255, 0.1);
-      font-size: 1.6rem;
-      line-height: 1;
-      cursor: pointer;
-    }
-
-    .compare-zoom-close:hover,
-    .compare-zoom-close:focus-visible {
-      background: rgba(59, 167, 255, 0.5);
-      outline: 2px solid #ffffff;
-      outline-offset: 2px;
-    }
-
-    .compare-zoom-stage {
-      min-height: 0;
-      align-self: center;
-    }
-
-    .compare-zoom-stage .compare-box {
-      width: min(100%, 138.67vh);
-      margin: 0 auto;
-    }
-
-    .compare-zoom-stage .compare-layer {
+    .compare-box.is-zoomed .compare-layer {
+      inset: auto;
+      left: calc(50% + var(--zoom-pan-x, 0px));
+      top: calc(50% + var(--zoom-pan-y, 0px));
+      right: auto;
+      bottom: auto;
+      width: var(--zoom-size, 100%);
+      height: var(--zoom-size, 100%);
       object-fit: contain;
-      transform: translate3d(var(--zoom-pan-x, 0px), var(--zoom-pan-y, 0px), 0) scale(var(--zoom-scale, 1));
-      transform-origin: center;
-      will-change: transform;
+      transform: translate(-50%, -50%);
     }
 
-    .compare-zoom-stage .compare-box.is-pan-mode {
+    .compare-box.is-zoomed [data-upscale-source] {
+      image-rendering: pixelated;
+    }
+
+    .compare-box.is-pan-mode {
       cursor: grab;
       touch-action: none;
     }
 
-    .compare-zoom-stage .compare-box.is-pan-mode .compare-slider {
+    .compare-box.is-pan-mode .compare-slider {
       pointer-events: none;
     }
 
-    .compare-zoom-stage .compare-box.is-dragging {
+    .compare-box.is-dragging {
       cursor: grabbing;
     }
 
@@ -939,6 +862,13 @@
         align-items: flex-start;
       }
     }
+
+    @media (max-width: 620px) {
+      .compare-control-help {
+        flex-basis: 100%;
+        margin-left: 0;
+      }
+    }
   </style>
 </head>
 <body>
@@ -1044,10 +974,10 @@
 
     <section class="compare-stage">
       <article class="compare card">
-        <h3 id="txtCompare4Title">Porownanie AI - Astro Upscale</h3>
-        <p id="txtCompare4Body">Przesun suwak, aby porownac oryginalny obraz z wynikiem skalowania AI.</p>
+        <h3 id="txtCompare4Title">Astro Upscale</h3>
+        <p id="txtCompare4Body">Przesun suwak, aby porownac oryginalny obraz z wersja 4×. Uzyj zoomu, aby zobaczyc piksele.</p>
         <div class="compare-box" data-compare>
-          <img class="compare-layer" src="assets/website/astro-upscale/ngc281/ngc_281.png" alt="NGC 281 przed skalowaniem AI">
+          <img class="compare-layer" data-upscale-source src="assets/website/astro-upscale/ngc281/ngc_281.png" alt="NGC 281 przed skalowaniem">
           <div class="compare-after-wrap">
             <img class="compare-layer" src="assets/website/astro-upscale/ngc281/ngc_281_upscaled.png" alt="NGC 281 po skalowaniu AI">
           </div>
@@ -1242,22 +1172,6 @@
 
   <div id="scrollHint" class="scroll-hint" aria-hidden="true">SCROLL DOWN</div>
 
-  <dialog id="compareZoomDialog" class="compare-zoom-dialog" aria-labelledby="compareZoomTitle">
-    <div class="compare-zoom-header">
-      <h2 id="compareZoomTitle"></h2>
-      <button class="compare-zoom-close" id="compareZoomClose" type="button" aria-label="Zamknij powiekszone porownanie">&times;</button>
-    </div>
-    <div class="compare-zoom-toolbar" id="compareZoomToolbar" role="group" aria-label="Sterowanie powiekszeniem i przesuwaniem">
-      <button id="txtZoomOut" type="button">Pomniejsz</button>
-      <output class="compare-zoom-level" id="compareZoomLevel" aria-live="polite">100%</output>
-      <button id="txtZoomIn" type="button">Powieksz</button>
-      <button id="txtPanToggle" type="button" aria-pressed="false">Wlacz przesuwanie</button>
-      <button id="txtZoomReset" type="button">Resetuj widok</button>
-      <span class="compare-zoom-help" id="txtZoomHelp">Kolko myszy: zoom; przeciagnij w trybie przesuwania: pan</span>
-    </div>
-    <div class="compare-zoom-stage" id="compareZoomStage"></div>
-  </dialog>
-
   <script>
     document.getElementById("year").textContent = new Date().getFullYear();
 
@@ -1285,19 +1199,18 @@
         txtCompare2Body: "Sprawdz, jak funkcja Star Shrink zmniejsza gwiazdy i poprawia czytelnosc obiektu.",
         txtCompare3Title: "Porownanie - korekcja tla",
         txtCompare3Body: "Przesun suwak, aby porownac oryginalny obraz z obrazem po korekcji tla.",
-        txtCompare4Title: "Porownanie AI - Astro Upscale",
-        txtCompare4Body: "Przesun suwak, aby porownac oryginalny obraz z wynikiem skalowania AI.",
+        txtCompare4Title: "Astro Upscale",
+        txtCompare4Body: "Przesun suwak, aby porownac oryginalny obraz z wersja 4×. Uzyj zoomu, aby zobaczyc piksele.",
         txtTagBefore: "Przed",
         txtTagAfter: "Po AI",
         txtTagCorrected: "Po korekcji",
-        txtZoomCompare: "Powieksz porownanie",
-        txtZoomClose: "Zamknij powiekszone porownanie",
         txtZoomIn: "Powieksz",
         txtZoomOut: "Pomniejsz",
         txtPanToggle: "Wlacz przesuwanie",
         txtPanEnabled: "Wylacz przesuwanie",
         txtZoomReset: "Resetuj widok",
         txtZoomHelp: "Kolko myszy: zoom; przeciagnij w trybie przesuwania: pan",
+        txtZoomLevel: "Poziom powiekszenia",
         txtZoomToolbar: "Sterowanie powiekszeniem i przesuwaniem",
         txtRoadmapTitle: "Roadmapa rozwoju",
         txtRoadmapBody: "Graficzna os czasu projektu.",
@@ -1360,19 +1273,18 @@
         txtCompare2Body: "See how Star Shrink reduces stars and improves object readability.",
         txtCompare3Title: "Comparison - background extraction",
         txtCompare3Body: "Move the slider to compare the original image with the background-corrected result.",
-        txtCompare4Title: "AI comparison - Astro Upscale",
-        txtCompare4Body: "Move the slider to compare the original image with the AI-upscaled result.",
+        txtCompare4Title: "Astro Upscale",
+        txtCompare4Body: "Move the slider to compare the original image with the 4× version. Zoom in to inspect pixels.",
         txtTagBefore: "Before",
         txtTagAfter: "After AI",
         txtTagCorrected: "Corrected",
-        txtZoomCompare: "Enlarge comparison",
-        txtZoomClose: "Close enlarged comparison",
         txtZoomIn: "Zoom in",
         txtZoomOut: "Zoom out",
         txtPanToggle: "Enable panning",
         txtPanEnabled: "Disable panning",
         txtZoomReset: "Reset view",
         txtZoomHelp: "Mouse wheel: zoom; drag with panning enabled: pan",
+        txtZoomLevel: "Zoom level",
         txtZoomToolbar: "Zoom and pan controls",
         txtRoadmapTitle: "Development roadmap",
         txtRoadmapBody: "Visual project timeline (top to bottom).",
@@ -1449,19 +1361,24 @@
       document.querySelectorAll("[data-after-tag]").forEach((el) => {
         el.textContent = dict.txtTagAfter;
       });
-      document.querySelectorAll(".compare-zoom-button").forEach((el) => {
-        el.setAttribute("aria-label", dict.txtZoomCompare);
-        el.title = dict.txtZoomCompare;
+      document.querySelectorAll("[data-compare-controls]").forEach((controls) => {
+        controls.setAttribute("aria-label", dict.txtZoomToolbar);
+        const zoomIn = controls.querySelector("[data-zoom-in]");
+        const zoomOut = controls.querySelector("[data-zoom-out]");
+        const zoomLevel = controls.querySelector("[data-zoom-level]");
+        const panToggle = controls.querySelector("[data-pan-toggle]");
+        const zoomReset = controls.querySelector("[data-zoom-reset]");
+        const zoomHelp = controls.querySelector("[data-zoom-help]");
+        if (zoomIn) zoomIn.setAttribute("aria-label", dict.txtZoomIn);
+        if (zoomOut) zoomOut.setAttribute("aria-label", dict.txtZoomOut);
+        if (zoomLevel) zoomLevel.setAttribute("aria-label", dict.txtZoomLevel);
+        if (zoomReset) zoomReset.textContent = dict.txtZoomReset;
+        if (zoomHelp) zoomHelp.textContent = dict.txtZoomHelp;
+        if (panToggle) {
+          const panEnabled = panToggle.getAttribute("aria-pressed") === "true";
+          panToggle.textContent = panEnabled ? dict.txtPanEnabled : dict.txtPanToggle;
+        }
       });
-      const zoomClose = document.getElementById("compareZoomClose");
-      if (zoomClose) zoomClose.setAttribute("aria-label", dict.txtZoomClose);
-      const zoomToolbar = document.getElementById("compareZoomToolbar");
-      if (zoomToolbar) zoomToolbar.setAttribute("aria-label", dict.txtZoomToolbar);
-      const panToggle = document.getElementById("txtPanToggle");
-      if (panToggle) {
-        const panEnabled = panToggle.getAttribute("aria-pressed") === "true";
-        panToggle.textContent = panEnabled ? dict.txtPanEnabled : dict.txtPanToggle;
-      }
 
       const docsBtn = document.getElementById("btnDocs");
       if (docsBtn) docsBtn.setAttribute("href", dict.docsHref);
@@ -1491,68 +1408,6 @@
     }
     applyLanguage(savedLang);
 
-    const compareZoomDialog = document.getElementById("compareZoomDialog");
-    const compareZoomTitle = document.getElementById("compareZoomTitle");
-    const compareZoomStage = document.getElementById("compareZoomStage");
-    const compareZoomClose = document.getElementById("compareZoomClose");
-    const compareZoomLevel = document.getElementById("compareZoomLevel");
-    const compareZoomIn = document.getElementById("txtZoomIn");
-    const compareZoomOut = document.getElementById("txtZoomOut");
-    const comparePanToggle = document.getElementById("txtPanToggle");
-    const compareZoomReset = document.getElementById("txtZoomReset");
-    let zoomedCompareBox = null;
-    let compareZoomScale = 1;
-    let comparePanX = 0;
-    let comparePanY = 0;
-    let comparePanEnabled = false;
-    let comparePanDrag = null;
-
-    function clampComparePan() {
-      if (!zoomedCompareBox) return;
-      const width = zoomedCompareBox.clientWidth;
-      const height = zoomedCompareBox.clientHeight;
-      const image = zoomedCompareBox.querySelector(".compare-layer");
-      const imageRatio = image?.naturalWidth && image?.naturalHeight
-        ? image.naturalWidth / image.naturalHeight
-        : width / height;
-      const boxRatio = width / height;
-      const fitWidth = imageRatio > boxRatio ? width : height * imageRatio;
-      const fitHeight = imageRatio > boxRatio ? width / imageRatio : height;
-      const maxX = Math.max(0, (fitWidth * compareZoomScale - width) / 2);
-      const maxY = Math.max(0, (fitHeight * compareZoomScale - height) / 2);
-      comparePanX = Math.max(-maxX, Math.min(maxX, comparePanX));
-      comparePanY = Math.max(-maxY, Math.min(maxY, comparePanY));
-    }
-
-    function updateCompareZoom() {
-      if (!zoomedCompareBox) return;
-      clampComparePan();
-      zoomedCompareBox.style.setProperty("--zoom-scale", compareZoomScale);
-      zoomedCompareBox.style.setProperty("--zoom-pan-x", `${comparePanX}px`);
-      zoomedCompareBox.style.setProperty("--zoom-pan-y", `${comparePanY}px`);
-      zoomedCompareBox.classList.toggle("is-pan-mode", comparePanEnabled);
-      compareZoomLevel.value = `${Math.round(compareZoomScale * 100)}%`;
-      compareZoomLevel.textContent = compareZoomLevel.value;
-      comparePanToggle.setAttribute("aria-pressed", String(comparePanEnabled));
-      const dict = i18n[document.documentElement.lang] || i18n.pl;
-      comparePanToggle.textContent = comparePanEnabled ? dict.txtPanEnabled : dict.txtPanToggle;
-    }
-
-    function setCompareZoom(nextScale, pointerX = null, pointerY = null) {
-      if (!zoomedCompareBox) return;
-      const previousScale = compareZoomScale;
-      const scale = Math.max(1, Math.min(8, nextScale));
-      if (pointerX !== null && pointerY !== null && scale !== previousScale) {
-        const rect = zoomedCompareBox.getBoundingClientRect();
-        const offsetX = pointerX - rect.left - rect.width / 2;
-        const offsetY = pointerY - rect.top - rect.height / 2;
-        comparePanX = offsetX - ((offsetX - comparePanX) / previousScale) * scale;
-        comparePanY = offsetY - ((offsetY - comparePanY) / previousScale) * scale;
-      }
-      compareZoomScale = scale;
-      updateCompareZoom();
-    }
-
     function updateCompareBox(box) {
       const slider = box.querySelector(".compare-slider");
       const after = box.querySelector(".compare-after-wrap");
@@ -1562,114 +1417,167 @@
       divider.style.left = value + "%";
     }
 
-    function initializeCompareBox(box) {
-      const slider = box.querySelector(".compare-slider");
-      slider.addEventListener("input", () => updateCompareBox(box));
-      updateCompareBox(box);
+    function clampComparePan(box, state) {
+      const width = box.clientWidth;
+      const height = box.clientHeight;
+      if (!width || !height) return;
+      const image = box.querySelector(".compare-layer");
+      const imageRatio = image?.naturalWidth && image?.naturalHeight
+        ? image.naturalWidth / image.naturalHeight
+        : width / height;
+      const boxRatio = width / height;
+      const fitWidth = imageRatio > boxRatio ? width : height * imageRatio;
+      const fitHeight = imageRatio > boxRatio ? width / imageRatio : height;
+      const maxX = Math.max(0, (fitWidth * state.zoomScale - width) / 2);
+      const maxY = Math.max(0, (fitHeight * state.zoomScale - height) / 2);
+      state.panX = Math.max(-maxX, Math.min(maxX, state.panX));
+      state.panY = Math.max(-maxY, Math.min(maxY, state.panY));
     }
 
-    document.querySelectorAll("[data-compare]").forEach((box) => {
-      initializeCompareBox(box);
+    function updateCompareZoom(box, controls, state) {
+      clampComparePan(box, state);
+      box.style.setProperty("--zoom-size", `${state.zoomScale * 100}%`);
+      box.style.setProperty("--zoom-pan-x", `${state.panX}px`);
+      box.style.setProperty("--zoom-pan-y", `${state.panY}px`);
+      box.classList.toggle("is-zoomed", state.zoomScale > 1);
+      box.classList.toggle("is-pan-mode", state.panEnabled);
+      controls.querySelector("[data-zoom-level]").textContent = `${Math.round(state.zoomScale * 100)}%`;
+      const panToggle = controls.querySelector("[data-pan-toggle]");
+      panToggle.setAttribute("aria-pressed", String(state.panEnabled));
+      panToggle.disabled = state.zoomScale <= 1;
+      const dict = i18n[document.documentElement.lang] || i18n.pl;
+      panToggle.textContent = state.panEnabled ? dict.txtPanEnabled : dict.txtPanToggle;
+    }
 
-      const zoomButton = document.createElement("button");
-      zoomButton.className = "compare-zoom-button";
-      zoomButton.type = "button";
-      zoomButton.setAttribute("aria-label", i18n[document.documentElement.lang]?.txtZoomCompare || i18n.pl.txtZoomCompare);
-      zoomButton.title = zoomButton.getAttribute("aria-label");
-      zoomButton.innerHTML = '<span aria-hidden="true">⤢</span>';
-      box.appendChild(zoomButton);
+    function setCompareZoom(box, controls, state, nextScale, pointerX = null, pointerY = null) {
+      const previousScale = state.zoomScale;
+      const scale = Math.max(1, Math.min(8, nextScale));
+      if (pointerX !== null && pointerY !== null && scale !== previousScale) {
+        const rect = box.getBoundingClientRect();
+        const offsetX = pointerX - rect.left - rect.width / 2;
+        const offsetY = pointerY - rect.top - rect.height / 2;
+        state.panX = offsetX - ((offsetX - state.panX) / previousScale) * scale;
+        state.panY = offsetY - ((offsetY - state.panY) / previousScale) * scale;
+      }
+      state.zoomScale = scale;
+      if (scale === 1) {
+        state.panX = 0;
+        state.panY = 0;
+        state.panEnabled = false;
+      }
+      updateCompareZoom(box, controls, state);
+    }
 
-      zoomButton.addEventListener("click", () => {
-        const originalSlider = box.querySelector(".compare-slider");
-        const zoomedBox = box.cloneNode(true);
-        zoomedBox.querySelector(".compare-zoom-button")?.remove();
-        const zoomedSlider = zoomedBox.querySelector(".compare-slider");
-        zoomedSlider.value = originalSlider.value;
-        initializeCompareBox(zoomedBox);
-        zoomedSlider.addEventListener("input", () => {
-          originalSlider.value = zoomedSlider.value;
-          originalSlider.dispatchEvent(new Event("input", { bubbles: true }));
-        });
+    function initializeCompareBox(box) {
+      const slider = box.querySelector(".compare-slider");
+      const state = {
+        zoomScale: 1,
+        panX: 0,
+        panY: 0,
+        panEnabled: false,
+        panDrag: null,
+      };
+      const dict = i18n[document.documentElement.lang] || i18n.pl;
+      const controls = document.createElement("div");
+      controls.className = "compare-controls";
+      controls.dataset.compareControls = "";
+      controls.setAttribute("role", "group");
+      controls.setAttribute("aria-label", dict.txtZoomToolbar);
 
-        const compareTitle = box.closest(".compare")?.querySelector("h3")?.textContent;
-        compareZoomTitle.textContent = compareTitle || i18n[document.documentElement.lang]?.txtZoomCompare || i18n.pl.txtZoomCompare;
-        compareZoomStage.replaceChildren(zoomedBox);
-        zoomedCompareBox = zoomedBox;
-        compareZoomScale = 1;
-        comparePanX = 0;
-        comparePanY = 0;
-        comparePanEnabled = false;
-        comparePanDrag = null;
-        updateCompareZoom();
-        compareZoomDialog.showModal();
-        zoomedSlider.focus({ preventScroll: true });
+      const zoomOut = document.createElement("button");
+      zoomOut.type = "button";
+      zoomOut.dataset.zoomOut = "";
+      zoomOut.textContent = "−";
+      zoomOut.setAttribute("aria-label", dict.txtZoomOut);
 
-        zoomedBox.addEventListener("wheel", (event) => {
-          if (event.deltaY === 0) return;
-          event.preventDefault();
-          setCompareZoom(compareZoomScale * (event.deltaY < 0 ? 1.15 : 1 / 1.15), event.clientX, event.clientY);
-        }, { passive: false });
+      const zoomLevel = document.createElement("output");
+      zoomLevel.className = "compare-zoom-level";
+      zoomLevel.dataset.zoomLevel = "";
+      zoomLevel.setAttribute("aria-label", dict.txtZoomLevel);
+      zoomLevel.setAttribute("aria-live", "polite");
+      zoomLevel.textContent = "100%";
 
-        zoomedBox.addEventListener("pointerdown", (event) => {
-          if (!comparePanEnabled || event.button !== 0 || compareZoomScale <= 1 || event.target.closest("button")) return;
-          event.preventDefault();
-          comparePanDrag = {
-            pointerId: event.pointerId,
-            startX: event.clientX,
-            startY: event.clientY,
-            panX: comparePanX,
-            panY: comparePanY,
-          };
-          zoomedBox.classList.add("is-dragging");
-          zoomedBox.setPointerCapture(event.pointerId);
-        });
-        zoomedBox.addEventListener("pointermove", (event) => {
-          if (!comparePanDrag || event.pointerId !== comparePanDrag.pointerId) return;
-          comparePanX = comparePanDrag.panX + event.clientX - comparePanDrag.startX;
-          comparePanY = comparePanDrag.panY + event.clientY - comparePanDrag.startY;
-          updateCompareZoom();
-        });
-        const finishPan = (event) => {
-          if (!comparePanDrag || event.pointerId !== comparePanDrag.pointerId) return;
-          comparePanDrag = null;
-          zoomedBox.classList.remove("is-dragging");
-          if (zoomedBox.hasPointerCapture(event.pointerId)) zoomedBox.releasePointerCapture(event.pointerId);
-        };
-        zoomedBox.addEventListener("pointerup", finishPan);
-        zoomedBox.addEventListener("pointercancel", finishPan);
+      const zoomIn = document.createElement("button");
+      zoomIn.type = "button";
+      zoomIn.dataset.zoomIn = "";
+      zoomIn.textContent = "+";
+      zoomIn.setAttribute("aria-label", dict.txtZoomIn);
+
+      const panToggle = document.createElement("button");
+      panToggle.type = "button";
+      panToggle.dataset.panToggle = "";
+      panToggle.setAttribute("aria-pressed", "false");
+      panToggle.textContent = dict.txtPanToggle;
+
+      const zoomReset = document.createElement("button");
+      zoomReset.type = "button";
+      zoomReset.dataset.zoomReset = "";
+      zoomReset.textContent = dict.txtZoomReset;
+
+      const zoomHelp = document.createElement("span");
+      zoomHelp.className = "compare-control-help";
+      zoomHelp.dataset.zoomHelp = "";
+      zoomHelp.textContent = dict.txtZoomHelp;
+
+      controls.append(zoomOut, zoomLevel, zoomIn, panToggle, zoomReset, zoomHelp);
+      box.insertAdjacentElement("afterend", controls);
+      box.style.setProperty("--zoom-size", "100%");
+      box.style.setProperty("--zoom-pan-x", "0px");
+      box.style.setProperty("--zoom-pan-y", "0px");
+      slider.addEventListener("input", () => updateCompareBox(box));
+      updateCompareBox(box);
+      updateCompareZoom(box, controls, state);
+
+      zoomIn.addEventListener("click", () => setCompareZoom(box, controls, state, state.zoomScale * 1.25));
+      zoomOut.addEventListener("click", () => setCompareZoom(box, controls, state, state.zoomScale / 1.25));
+      panToggle.addEventListener("click", () => {
+        state.panEnabled = !state.panEnabled;
+        updateCompareZoom(box, controls, state);
       });
-    });
+      zoomReset.addEventListener("click", () => {
+        state.zoomScale = 1;
+        state.panX = 0;
+        state.panY = 0;
+        state.panEnabled = false;
+        updateCompareZoom(box, controls, state);
+      });
 
-    compareZoomIn.addEventListener("click", () => setCompareZoom(compareZoomScale * 1.25));
-    compareZoomOut.addEventListener("click", () => setCompareZoom(compareZoomScale / 1.25));
-    comparePanToggle.addEventListener("click", () => {
-      comparePanEnabled = !comparePanEnabled;
-      updateCompareZoom();
-    });
-    compareZoomReset.addEventListener("click", () => {
-      compareZoomScale = 1;
-      comparePanX = 0;
-      comparePanY = 0;
-      comparePanEnabled = false;
-      updateCompareZoom();
-    });
-    compareZoomClose.addEventListener("click", () => compareZoomDialog.close());
-    compareZoomDialog.addEventListener("click", (event) => {
-      if (event.target === compareZoomDialog) compareZoomDialog.close();
-    });
-    compareZoomDialog.addEventListener("close", () => {
-      compareZoomStage.replaceChildren();
-      zoomedCompareBox = null;
-      compareZoomScale = 1;
-      comparePanX = 0;
-      comparePanY = 0;
-      comparePanEnabled = false;
-      comparePanDrag = null;
-      compareZoomLevel.value = "100%";
-      compareZoomLevel.textContent = "100%";
-      comparePanToggle.setAttribute("aria-pressed", "false");
-      comparePanToggle.textContent = (i18n[document.documentElement.lang] || i18n.pl).txtPanToggle;
-    });
+      box.addEventListener("wheel", (event) => {
+        if (event.deltaY === 0) return;
+        event.preventDefault();
+        setCompareZoom(box, controls, state, state.zoomScale * (event.deltaY < 0 ? 1.15 : 1 / 1.15), event.clientX, event.clientY);
+      }, { passive: false });
+
+      box.addEventListener("pointerdown", (event) => {
+        if (!state.panEnabled || event.button !== 0 || state.zoomScale <= 1) return;
+        event.preventDefault();
+        state.panDrag = {
+          pointerId: event.pointerId,
+          startX: event.clientX,
+          startY: event.clientY,
+          panX: state.panX,
+          panY: state.panY,
+        };
+        box.classList.add("is-dragging");
+        box.setPointerCapture(event.pointerId);
+      });
+      box.addEventListener("pointermove", (event) => {
+        if (!state.panDrag || event.pointerId !== state.panDrag.pointerId) return;
+        state.panX = state.panDrag.panX + event.clientX - state.panDrag.startX;
+        state.panY = state.panDrag.panY + event.clientY - state.panDrag.startY;
+        updateCompareZoom(box, controls, state);
+      });
+      const finishPan = (event) => {
+        if (!state.panDrag || event.pointerId !== state.panDrag.pointerId) return;
+        state.panDrag = null;
+        box.classList.remove("is-dragging");
+        if (box.hasPointerCapture(event.pointerId)) box.releasePointerCapture(event.pointerId);
+      };
+      box.addEventListener("pointerup", finishPan);
+      box.addEventListener("pointercancel", finishPan);
+    }
+
+    document.querySelectorAll("[data-compare]").forEach(initializeCompareBox);
 
     const introVideo = document.querySelector(".intro video");
     const scrollHint = document.getElementById("scrollHint");
