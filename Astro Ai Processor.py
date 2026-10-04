@@ -28,6 +28,7 @@ from processing.image_effects import _normalize_mask01, local_contrast_enhanceme
 from processing.stretch import stretch_image
 from processing.stacking import integrate_stack_frames, normalize_stack_frames
 from processing.tonal_adjustments import apply_curves_lut, apply_levels, build_curve_lut
+from processing.astro_upscale import AstroUpscaler, available_memory_bytes, rescale_fits_header
 
 try:
     import speech_recognition as sr
@@ -160,7 +161,7 @@ from PyQt5.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QPushButton, QFileDialog, QGraphicsView,
     QGraphicsScene, QSlider, QLabel, QFrame, QTabWidget, QGridLayout,
     QMenuBar, QMenu, QAction, QDialog, QStyle, QSpinBox,
-    QDoubleSpinBox, QTextEdit, QLineEdit, QComboBox, QCompleter, QSplitter,
+    QDoubleSpinBox, QTextEdit, QLineEdit, QComboBox, QCompleter, QSplitter, QDialogButtonBox,
     QScrollArea, QStackedLayout, QTabBar, QListWidget, QListWidgetItem, QStackedWidget, QPlainTextEdit
 )
 from PyQt5.QtGui import QImage, QPixmap, QPainter, QIcon, QColor, QFont, QPolygon, QPolygonF, QPen, QPalette, QRegion, QLinearGradient, QDrag, QCursor
@@ -230,6 +231,7 @@ I18N = {
     "action_plate": {"pl": "Plate Solving", "en": "Plate Solving"},
     "action_starnet": {"pl": "Uruchom StarNet++", "en": "Run StarNet++"},
     "action_deepsnr": {"pl": "Uruchom deepSNR", "en": "Run deepSNR"},
+    "action_astro_upscale": {"pl": "Astro Upscale", "en": "Astro Upscale"},
     "action_correction": {"pl": "Korekcja", "en": "Correction"},
     "action_star_correction": {"pl": "Korekcja gwiazd", "en": "Star Correction"},
     "action_color_calibration": {"pl": "Kalibracja kolorów", "en": "Color Calibration"},
@@ -262,6 +264,7 @@ I18N = {
     "top_plate": {"pl": "Plate", "en": "Plate"},
     "top_starnet": {"pl": "StarNet", "en": "StarNet"},
     "top_deepsnr": {"pl": "deepSNR", "en": "deepSNR"},
+    "top_astro_upscale": {"pl": "Astro Upscale", "en": "Astro Upscale"},
     "top_3d_fly": {"pl": "3D FLY", "en": "3D FLY"},
     "top_blur": {"pl": "Blur", "en": "Blur"},
     "top_background_extraction": {"pl": "Tło", "en": "BG"},
@@ -300,6 +303,27 @@ I18N = {
     "angle_degrees": {"pl": "Kąt (stopnie):", "en": "Angle (degrees):"},
     "apply": {"pl": "Zastosuj", "en": "Apply"},
     "cancel": {"pl": "Anuluj", "en": "Cancel"},
+    "astro_upscale_title": {"pl": "Astro Upscale", "en": "Astro Upscale"},
+    "astro_upscale_scale": {"pl": "Skala", "en": "Scale"},
+    "astro_upscale_method": {"pl": "Metoda", "en": "Method"},
+    "astro_upscale_sharpen": {"pl": "Włącz delikatne wyostrzanie", "en": "Enable subtle sharpening"},
+    "astro_upscale_preview": {"pl": "Podgląd detalu (wycinek obrazu)", "en": "Detail preview (image crop)"},
+    "astro_upscale_source": {"pl": "Oryginał", "en": "Source"},
+    "astro_upscale_result": {"pl": "Podgląd Astro Upscale", "en": "Astro Upscale preview"},
+    "astro_upscale_cancel": {"pl": "Anuluj obliczenia", "en": "Cancel processing"},
+    "astro_upscale_cancelling": {"pl": "Anulowanie Astro Upscale...", "en": "Cancelling Astro Upscale..."},
+    "astro_upscale_processing": {"pl": "Astro Upscale — przetwarzanie danych obrazu...", "en": "Astro Upscale — processing image data..."},
+    "astro_upscale_stage": {"pl": "Astro Upscale — przetwarzanie danych obrazu {current}/{total}...", "en": "Astro Upscale — processing image data {current}/{total}..."},
+    "astro_upscale_memory_block": {
+        "pl": "Szacowane zapotrzebowanie to około {estimated} MiB, a obecnie dostępne jest {available} MiB. Operacja została wstrzymana, aby uniknąć awarii z powodu braku RAM.",
+        "en": "Estimated memory use is about {estimated} MiB, while only {available} MiB is currently available. The operation was stopped to avoid an out-of-memory crash.",
+    },
+    "astro_upscale_memory_warning": {
+        "pl": "Szacowane zapotrzebowanie: około {estimated} MiB.\n{available}\n\nCzy kontynuować?",
+        "en": "Estimated memory use: about {estimated} MiB.\n{available}\n\nContinue?",
+    },
+    "astro_upscale_available_memory": {"pl": "Dostępna pamięć: około {available} MiB.", "en": "Available memory: about {available} MiB."},
+    "astro_upscale_memory_unknown": {"pl": "Nie udało się odczytać dostępnej pamięci systemowej.", "en": "Could not read available system memory."},
 }
 
 
@@ -8075,6 +8099,232 @@ class ImageProcessingWorker(QThread):
             self.result = img
         except Exception as exc:
             self.error = str(exc)
+
+
+class AstroUpscaleWorker(QThread):
+    progress_signal = pyqtSignal(str, int, int)
+    completed_signal = pyqtSignal(object, str, bool)
+
+    def __init__(self, operations, scale: int, method: str, sharpen: bool = False, language: str = "pl"):
+        super().__init__()
+        self.operations = list(operations)
+        self.scale = int(scale)
+        self.method = str(method or "lanczos")
+        self.sharpen = bool(sharpen)
+        self.language = str(language or "pl")
+        self.result = None
+        self.error = ""
+        self.cancelled = False
+
+    def run(self):
+        results = []
+        total = max(1, len(self.operations))
+        try:
+            for index, (image, is_mask) in enumerate(self.operations, start=1):
+                if self.isInterruptionRequested():
+                    self.cancelled = True
+                    self.completed_signal.emit(None, "", True)
+                    return
+                stage = tr_text(
+                    self.language,
+                    "astro_upscale_stage",
+                    "Astro Upscale — processing image data {current}/{total}...",
+                ).format(current=index, total=total)
+                self.progress_signal.emit(stage, int((index - 1) * 100 / total), 0)
+                if is_mask:
+                    result = AstroUpscaler.upscale_mask(image, self.scale)
+                else:
+                    result = AstroUpscaler.upscale(
+                        image,
+                        self.scale,
+                        self.method,
+                        sharpen=self.sharpen,
+                    )
+                results.append(result)
+                self.progress_signal.emit(stage, int(index * 100 / total), 100)
+            if self.isInterruptionRequested():
+                self.cancelled = True
+                self.completed_signal.emit(None, "", True)
+                return
+            self.result = results
+            self.completed_signal.emit(results, "", False)
+        except Exception as exc:
+            self.error = str(exc)
+            self.completed_signal.emit(None, self.error, False)
+
+
+class AstroUpscaleDialog(QDialog):
+    def __init__(self, image: np.ndarray, language: str = "pl", parent=None):
+        super().__init__(parent)
+        self.source_image = image
+        self.language = language
+        apply_dialog_window_flags(self)
+        self.setWindowTitle(tr_text(language, "astro_upscale_title", "Astro Upscale"))
+        self.setModal(True)
+        self.setMinimumWidth(690)
+
+        layout = QVBoxLayout(self)
+        apply_standard_layout_margins(layout)
+        intro = QLabel(tr_text(language, "astro_upscale_title", "Astro Upscale"))
+        intro.setStyleSheet("font-size: 18px; font-weight: 700; color: #d9e8ff;")
+        layout.addWidget(intro)
+
+        controls = QGridLayout()
+        controls.setHorizontalSpacing(12)
+        controls.setVerticalSpacing(8)
+        controls.addWidget(QLabel(tr_text(language, "astro_upscale_scale", "Scale")), 0, 0)
+        self.scale_combo = QComboBox(self)
+        self.scale_combo.addItem("2×", 2)
+        self.scale_combo.addItem("4×", 4)
+        controls.addWidget(self.scale_combo, 0, 1)
+        controls.addWidget(QLabel(tr_text(language, "astro_upscale_method", "Method")), 1, 0)
+        self.method_combo = QComboBox(self)
+        self.method_combo.addItem("Lanczos", "lanczos")
+        self.method_combo.addItem("Bicubic", "bicubic")
+        controls.addWidget(self.method_combo, 1, 1)
+        self.sharpen_checkbox = QCheckBox(
+            tr_text(language, "astro_upscale_sharpen", "Enable subtle sharpening"), self
+        )
+        self.sharpen_checkbox.setChecked(False)
+        controls.addWidget(self.sharpen_checkbox, 2, 0, 1, 2)
+        layout.addLayout(controls)
+
+        dims = f"{image.shape[1]} × {image.shape[0]}  →  "
+        self.output_size_label = QLabel(dims)
+        self.output_size_label.setStyleSheet("color: #9cb4d0; font-weight: 600;")
+        layout.addWidget(self.output_size_label)
+
+        preview_title = QLabel(tr_text(language, "astro_upscale_preview", "Detail preview (image crop)"))
+        preview_title.setStyleSheet("font-weight: 600; margin-top: 4px;")
+        layout.addWidget(preview_title)
+        preview_row = QHBoxLayout()
+        self.source_preview = self._make_preview_label(
+            tr_text(language, "astro_upscale_source", "Source")
+        )
+        self.result_preview = self._make_preview_label(
+            tr_text(language, "astro_upscale_result", "Astro Upscale preview")
+        )
+        preview_row.addWidget(self.source_preview, 1)
+        preview_row.addWidget(self.result_preview, 1)
+        layout.addLayout(preview_row)
+
+        self.button_box = QDialogButtonBox(QDialogButtonBox.Apply | QDialogButtonBox.Cancel, self)
+        self.button_box.button(QDialogButtonBox.Apply).setText(tr_text(language, "apply", "Apply"))
+        self.button_box.button(QDialogButtonBox.Cancel).setText(tr_text(language, "cancel", "Cancel"))
+        self.button_box.button(QDialogButtonBox.Apply).clicked.connect(self.accept)
+        self.button_box.rejected.connect(self.reject)
+        layout.addWidget(self.button_box)
+
+        self.scale_combo.currentIndexChanged.connect(self._update_preview)
+        self.method_combo.currentIndexChanged.connect(self._update_preview)
+        self.sharpen_checkbox.toggled.connect(self._update_preview)
+        self._update_preview()
+
+    def _make_preview_label(self, text: str) -> QLabel:
+        label = QLabel(text, self)
+        label.setAlignment(Qt.AlignCenter)
+        label.setFixedSize(300, 210)
+        label.setStyleSheet(
+            "QLabel { background: #111827; color: #9cb4d0; border: 1px solid #35445a; "
+            "border-radius: 8px; padding: 6px; }"
+        )
+        return label
+
+    def _update_preview(self, *_args):
+        if not isinstance(self.source_image, np.ndarray) or self.source_image.size == 0:
+            return
+        scale = int(self.scale_combo.currentData())
+        height, width = self.source_image.shape[:2]
+        max_width, max_height = 360, 260
+        crop_width = min(width, max_width)
+        crop_height = min(height, max_height)
+        x0 = max(0, (width - crop_width) // 2)
+        y0 = max(0, (height - crop_height) // 2)
+        crop = self.source_image[y0:y0 + crop_height, x0:x0 + crop_width]
+        try:
+            out_width, out_height = AstroUpscaler.output_shape(self.source_image, scale)
+            self.output_size_label.setText(
+                f"{width} × {height}  →  {out_width} × {out_height}"
+            )
+            result = AstroUpscaler.upscale(
+                crop,
+                scale,
+                self.method_combo.currentData(),
+                sharpen=self.sharpen_checkbox.isChecked(),
+            )
+            source_pixmap = np_to_qpixmap(crop)
+            result_pixmap = np_to_qpixmap(result)
+            self.source_preview.setPixmap(
+                source_pixmap.scaled(self.source_preview.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            )
+            self.result_preview.setPixmap(
+                result_pixmap.scaled(self.result_preview.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            )
+        except Exception as exc:
+            self.output_size_label.setText(str(exc))
+            self.source_preview.setText("Preview unavailable")
+            self.result_preview.clear()
+
+    def get_parameters(self) -> dict:
+        return {
+            "scale": int(self.scale_combo.currentData()),
+            "method": str(self.method_combo.currentData()),
+            "sharpen": self.sharpen_checkbox.isChecked(),
+        }
+
+
+class AstroUpscaleProgressDialog(QDialog):
+    def __init__(self, language: str = "pl", parent=None):
+        super().__init__(parent)
+        self.language = language
+        self._allow_close = False
+        apply_dialog_window_flags(self)
+        self.setWindowTitle(tr_text(language, "astro_upscale_title", "Astro Upscale"))
+        self.setModal(True)
+        self.setMinimumWidth(440)
+
+        layout = QVBoxLayout(self)
+        apply_standard_layout_margins(layout)
+        self.label = QLabel(tr_text(language, "astro_upscale_processing", "Processing image data..."))
+        self.label.setWordWrap(True)
+        self.progress = QProgressBar(self)
+        self.progress.setRange(0, 100)
+        self.progress.setValue(0)
+        self.cancel_button = QPushButton(
+            tr_text(language, "astro_upscale_cancel", "Cancel processing"), self
+        )
+        self.cancel_button.clicked.connect(self._request_cancel)
+        layout.addWidget(self.label)
+        layout.addWidget(self.progress)
+        layout.addWidget(self.cancel_button, 0, Qt.AlignRight)
+        self.cancel_requested = None
+
+    def _request_cancel(self):
+        if callable(self.cancel_requested):
+            self.cancel_requested()
+        self.cancel_button.setEnabled(False)
+        self.label.setText(tr_text(self.language, "astro_upscale_cancelling", "Cancelling Astro Upscale..."))
+
+    def update_progress(self, stage: str, overall: int, _current: int):
+        self.label.setText(str(stage))
+        self.progress.setValue(max(0, min(100, int(overall))))
+
+    def finish(self):
+        self._allow_close = True
+        self.close()
+
+    def reject(self):
+        if self._allow_close:
+            super().reject()
+        else:
+            self._request_cancel()
+
+    def closeEvent(self, event):
+        if self._allow_close:
+            super().closeEvent(event)
+        else:
+            self._request_cancel()
+            event.ignore()
 
 
 class ImageAnalysisWorker(QThread):
@@ -17722,6 +17972,7 @@ class AstroApp(QMainWindow):
         if worker.job["revision"] == self._processing_revision:
             if worker.error:
                 self.log(f"Image processing failed: {worker.error}", "error")
+                self._pending_astro_upscale_history_label = None
             elif worker.result is not None:
                 self.processed_img = worker.result
                 self.analysis_dirty = True
@@ -17729,6 +17980,11 @@ class AstroApp(QMainWindow):
                 self.viewer.set_after(np_to_qpixmap(display_img, apply_display_stretch=False))
                 if self.histogram_window.isVisible():
                     self.histogram_window.set_image(display_img)
+                history_label = getattr(self, "_pending_astro_upscale_history_label", None)
+                if history_label:
+                    self._pending_astro_upscale_history_label = None
+                    self.add_thumbnail(history_label, self.processed_img, copy_images=False)
+                self.update_menu_actions()
                 self.update_photoshop_panel()
                 self.update_viewer_overlay()
 
@@ -18221,6 +18477,9 @@ class AstroApp(QMainWindow):
         self._processing_revision = 0
         self._processing_worker = None
         self._pending_processing_job = None
+        self.astro_upscale_worker = None
+        self.astro_upscale_progress_dialog = None
+        self._pending_astro_upscale_history_label = None
         self.analysis_worker = None
         self._analysis_request_id = 0
 
@@ -20638,6 +20897,7 @@ class AstroApp(QMainWindow):
             ("action_adjustment_levels", "action_levels", "Levels"),
             ("action_adjustment_curves", "action_curves", "Curves (LUT)"),
             ("action_magic_filter", "action_magic", "Magic Filter"),
+            ("action_astro_upscale", "action_astro_upscale", "Astro Upscale"),
             ("action_star_shrink", "action_shrink", "Star Shrink"),
             ("action_plate_solve", "action_plate", "Plate Solving"),
             ("action_starnet", "action_starnet", "Run StarNet++"),
@@ -20686,6 +20946,7 @@ class AstroApp(QMainWindow):
             ("btn_hist_top", "top_histogram", "Histogram"),
             ("btn_ai_top", "top_ai", "AI"),
             ("btn_magic_top", "top_magic", "Magic"),
+            ("btn_astro_upscale_top", "top_astro_upscale", "Astro Upscale"),
             ("btn_shrink_top", "top_shrink", "Shrink"),
             ("btn_plate_top", "top_plate", "Plate"),
             ("btn_starnet_top", "top_starnet", "StarNet"),
@@ -21811,6 +22072,9 @@ class AstroApp(QMainWindow):
         self.action_magic_filter = QAction("Magic Filter", self)
         self.action_magic_filter.triggered.connect(self.run_magic)
 
+        self.action_astro_upscale = QAction("Astro Upscale", self)
+        self.action_astro_upscale.triggered.connect(self.run_astro_upscale)
+
         self.action_star_shrink = QAction("Star Shrink", self)
         self.action_star_shrink.triggered.connect(self.run_star_shrink)
 
@@ -21947,6 +22211,7 @@ class AstroApp(QMainWindow):
         top_actions_layout.addSpacing(8)
 
         self.btn_magic_top = _add_top_btn("Magic", action=self.action_magic_filter)
+        self.btn_astro_upscale_top = _add_top_btn("Astro Upscale", action=self.action_astro_upscale)
         self.btn_shrink_top = _add_top_btn("Shrink", action=self.action_star_shrink)
         self.btn_plate_top = _add_top_btn("Plate", action=self.action_plate_solve)
         self.btn_starnet_top = _add_top_btn("StarNet", action=self.action_starnet)
@@ -21992,6 +22257,7 @@ class AstroApp(QMainWindow):
             "btn_hist_top",
             "btn_ai_top",
             "btn_magic_top",
+            "btn_astro_upscale_top",
             "btn_shrink_top",
             "btn_plate_top",
             "btn_starnet_top",
@@ -22049,6 +22315,7 @@ class AstroApp(QMainWindow):
             "btn_hist_top": "histogram.svg",
             "btn_ai_top": "ai.svg",
             "btn_magic_top": "magic.svg",
+            "btn_astro_upscale_top": "astro_upscale.svg",
             "btn_shrink_top": "shrink.svg",
             "btn_plate_top": "plate.svg",
             "btn_starnet_top": "starnet.svg",
@@ -23579,6 +23846,243 @@ class AstroApp(QMainWindow):
                 "Błąd ładowania obrazu", 
                 f"Nie udało się otworzyć pliku.\n\nSzczegóły: {e}\nŚcieżka: {path}"
             )
+    def _capture_astro_upscale_state(self) -> dict:
+        """Keep references to the complete pre-resize document for undo/redo."""
+        return {
+            "_astro_upscale_state": True,
+            "magic_img": self.magic_img,
+            "original_img": self.original_img,
+            "processed_img": self.processed_img,
+            "native_loaded_image": self._native_loaded_image,
+            "preview_override_img": self.preview_override_img,
+            "layer_images": dict(self.layer_images),
+            "layer_masks": dict(self.layer_masks),
+            "layer_visibility": dict(self.layer_visibility),
+            "layer_order": list(self.layer_order),
+            "selected_layer_key": self.selected_layer_key,
+            "overlay_layer_pixmaps": dict(self.overlay_layer_pixmaps),
+            "constellation_lines": list(self.constellation_lines),
+            "fits_header": dict(self.current_fits_header) if isinstance(self.current_fits_header, dict) else self.current_fits_header,
+            "latest_image_analysis": dict(self.latest_image_analysis),
+            "analysis_dirty": self.analysis_dirty,
+            "latest_plate_solve_result": getattr(self, "latest_plate_solve_result", None),
+            "plate_solve_object_info": dict(self.plate_solve_object_info),
+            "bge_save_image": self._bge_save_image,
+            "bge_save_magic_snapshot": self._bge_save_magic_snapshot,
+            "bge_save_processing_revision": self._bge_save_processing_revision,
+        }
+
+    def _restore_astro_upscale_state(self, snapshot: dict):
+        self.magic_img = snapshot["magic_img"]
+        self.original_img = snapshot["original_img"]
+        self.processed_img = snapshot["processed_img"]
+        self._native_loaded_image = snapshot["native_loaded_image"]
+        self.preview_override_img = snapshot["preview_override_img"]
+        self.layer_images = dict(snapshot["layer_images"])
+        self.layer_masks = dict(snapshot["layer_masks"])
+        self.layer_visibility = dict(snapshot["layer_visibility"])
+        self.layer_order = list(snapshot["layer_order"])
+        self.selected_layer_key = snapshot["selected_layer_key"]
+        self.overlay_layer_pixmaps = dict(snapshot["overlay_layer_pixmaps"])
+        self.constellation_lines = list(snapshot["constellation_lines"])
+        header = snapshot["fits_header"]
+        self.current_fits_header = dict(header) if isinstance(header, dict) else header
+        self.latest_image_analysis = dict(snapshot["latest_image_analysis"])
+        self.analysis_dirty = bool(snapshot["analysis_dirty"])
+        self.latest_plate_solve_result = snapshot["latest_plate_solve_result"]
+        self.plate_solve_object_info = dict(snapshot["plate_solve_object_info"])
+        self._bge_save_image = snapshot["bge_save_image"]
+        self._bge_save_magic_snapshot = snapshot["bge_save_magic_snapshot"]
+        self._bge_save_processing_revision = snapshot["bge_save_processing_revision"]
+
+    def run_astro_upscale(self):
+        if not isinstance(self.magic_img, np.ndarray):
+            self.log("Astro Upscale skipped: no image is loaded.", "warning")
+            return
+        processing_worker = getattr(self, "_processing_worker", None)
+        if (processing_worker is not None and processing_worker.isRunning()) or getattr(
+            self, "_pending_processing_job", None
+        ) is not None:
+            QMessageBox.information(
+                self,
+                "Astro Upscale",
+                "Poczekaj na zakończenie bieżącego przetwarzania obrazu przed uruchomieniem Astro Upscale.",
+            )
+            return
+        running_worker = getattr(self, "astro_upscale_worker", None)
+        if running_worker is not None and running_worker.isRunning():
+            self.log("Astro Upscale is already running.", "warning")
+            return
+
+        dialog = AstroUpscaleDialog(self.magic_img, self.language, self)
+        if dialog.exec_() != QDialog.Accepted:
+            self.log("Astro Upscale canceled.", "warning")
+            return
+        params = dialog.get_parameters()
+        scale = int(params["scale"])
+        method = str(params["method"])
+        sharpen = bool(params["sharpen"])
+
+        height, width = self.magic_img.shape[:2]
+        operations = []
+        slots_by_operation = []
+        operation_lookup = {}
+
+        # The app's geometric transforms (rotate/crop) work on the shared
+        # canvas, so resize every aligned raster layer and mask together.
+        def add_operation(image, is_mask: bool, slot: tuple):
+            if not isinstance(image, np.ndarray) or image.shape[:2] != (height, width):
+                return
+            identity = (id(image), bool(is_mask))
+            operation_index = operation_lookup.get(identity)
+            if operation_index is None:
+                operation_index = len(operations)
+                operation_lookup[identity] = operation_index
+                operations.append((image, bool(is_mask)))
+                slots_by_operation.append([])
+            slots_by_operation[operation_index].append(slot)
+
+        for attr in ("magic_img", "original_img", "_native_loaded_image"):
+            add_operation(getattr(self, attr, None), False, ("attribute", attr))
+        overlay_keys = {"grid_overlay", "plate_solve_overlay", "object_labels", "constellation_overlay"}
+        for key, image in list(self.layer_images.items()):
+            if key not in overlay_keys and self.layer_types.get(key) != "overlay":
+                add_operation(image, False, ("layer_image", key))
+        for key, mask in list(self.layer_masks.items()):
+            add_operation(mask, True, ("layer_mask", key))
+
+        try:
+            estimated_bytes = AstroUpscaler.estimate_working_set_bytes(
+                (image for image, _is_mask in operations), scale, sharpen=sharpen
+            )
+        except Exception as exc:
+            QMessageBox.warning(self, "Astro Upscale", str(exc))
+            return
+
+        available_bytes = available_memory_bytes()
+        estimated_mib = estimated_bytes / (1024.0 ** 2)
+        available_mib = None if available_bytes is None else available_bytes / (1024.0 ** 2)
+        if available_bytes is not None and estimated_bytes > available_bytes * 0.90:
+            QMessageBox.warning(
+                self,
+                f"Astro Upscale — {self.tr('action_astro_upscale', 'Astro Upscale')}",
+                self.tr("astro_upscale_memory_block", "Insufficient available memory.").format(
+                    estimated=f"{estimated_mib:,.0f}",
+                    available=f"{available_mib:,.0f}",
+                ),
+            )
+            return
+        if (available_bytes is not None and estimated_bytes > available_bytes * 0.65) or (
+            available_bytes is None and estimated_bytes > 2 * 1024 ** 3
+        ):
+            available_text = (
+                self.tr("astro_upscale_available_memory", "Available memory: {available} MiB.").format(
+                    available=f"{available_mib:,.0f}"
+                )
+                if available_mib is not None
+                else self.tr("astro_upscale_memory_unknown", "Available system memory is unknown.")
+            )
+            answer = QMessageBox.warning(
+                self,
+                "Astro Upscale — duże zapotrzebowanie na pamięć",
+                self.tr("astro_upscale_memory_warning", "Estimated memory use: {estimated} MiB.\n{available}\n\nContinue?").format(
+                    estimated=f"{estimated_mib:,.0f}",
+                    available=available_text,
+                ),
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            if answer != QMessageBox.Yes:
+                return
+
+        try:
+            for image, is_mask in operations:
+                AstroUpscaler.output_shape(image, scale)
+                allowed_types = (np.uint8, np.uint16, np.float32, np.float64, np.bool_) if is_mask else (
+                    np.uint8, np.uint16, np.float32, np.float64
+                )
+                if image.dtype not in allowed_types:
+                    raise ValueError(f"Nieobsługiwany typ danych: {image.dtype}.")
+        except Exception as exc:
+            QMessageBox.warning(self, "Astro Upscale", str(exc))
+            return
+
+        progress_dialog = AstroUpscaleProgressDialog(self.language, self)
+        worker = AstroUpscaleWorker(operations, scale, method, sharpen, self.language)
+        worker.slots_by_operation = slots_by_operation
+        worker.upscale_scale = scale
+        worker.upscale_method = method
+        progress_dialog.cancel_requested = worker.requestInterruption
+        worker.progress_signal.connect(progress_dialog.update_progress)
+        worker.completed_signal.connect(self._on_astro_upscale_finished)
+        worker.finished.connect(worker.deleteLater)
+        self.astro_upscale_worker = worker
+        self.astro_upscale_progress_dialog = progress_dialog
+        progress_dialog.show()
+        worker.start()
+
+    def _on_astro_upscale_finished(self, results, error, cancelled):
+        worker = self.sender()
+        slots_by_operation = getattr(worker, "slots_by_operation", [])
+        scale = int(getattr(worker, "upscale_scale", 2))
+        method = str(getattr(worker, "upscale_method", "lanczos"))
+        progress_dialog = getattr(self, "astro_upscale_progress_dialog", None)
+        if progress_dialog is not None:
+            progress_dialog.finish()
+        if self.astro_upscale_worker is worker:
+            self.astro_upscale_worker = None
+        self.astro_upscale_progress_dialog = None
+
+        if cancelled:
+            self.log("Astro Upscale canceled; the document was not changed.", "warning")
+            return
+        if error:
+            self.log(f"Astro Upscale failed: {error}", "error")
+            QMessageBox.warning(self, "Astro Upscale", error)
+            return
+        if not isinstance(results, list) or len(results) != len(slots_by_operation):
+            self.log("Astro Upscale failed: the worker returned incomplete image data.", "error")
+            return
+
+        snapshot = self._capture_astro_upscale_state()
+        self.undo_stack.append(snapshot)
+        self.redo_stack.clear()
+        for result, slots in zip(results, slots_by_operation):
+            for slot_type, key in slots:
+                if slot_type == "attribute":
+                    setattr(self, key, result)
+                elif slot_type == "layer_image":
+                    self.layer_images[key] = result
+                elif slot_type == "layer_mask":
+                    self.layer_masks[key] = result
+
+        new_height, new_width = self.magic_img.shape[:2]
+        if self.current_fits_header is not None:
+            try:
+                self.current_fits_header = rescale_fits_header(
+                    self.current_fits_header, scale, new_width, new_height
+                )
+            except Exception as exc:
+                self.log(f"FITS WCS metadata could not be fully rescaled: {exc}", "warning")
+
+        self._bge_save_image = None
+        self._bge_save_magic_snapshot = None
+        self._bge_save_processing_revision = None
+        self.preview_override_img = None
+        self.processed_img = None
+        self.latest_image_analysis = {}
+        self.analysis_dirty = True
+        self._clear_plate_solving_layers()
+        self.levels_window.levels_widget.set_image(self.magic_img)
+        self._pending_astro_upscale_history_label = f"Astro Upscale {scale}× ({method.title()})"
+        self.apply_full_processing_async()
+        self.update_menu_actions()
+        self.update_viewer_overlay()
+        self.log(
+            f"Astro Upscale completed: {new_width} × {new_height} ({scale}× {method.title()}).",
+            "success",
+        )
+
     def run_magic(self):
 
         if self.original_img is None:
@@ -25538,10 +26042,18 @@ class AstroApp(QMainWindow):
         self.log(f"Image saved as: {self.current_save_path}", "success")
 
     def _restore_magic_state(self, img):
-        self.magic_img = img.copy()
+        is_upscale_state = isinstance(img, dict) and bool(img.get("_astro_upscale_state"))
+        if is_upscale_state:
+            self._restore_astro_upscale_state(img)
+        else:
+            self.magic_img = img.copy()
         self.levels_window.levels_widget.set_image(self.magic_img)
         self.viewer.set_before(np_to_qpixmap(self.magic_img))
-        self.apply_full_processing()
+        if is_upscale_state:
+            self.apply_full_processing_async()
+            self.update_viewer_overlay()
+        else:
+            self.apply_full_processing()
         self._sync_selected_thumbnail_with_current_state()
         self.update_menu_actions()
 
@@ -25561,18 +26073,26 @@ class AstroApp(QMainWindow):
         if not self.undo_stack:
             self.log("Undo skipped: history is empty.")
             return
+        previous = self.undo_stack.pop()
         if self.magic_img is not None:
-            self.redo_stack.append(self.magic_img.copy())
-        self._restore_magic_state(self.undo_stack.pop())
+            if isinstance(previous, dict) and bool(previous.get("_astro_upscale_state")):
+                self.redo_stack.append(self._capture_astro_upscale_state())
+            else:
+                self.redo_stack.append(self.magic_img.copy())
+        self._restore_magic_state(previous)
         self.log("Undo", "success")
 
     def redo(self):
         if not self.redo_stack:
             self.log("Redo skipped: history is empty.")
             return
+        next_state = self.redo_stack.pop()
         if self.magic_img is not None:
-            self.undo_stack.append(self.magic_img.copy())
-        self._restore_magic_state(self.redo_stack.pop())
+            if isinstance(next_state, dict) and bool(next_state.get("_astro_upscale_state")):
+                self.undo_stack.append(self._capture_astro_upscale_state())
+            else:
+                self.undo_stack.append(self.magic_img.copy())
+        self._restore_magic_state(next_state)
         self.log("Redo", "success")
 
     def _sync_selected_thumbnail_with_current_state(self):
@@ -25601,7 +26121,7 @@ class AstroApp(QMainWindow):
         self.current_history_node_id = selected_entry.get("id") if isinstance(selected_entry, dict) else None
         self._update_thumbnails_view()
 
-    def add_thumbnail(self, operation_name: str, img: np.ndarray = None):
+    def add_thumbnail(self, operation_name: str, img: np.ndarray = None, *, copy_images: bool = True):
         if img is None:
             img = self.processed_img if self.processed_img is not None else self.magic_img
         if img is None:
@@ -25640,8 +26160,10 @@ class AstroApp(QMainWindow):
                 "id": node_id,
                 "parent_id": parent_id,
                 "name": operation_name,
-                "img": img.copy(),
-                "magic_img": self.magic_img.copy() if self.magic_img is not None else None,
+                "img": img.copy() if copy_images else img,
+                "magic_img": (
+                    self.magic_img.copy() if copy_images else self.magic_img
+                ) if self.magic_img is not None else None,
             }
         )
         self.thumbnail_next_id = int(getattr(self, "thumbnail_next_id", 1)) + 1
@@ -25663,6 +26185,14 @@ class AstroApp(QMainWindow):
         item = self.processing_history[index]
         magic = item.get("magic_img")
         if isinstance(magic, np.ndarray):
+            current_base = self.original_img if isinstance(self.original_img, np.ndarray) else self.magic_img
+            if isinstance(current_base, np.ndarray) and magic.shape[:2] != current_base.shape[:2]:
+                QMessageBox.information(
+                    self,
+                    "Historia obrazu",
+                    "Ten krok historii ma inną rozdzielczość. Użyj Cofnij/Ponów, aby przywrócić cały dokument.",
+                )
+                return
             self.current_history_node_id = item.get("id")
             self.magic_img = magic.copy()
             self.levels_window.levels_widget.set_image(self.magic_img)
@@ -25849,6 +26379,7 @@ class AstroApp(QMainWindow):
             self.action_save_as.setEnabled(self.processed_img is not None)
         for action_name in (
             "action_magic_filter",
+            "action_astro_upscale",
             "action_star_shrink",
             "action_plate_solve",
             "action_starnet",
