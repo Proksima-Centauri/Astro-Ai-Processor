@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Astro AI Processor Documentation — Getting Started and Tools</title>
+  <meta name="description" content="Astro AI Processor documentation for getting started, astrophotography image processing, AI tools, FITS, plate solving, star processing, image analysis and export.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://proksima-centauri.github.io/Astro-Ai-Processor/docs/">
+  <link rel="icon" href="../favicon.ico" sizes="any">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Astro AI Processor">
+  <meta property="og:title" content="Astro AI Processor Documentation — Getting Started and Tools">
+  <meta property="og:description" content="Guides to Astro AI Processor desktop astrophotography image processing and astronomy tools.">
+  <meta property="og:url" content="https://proksima-centauri.github.io/Astro-Ai-Processor/docs/">
+  <meta property="og:image" content="https://proksima-centauri.github.io/Astro-Ai-Processor/assets/altair/init.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Astro AI Processor Documentation — Getting Started and Tools">
+  <meta name="twitter:description" content="Guides to Astro AI Processor desktop astrophotography image processing and astronomy tools.">
+  <meta name="twitter:image" content="https://proksima-centauri.github.io/Astro-Ai-Processor/assets/altair/init.png">
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebPage",
+      "name": "Astro AI Processor Documentation",
+      "url": "https://proksima-centauri.github.io/Astro-Ai-Processor/docs/",
+      "isPartOf": { "@type": "WebSite", "name": "Astro AI Processor", "url": "https://proksima-centauri.github.io/Astro-Ai-Processor/" },
+      "about": { "@type": "SoftwareApplication", "name": "Astro AI Processor" }
+    }
+  </script>
+  <style>
+    :root { color-scheme: dark; font-family: "Segoe UI", sans-serif; background: #080912; color: #edf2ff; }
+    body { max-width: 960px; margin: 0 auto; padding: 32px 22px 60px; line-height: 1.7; background: radial-gradient(circle at 85% 0, #18304a, transparent 38%), #080912; }
+    a { color: #70e3ca; }
+    nav, main, footer { padding: 20px; border: 1px solid #43516a; border-radius: 16px; background: rgb(16 23 41 / 82%); }
+    nav { display: flex; flex-wrap: wrap; gap: 18px; margin-bottom: 22px; }
+    h1, h2 { line-height: 1.2; }
+    h1 { font-size: clamp(2rem, 6vw, 3.3rem); }
+    section { padding-top: 4px; }
+    footer { margin-top: 22px; color: #b9c3da; }
+  </style>
+</head>
+<body>
+  <nav aria-label="Astro AI Processor site navigation">
+    <a href="../">Astro AI Processor home</a>
+    <a href="../about.html">About Astro AI Processor</a>
+    <a href="../#faq">Frequently asked questions</a>
+  </nav>
+  <main>
+    <h1>Astro AI Processor Documentation</h1>
+    <p>This documentation covers Astro AI Processor, a desktop application for processing and analyzing astrophotography images. It describes the application's available workflows and optional external tools.</p>
+
+    <section id="getting-started">
+      <h2>Getting started with Astro AI Processor</h2>
+      <p>Install the Python requirements for a source checkout, or use a packaged build. Open an astronomical image, make image adjustments, optionally run analysis or astronomy tools, then save the result. The project supports Linux and Windows. See the <a href="https://github.com/Proksima-Centauri/Astro-Ai-Processor#installation">Astro AI Processor installation instructions</a>.</p>
+    </section>
+
+    <section id="image-processing">
+      <h2>Astrophotography image processing</h2>
+      <p>Astro AI Processor includes levels, curves, histogram controls, blur, crop, rotation and color adjustments. It also supports layers and an edit history with undo and redo.</p>
+    </section>
+
+    <section id="fits">
+      <h2>FITS image support</h2>
+      <p>Astro AI Processor supports astronomy FITS files with .fits, .fit and .fts extensions. The application also handles PNG, JPG and TIFF images.</p>
+    </section>
+
+    <section id="ai-tools">
+      <h2>AI tools in Astro AI Processor</h2>
+      <p>Optional AI tools include the Altair assistant using a local GGUF model, StarNet++ integration for star removal and deepSNR integration for denoising. External command-line tools and model files must be installed separately where required.</p>
+      <p>Astro Upscale is a separate, non-generative resampling tool. It enlarges image data using Lanczos or bicubic interpolation rather than generating new detail.</p>
+    </section>
+
+    <section id="plate-solving">
+      <h2>Astronomical plate solving</h2>
+      <p>Astro AI Processor can use the local solve-field command or the Astrometry.net service for astronomical plate solving. Local plate solving requires solve-field and its supporting data; the online service requires an internet connection.</p>
+    </section>
+
+    <section id="star-processing">
+      <h2>Star processing</h2>
+      <p>Use Star Shrink to reduce star size in an astrophotography image. StarNet++ can provide star removal when its command-line application is installed and configured.</p>
+    </section>
+
+    <section id="image-analysis">
+      <h2>Astrophotography image analysis</h2>
+      <p>Astro AI Processor provides image and star analysis that includes FWHM, SNR and background-noise measurements. Plate solving can add astronomical field identification and coordinates.</p>
+    </section>
+
+    <section id="export">
+      <h2>Saving and export</h2>
+      <p>Save processed images using the application's Save or Save As workflow. Supported image formats include PNG, JPG, TIFF and FITS; available output options depend on the selected format.</p>
+    </section>
+
+    <section id="3d-fly">
+      <h2>3D FLY guide</h2>
+      <p>The optional 3D FLY workflow builds a video animation from prepared image layers. Read the <a href="https://github.com/Proksima-Centauri/Astro-Ai-Processor/blob/main/3d_fly_help.md">Astro AI Processor 3D FLY guide</a> for the complete step-by-step instructions.</p>
+    </section>
+    <p>Browse the <a href="https://github.com/Proksima-Centauri/Astro-Ai-Processor/blob/main/README.en.md">Astro AI Processor README</a> or return to the <a href="../">Astro AI Processor product page</a>.</p>
+  </main>
+  <footer>Astro AI Processor · <a href="../">Home</a> · <a href="../about.html">About</a></footer>
+</body>
+</html>

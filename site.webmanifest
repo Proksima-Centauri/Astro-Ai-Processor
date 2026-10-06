@@ -1,0 +1,17 @@
+{
+  "name": "Astro AI Processor",
+  "short_name": "Astro AI Processor",
+  "description": "Desktop astrophotography image processing application",
+  "start_url": "/Astro-Ai-Processor/",
+  "scope": "/Astro-Ai-Processor/",
+  "display": "standalone",
+  "background_color": "#080912",
+  "theme_color": "#080912",
+  "icons": [
+    {
+      "src": "/Astro-Ai-Processor/assets/favicon.ico",
+      "sizes": "16x16 32x32",
+      "type": "image/x-icon"
+    }
+  ]
+}

@@ -1,10 +1,16 @@
 # Astro AI Processor
 
-Desktop astrophotography processing application built with Python (PyQt5 + OpenCV + NumPy).
+> **Astro AI Processor is a desktop astrophotography image processing application.**
+
+Astro AI Processor processes and analyzes astrophotography images with FITS support, astronomy-specific analysis, plate solving, star tools, denoising, and traditional image-editing tools. It is built with Python, PyQt5, OpenCV and NumPy.
+
+## What is Astro AI Processor?
+
+Astro AI Processor is a desktop application for processing and analyzing astrophotography images. It combines traditional image-processing tools with astronomy-specific analysis and AI-powered processing features.
 
 Language versions: [EN](README.en.md), [PL](README.pl.md), [DE](README.de.md), [ES](README.es.md), [FR](README.fr.md), [IT](README.it.md), [NL](README.nl.md), [PT](README.pt.md), [CS](README.cs.md), [TR](README.tr.md), [JA](README.ja.md), [RU](README.ru.md), [UK](README.uk.md).
 
-The project combines classic editing tools (Levels, Curves, Histogram, Blur, Crop, Rotate) with astronomy-specific features: star analysis (FWHM/SNR), plate solving, star removal (StarNet++), denoise (deepSNR), frame mosaics, and the 3D FLY animation filter.
+Astro AI Processor combines classic editing tools (Levels, Curves, Histogram, Blur, Crop, Rotate) with astronomy-specific features: star analysis (FWHM/SNR), astronomical plate solving, StarNet++ star removal, deepSNR denoising, frame mosaics, and the 3D FLY animation filter.
 
 ## Key features
 
@@ -107,3 +113,7 @@ Common issues:
 - `3d_fly_help.md` - detailed 3D FLY manual.
 - `requirements.txt` - Python dependencies.
 - `assets/` - UI icons and resources.
+
+## License
+
+Astro AI Processor is licensed under the GNU General Public License v3.0. See [LICENSE](LICENSE) for details.
