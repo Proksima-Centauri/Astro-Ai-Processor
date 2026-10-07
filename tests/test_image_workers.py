@@ -17,6 +17,19 @@ APP_SPEC.loader.exec_module(APP_MODULE)
 QT_APPLICATION = QCoreApplication.instance() or QCoreApplication([])
 
 
+def test_deepsnr_export_conversion_produces_uint16_bgr():
+    float_image = np.array([[0.0, 0.5, 1.0]], dtype=np.float32)
+    converted_float = APP_MODULE.normalize_to_uint16_bgr(float_image)
+    assert converted_float.dtype == np.uint16
+    assert converted_float.shape == (1, 3, 3)
+    assert converted_float[0, :, 0].tolist() == [0, 32768, 65535]
+
+    uint8_image = np.array([[0, 128, 255]], dtype=np.uint8)
+    converted_uint8 = APP_MODULE.normalize_to_uint16_bgr(uint8_image)
+    assert converted_uint8.dtype == np.uint16
+    assert converted_uint8[0, :, 0].tolist() == [0, 32896, 65535]
+
+
 def test_image_processing_worker_runs_pipeline_off_the_caller_thread():
     image = np.array(
         [

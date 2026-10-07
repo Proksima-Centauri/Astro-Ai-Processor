@@ -9,8 +9,7 @@ a = Analysis(
     binaries=[],
     datas=[
         ('assets', 'assets'),
-        ('assets/favicon.ico', 'assets'),
-        ('assets/favicon.ico', '.'),
+        ('favicon-32.png', '.'),
         ('3d_fly_help.md', '.'),
     ],
     hiddenimports=collect_submodules('processing'),
@@ -33,7 +32,7 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    icon='assets/favicon.ico',
+    icon='favicon-32.png',
     console=True,
     disable_windowed_traceback=False,
     argv_emulation=False,

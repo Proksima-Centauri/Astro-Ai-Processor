@@ -279,6 +279,46 @@
       color: var(--muted);
     }
 
+    .comparison-selector {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 12px 16px;
+      margin-bottom: 18px;
+    }
+
+    .comparison-selector-label {
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    .comparison-selector-buttons {
+      display: flex;
+      gap: 8px;
+    }
+
+    .comparison-target-button {
+      min-height: 40px;
+      padding: 8px 16px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      color: var(--text);
+      background: rgba(173, 194, 255, 0.1);
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .comparison-target-button:hover,
+    .comparison-target-button:focus-visible,
+    .comparison-target-button[aria-pressed="true"] {
+      color: #061022;
+      background: linear-gradient(135deg, var(--accent-1), #83f1da);
+      outline: 2px solid rgba(255, 255, 255, 0.85);
+      outline-offset: 1px;
+    }
+
     .actions {
       display: flex;
       gap: 12px;
@@ -954,6 +994,15 @@
         flex-basis: 100%;
         margin-left: 0;
       }
+
+      .comparison-selector {
+        align-items: stretch;
+        flex-direction: column;
+      }
+
+      .comparison-selector-buttons > button {
+        flex: 1;
+      }
     }
   </style>
 </head>
@@ -1014,14 +1063,22 @@
       <p lang="pl">Astro AI Processor to desktopowa aplikacja do obróbki i analizy astrofotografii, łącząca klasyczne narzędzia przetwarzania obrazu z narzędziami astronomicznymi i funkcjami AI.</p>
     </section>
 
+    <div class="comparison-selector card" data-comparison-selector role="group" aria-label="Wybierz obiekt do porównania">
+      <span class="comparison-selector-label" id="txtComparisonSelectorLabel">Wybierz porównywany obiekt</span>
+      <div class="comparison-selector-buttons">
+        <button class="comparison-target-button" type="button" data-comparison-target="c11" aria-pressed="false">C11</button>
+        <button class="comparison-target-button" type="button" data-comparison-target="ngc281" aria-pressed="true">NGC 281</button>
+      </div>
+    </div>
+
     <section class="compare-stage">
       <article class="compare card">
         <h3 id="txtCompare3Title">Porownanie - korekcja tla</h3>
         <p id="txtCompare3Body">Przesun suwak, aby porownac oryginalny obraz z obrazem po korekcji tla.</p>
         <div class="compare-box" data-compare>
-          <img class="compare-layer" src="assets/website/background-exctaction/ngc281/ngc281.png" alt="Astro AI Processor astrophotography background correction before processing, NGC 281">
+          <img class="compare-layer" src="assets/website/background-exctaction/ngc281/ngc281.png" data-ngc281-src="assets/website/background-exctaction/ngc281/ngc281.png" data-ngc281-alt="Astro AI Processor astrophotography background correction before processing, NGC 281" data-c11-src="assets/website/background-exctaction/c11/c11.png" data-c11-alt="Astro AI Processor astrophotography background correction before processing, C11" alt="Astro AI Processor astrophotography background correction before processing, NGC 281">
           <div class="compare-after-wrap">
-            <img class="compare-layer" src="assets/website/background-exctaction/ngc281/ngc281_gradientcorected.png" alt="Astro AI Processor astrophotography background correction result, NGC 281">
+            <img class="compare-layer" src="assets/website/background-exctaction/ngc281/ngc281_gradientcorected.png" data-ngc281-src="assets/website/background-exctaction/ngc281/ngc281_gradientcorected.png" data-ngc281-alt="Astro AI Processor astrophotography background correction result, NGC 281" data-c11-src="assets/website/background-exctaction/c11/c11_coreccted.png" data-c11-alt="Astro AI Processor astrophotography background correction result, C11" alt="Astro AI Processor astrophotography background correction result, NGC 281">
           </div>
           <div class="compare-divider" aria-hidden="true"></div>
           <span class="compare-tag before" data-before-tag>Przed</span>
@@ -1036,9 +1093,9 @@
         <h3 id="txtCompare1Title">Porownanie AI - deepSNR</h3>
         <p id="txtCompare1Body">Przesun suwak, aby porownac obraz przed i po odszumianiu AI.</p>
         <div class="compare-box" data-compare>
-          <img class="compare-layer" src="assets/website/deep-snr/ngc281/ngc281.png" alt="Astro AI Processor astrophotography denoising with deepSNR, before processing">
+          <img class="compare-layer" src="assets/website/deep-snr/ngc281/ngc281.png" data-ngc281-src="assets/website/deep-snr/ngc281/ngc281.png" data-ngc281-alt="Astro AI Processor astrophotography denoising with deepSNR, before processing, NGC 281" data-c11-src="assets/website/deep-snr/c11/c11.png" data-c11-alt="Astro AI Processor astrophotography denoising with deepSNR, before processing, C11" alt="Astro AI Processor astrophotography denoising with deepSNR, before processing, NGC 281">
           <div class="compare-after-wrap">
-            <img class="compare-layer" src="assets/website/deep-snr/ngc281/ngc281_denoised.png" alt="Astro AI Processor astrophotography denoising with deepSNR, processed NGC 281">
+            <img class="compare-layer" src="assets/website/deep-snr/ngc281/ngc281_denoised.png" data-ngc281-src="assets/website/deep-snr/ngc281/ngc281_denoised.png" data-ngc281-alt="Astro AI Processor astrophotography denoising with deepSNR, processed NGC 281" data-c11-src="assets/website/deep-snr/c11/c11_denoised.png" data-c11-alt="Astro AI Processor astrophotography denoising with deepSNR, processed C11" alt="Astro AI Processor astrophotography denoising with deepSNR, processed NGC 281">
           </div>
           <div class="compare-divider" aria-hidden="true"></div>
           <span class="compare-tag before" data-before-tag>Przed</span>
@@ -1053,9 +1110,9 @@
         <h3 id="txtCompare2Title">Porownanie AI - Star Shrink</h3>
         <p id="txtCompare2Body">Sprawdz, jak funkcja Star Shrink zmniejsza gwiazdy i poprawia czytelnosc obiektu.</p>
         <div class="compare-box" data-compare>
-          <img class="compare-layer" src="assets/website/star-shrink/ngc281/ngc281.png" alt="Astro AI Processor astrophotography star reduction before Star Shrink">
+          <img class="compare-layer" src="assets/website/star-shrink/ngc281/ngc281.png" data-ngc281-src="assets/website/star-shrink/ngc281/ngc281.png" data-ngc281-alt="Astro AI Processor astrophotography star reduction before Star Shrink, NGC 281" data-c11-src="assets/website/star-shrink/c11/c11.png" data-c11-alt="Astro AI Processor astrophotography star reduction before Star Shrink, C11" alt="Astro AI Processor astrophotography star reduction before Star Shrink, NGC 281">
           <div class="compare-after-wrap">
-            <img class="compare-layer" src="assets/website/star-shrink/ngc281/ngc_281_shrinked.png" alt="Astro AI Processor astrophotography star reduction result with Star Shrink">
+            <img class="compare-layer" src="assets/website/star-shrink/ngc281/ngc_281_shrinked.png" data-ngc281-src="assets/website/star-shrink/ngc281/ngc_281_shrinked.png" data-ngc281-alt="Astro AI Processor astrophotography star reduction result with Star Shrink, NGC 281" data-c11-src="assets/website/star-shrink/c11/c11_shrinked.png" data-c11-alt="Astro AI Processor astrophotography star reduction result with Star Shrink, C11" alt="Astro AI Processor astrophotography star reduction result with Star Shrink, NGC 281">
           </div>
           <div class="compare-divider" aria-hidden="true"></div>
           <span class="compare-tag before" data-before-tag>Przed</span>
@@ -1070,9 +1127,9 @@
         <h3 id="txtCompare4Title">Astro Upscale</h3>
         <p id="txtCompare4Body">Przesun suwak, aby porownac oryginalny obraz z wersja 4×. Uzyj zoomu, aby zobaczyc piksele.</p>
         <div class="compare-box" data-compare>
-          <img class="compare-layer" data-upscale-source src="assets/website/astro-upscale/ngc281/ngc_281.png" alt="Astro AI Processor astrophotography image before Astro Upscale, NGC 281">
+          <img class="compare-layer" data-upscale-source src="assets/website/astro-upscale/ngc281/ngc_281.png" data-ngc281-src="assets/website/astro-upscale/ngc281/ngc_281.png" data-ngc281-alt="Astro AI Processor astrophotography image before Astro Upscale, NGC 281" data-c11-src="assets/website/astro-upscale/c11/c11.png" data-c11-alt="Astro AI Processor astrophotography image before Astro Upscale, C11" alt="Astro AI Processor astrophotography image before Astro Upscale, NGC 281">
           <div class="compare-after-wrap">
-            <img class="compare-layer" src="assets/website/astro-upscale/ngc281/ngc_281_upscaled.png" alt="Astro AI Processor astrophotography image after 4× Astro Upscale, NGC 281">
+            <img class="compare-layer" src="assets/website/astro-upscale/ngc281/ngc_281_upscaled.png" data-ngc281-src="assets/website/astro-upscale/ngc281/ngc_281_upscaled.png" data-ngc281-alt="Astro AI Processor astrophotography image after 4× Astro Upscale, NGC 281" data-c11-src="assets/website/astro-upscale/c11/c11_upscaled.png" data-c11-alt="Astro AI Processor astrophotography image after 4× Astro Upscale, C11" alt="Astro AI Processor astrophotography image after 4× Astro Upscale, NGC 281">
           </div>
           <div class="compare-divider" aria-hidden="true"></div>
           <span class="compare-tag before" data-before-tag>Przed</span>
@@ -1318,6 +1375,7 @@
     const i18n = {
       pl: {
         langCode: "pl",
+        txtComparisonSelectorLabel: "Wybierz porównywany obiekt",
         pageTitle: "Astro AI Processor — desktopowa aplikacja do obróbki astrofotografii",
         pageDescription: "Astro AI Processor to desktopowa aplikacja do obróbki astrofotografii: FITS, plate solving, analiza gwiazd, narzędzia AI i odszumianie.",
         docsHref: "docs/",
@@ -1409,6 +1467,7 @@
       },
       en: {
         langCode: "en",
+        txtComparisonSelectorLabel: "Choose comparison target",
         pageTitle: "Astro AI Processor — Astrophotography Image Processing Software",
         pageDescription: "Astro AI Processor is a desktop application for astrophotography image processing, with FITS support, plate solving, star tools, denoising and image analysis.",
         docsHref: "docs/",
@@ -1539,6 +1598,10 @@
       document.querySelectorAll("[data-after-tag]").forEach((el) => {
         el.textContent = dict.txtTagAfter;
       });
+      const comparisonSelector = document.querySelector("[data-comparison-selector]");
+      if (comparisonSelector) {
+        comparisonSelector.setAttribute("aria-label", dict.txtComparisonSelectorLabel);
+      }
       document.querySelectorAll("[data-compare-controls]").forEach((controls) => {
         controls.setAttribute("aria-label", dict.txtZoomToolbar);
         const zoomIn = controls.querySelector("[data-zoom-in]");
@@ -1594,6 +1657,30 @@
       after.style.clipPath = `inset(0 0 0 ${value}%)`;
       divider.style.left = value + "%";
     }
+
+    function setComparisonTarget(target) {
+      if (target !== "c11" && target !== "ngc281") return;
+
+      document.querySelectorAll("img[data-c11-src][data-ngc281-src]").forEach((image) => {
+        const source = image.dataset[`${target}Src`];
+        const alt = image.dataset[`${target}Alt`];
+        if (source) image.src = source;
+        if (alt) image.alt = alt;
+      });
+
+      document.querySelectorAll("[data-comparison-target]").forEach((button) => {
+        button.setAttribute("aria-pressed", String(button.dataset.comparisonTarget === target));
+      });
+      document.documentElement.dataset.comparisonTarget = target;
+
+      // Reset zoom so the newly selected target opens fitted in each panel.
+      document.querySelectorAll("[data-zoom-reset]").forEach((button) => button.click());
+    }
+
+    document.querySelectorAll("[data-comparison-target]").forEach((button) => {
+      button.addEventListener("click", () => setComparisonTarget(button.dataset.comparisonTarget));
+    });
+    setComparisonTarget("ngc281");
 
     function clampComparePan(box, state) {
       const width = box.clientWidth;

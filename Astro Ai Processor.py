@@ -525,12 +525,8 @@ def get_runtime_base_dir() -> str:
 def get_app_icon_path() -> str:
     base_dir = get_runtime_base_dir()
     icon_candidates = (
-        "main_icon.ico",
         "favicon.png",
         "favicon-32.png",
-        "favicon.ico",
-        "favicon(1).ico",
-        os.path.join("assets", "favicon.ico"),
     )
     for name in icon_candidates:
         candidate = os.path.join(base_dir, name)
@@ -3399,7 +3395,7 @@ class StackDialog(QDialog):
         self.combo_method = QComboBox()
         self.combo_method.addItem("Median", "median")
         self.combo_method.addItem("Average", "average")
-        self.combo_method.addItem("Sigma-clipped average", "sigma_clip")
+        self.combo_method.addItem("MAD-clipped average", "mad_clip")
         stack_layout.addWidget(self.combo_method, 3, 1)
 
         self.check_align = QCheckBox("Align frames before stacking")
@@ -3424,7 +3420,7 @@ class StackDialog(QDialog):
         self.combo_normalization.addItem("Multiplicative + scaling", "multiplicative_scaling")
         stack_layout.addWidget(self.combo_normalization, 6, 1)
 
-        self.lbl_hint = QLabel("Sigma-clipped average rejects hot pixels and transient outliers before averaging.")
+        self.lbl_hint = QLabel("MAD-clipped average rejects hot pixels and transient outliers before averaging.")
         self.lbl_hint.setWordWrap(True)
         stack_layout.addWidget(self.lbl_hint, 7, 0, 1, 2)
 
@@ -3467,6 +3463,7 @@ class StackDialog(QDialog):
             align_frames=align_frames,
             use_calibration=use_calibration,
             bayer_pattern=bayer_pattern,
+            normalization=normalization,
         )
         self.set_selected_files(selected_files or [])
 
@@ -3581,7 +3578,7 @@ class StackDialog(QDialog):
 
 
 class SolarVideoStackDialog(QDialog):
-    def __init__(self, parent=None, method: str = "median", align_frames: bool = True, bayer_pattern: str = "AUTO", source_path: str = ""):
+    def __init__(self, parent=None, method: str = "median", align_frames: bool = True, bayer_pattern: str = "AUTO", normalization: str = "none", source_path: str = ""):
         super().__init__(parent)
         apply_dialog_window_flags(self)
         self.setWindowTitle("Video Stacking (Sun/Planets/Moon)")
@@ -3616,6 +3613,7 @@ class SolarVideoStackDialog(QDialog):
         self.combo_method = QComboBox()
         self.combo_method.addItem("Median", "median")
         self.combo_method.addItem("Average", "average")
+        self.combo_method.addItem("MAD-clipped average", "mad_clip")
         grid.addWidget(self.combo_method, 2, 1)
 
         self.check_align = QCheckBox("3. Dodaj punkty wyrównania (auto align)")
@@ -3631,6 +3629,15 @@ class SolarVideoStackDialog(QDialog):
         self.combo_bayer_pattern.addItem("None / Mono", "NONE")
         grid.addWidget(self.combo_bayer_pattern, 4, 1)
 
+        grid.addWidget(QLabel("Frame normalization:"), 5, 0)
+        self.combo_normalization = QComboBox()
+        self.combo_normalization.addItem("None", "none")
+        self.combo_normalization.addItem("Additive", "additive")
+        self.combo_normalization.addItem("Multiplicative", "multiplicative")
+        self.combo_normalization.addItem("Additive + scaling", "additive_scaling")
+        self.combo_normalization.addItem("Multiplicative + scaling", "multiplicative_scaling")
+        grid.addWidget(self.combo_normalization, 5, 1)
+
         layout.addLayout(grid)
 
         button_layout = QHBoxLayout()
@@ -3645,7 +3652,7 @@ class SolarVideoStackDialog(QDialog):
         self.btn_run.clicked.connect(self.accept)
         self.btn_cancel.clicked.connect(self.reject)
 
-        self.set_parameters(method=method, align_frames=align_frames, bayer_pattern=bayer_pattern, source_path=source_path)
+        self.set_parameters(method=method, align_frames=align_frames, bayer_pattern=bayer_pattern, normalization=normalization, source_path=source_path)
 
     def _video_filter(self) -> str:
         return "Wideo astronomiczne (*.avi *.ser);;AVI (*.avi);;SER (*.ser);;Wszystkie pliki (*)"
@@ -3670,7 +3677,7 @@ class SolarVideoStackDialog(QDialog):
         if path:
             self.edit_source.setText(os.path.abspath(path))
 
-    def set_parameters(self, method: str = "median", align_frames: bool = True, bayer_pattern: str = "AUTO", source_path: str = ""):
+    def set_parameters(self, method: str = "median", align_frames: bool = True, bayer_pattern: str = "AUTO", normalization: str = "none", source_path: str = ""):
         wanted = str(method or "median").strip().lower()
         idx = 0
         for i in range(self.combo_method.count()):
@@ -3685,6 +3692,8 @@ class SolarVideoStackDialog(QDialog):
         pattern_index = max(0, self.combo_bayer_pattern.findData(desired_pattern))
         self.combo_bayer_pattern.setCurrentIndex(pattern_index)
         self.check_align.setChecked(bool(align_frames))
+        normalization_index = max(0, self.combo_normalization.findData(str(normalization or "none").strip().lower()))
+        self.combo_normalization.setCurrentIndex(normalization_index)
         self.edit_source.setText(str(source_path or "").strip())
 
     def get_parameters(self):
@@ -3692,6 +3701,7 @@ class SolarVideoStackDialog(QDialog):
             "method": str(self.combo_method.currentData() or "median"),
             "align_frames": bool(self.check_align.isChecked()),
             "bayer_pattern": str(self.combo_bayer_pattern.currentData() or "AUTO"),
+            "normalization": str(self.combo_normalization.currentData() or "none"),
             "source_path": str(self.edit_source.text() or "").strip(),
         }
 
@@ -11594,6 +11604,21 @@ def normalize_to_uint8_bgr(img: np.ndarray) -> np.ndarray:
     return img
 
 
+def normalize_to_uint16_bgr(img: np.ndarray) -> np.ndarray:
+    """Convert supported source images to a deepSNR-compatible 16-bit BGR image."""
+    linear = normalize_to_linear_bgr(img)
+    if linear is None:
+        return None
+
+    if np.issubdtype(linear.dtype, np.unsignedinteger):
+        source_max = float(np.iinfo(linear.dtype).max)
+        scaled = linear.astype(np.float64) * (65535.0 / source_max)
+    else:
+        scaled = np.asarray(linear, dtype=np.float64) * 65535.0
+
+    return np.clip(np.rint(scaled), 0.0, 65535.0).astype(np.uint16)
+
+
 def normalize_to_linear_bgr(img: np.ndarray) -> np.ndarray:
     """Normalize layout while retaining the native source precision for STF."""
     if img is None:
@@ -18302,7 +18327,8 @@ class AstroApp(QMainWindow):
 
         temp_dir = tempfile.mkdtemp(prefix=f"astro_{prefix}_")
         temp_path = os.path.join(temp_dir, "input.tif")
-        if not cv2.imwrite(temp_path, source_img):
+        export_img = normalize_to_uint16_bgr(source_img)
+        if not cv2.imwrite(temp_path, export_img):
             shutil.rmtree(temp_dir, ignore_errors=True)
             return ""
         return temp_path
@@ -18468,6 +18494,8 @@ class AstroApp(QMainWindow):
 
         self.resize(1600, 900)
         self.compare_dialogs = []
+        self._color_calibration_compare_suppressed = False
+        self._compare_enabled_before_color_calibration = False
         self.history_items = []
         self.arduino_joystick_worker = None
         self.params_preview_timer = QTimer(self)
@@ -18659,11 +18687,13 @@ class AstroApp(QMainWindow):
         self.mosaic_input_paths = []
         self.stack_method = "median"
         self.stack_align_frames = True
+        self.stack_normalization = "none"
         self.stack_use_calibration = False
         self.stack_bayer_pattern = "AUTO"
         self.stack_input_paths = []
         self.solar_stack_method = "median"
         self.solar_stack_align_frames = True
+        self.solar_stack_normalization = "none"
         self.solar_stack_bayer_pattern = "AUTO"
         self.solar_stack_source_path = ""
         self.timelapse_fps = 12
@@ -19141,6 +19171,7 @@ class AstroApp(QMainWindow):
                 align_frames=bool(getattr(self, "stack_align_frames", True)),
                 use_calibration=bool(getattr(self, "stack_use_calibration", False)),
                 bayer_pattern=getattr(self, "stack_bayer_pattern", "AUTO"),
+                normalization=getattr(self, "stack_normalization", "none"),
                 selected_files=getattr(self, "stack_input_paths", []),
             )
         else:
@@ -19149,6 +19180,7 @@ class AstroApp(QMainWindow):
                 align_frames=bool(getattr(self, "stack_align_frames", True)),
                 use_calibration=bool(getattr(self, "stack_use_calibration", False)),
                 bayer_pattern=getattr(self, "stack_bayer_pattern", "AUTO"),
+                normalization=getattr(self, "stack_normalization", "none"),
             )
             self.stack_dialog.set_selected_files(getattr(self, "stack_input_paths", []))
         return self.stack_dialog
@@ -19160,6 +19192,7 @@ class AstroApp(QMainWindow):
                 method=getattr(self, "solar_stack_method", "median"),
                 align_frames=bool(getattr(self, "solar_stack_align_frames", True)),
                 bayer_pattern=getattr(self, "solar_stack_bayer_pattern", "AUTO"),
+                normalization=getattr(self, "solar_stack_normalization", "none"),
                 source_path=getattr(self, "solar_stack_source_path", ""),
             )
         else:
@@ -19167,6 +19200,7 @@ class AstroApp(QMainWindow):
                 method=getattr(self, "solar_stack_method", "median"),
                 align_frames=bool(getattr(self, "solar_stack_align_frames", True)),
                 bayer_pattern=getattr(self, "solar_stack_bayer_pattern", "AUTO"),
+                normalization=getattr(self, "solar_stack_normalization", "none"),
                 source_path=getattr(self, "solar_stack_source_path", ""),
             )
         return self.solar_stack_dialog
@@ -19269,12 +19303,14 @@ class AstroApp(QMainWindow):
         if auto_end and not dialog.property("compare_auto_end_connected"):
             dialog.finished.connect(lambda _result, d=dialog: self._end_dialog_compare(d))
             dialog.setProperty("compare_auto_end_connected", True)
-        self.viewer.set_compare_enabled(True)
+        if not self._color_calibration_compare_suppressed:
+            self.viewer.set_compare_enabled(True)
 
     def _end_dialog_compare(self, dialog):
         if dialog in self.compare_dialogs:
             self.compare_dialogs.remove(dialog)
-        self.viewer.set_compare_enabled(len(self.compare_dialogs) > 0)
+        if not self._color_calibration_compare_suppressed:
+            self.viewer.set_compare_enabled(len(self.compare_dialogs) > 0)
 
     def log(self, message: str, level: str = "info"):
         if not hasattr(self, "history_items"):
@@ -21322,7 +21358,10 @@ class AstroApp(QMainWindow):
         self._stop_bn_roi_pick()
         self._bn_overlay_active = False
         self.update_viewer_overlay()
-        self._begin_dialog_compare(dialog)
+        if not self._color_calibration_compare_suppressed:
+            self._compare_enabled_before_color_calibration = bool(self.viewer.compare_enabled)
+        self._color_calibration_compare_suppressed = True
+        self.viewer.set_compare_enabled(False)
         dialog.show()
         dialog.raise_()
         dialog.activateWindow()
@@ -21592,6 +21631,10 @@ class AstroApp(QMainWindow):
         self._stop_bn_roi_pick()
         self._bn_overlay_active = False
         self.update_viewer_overlay()
+        self._color_calibration_compare_suppressed = False
+        restore_compare = self._compare_enabled_before_color_calibration or bool(self.compare_dialogs)
+        self._compare_enabled_before_color_calibration = False
+        self.viewer.set_compare_enabled(restore_compare)
 
     def _set_bn_overlay_from_roi(self, y1: int, y2: int, x1: int, x2: int):
         self._bn_overlay_rect = (
@@ -22920,12 +22963,14 @@ class AstroApp(QMainWindow):
             return
         params = dialog.get_parameters()
         method_key = str(params.get("method") or "median").strip().lower()
-        method_key = "average" if method_key == "average" else "median"
+        method_key = method_key if method_key in {"average", "median", "mad_clip"} else "median"
         align_frames = bool(params.get("align_frames", True))
         use_calibration = bool(params.get("use_calibration", False))
         bayer_pattern = str(params.get("bayer_pattern") or "AUTO").strip().upper()
+        normalization_mode = str(params.get("normalization") or "none").strip().lower()
         self.stack_method = method_key
         self.stack_align_frames = align_frames
+        self.stack_normalization = normalization_mode
         self.stack_use_calibration = use_calibration
         self.stack_bayer_pattern = bayer_pattern
 
@@ -23191,6 +23236,8 @@ class AstroApp(QMainWindow):
             frames = [cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR) for frame in frames]
             _stack_progress("Converting mono frames...", 70, 100, "Mono conversion complete", visual_stage="debayer")
 
+        frames = normalize_stack_frames(frames, normalization_mode)
+
         frame_stack = [frames[0].astype(np.float32)]
         alignment_failures = 0
 
@@ -23224,11 +23271,7 @@ class AstroApp(QMainWindow):
             frame_stack.extend(frame.astype(np.float32) for frame in frames[1:])
 
         _stack_progress("Stacking frames...", 92, 0, "Computing final stack...", indeterminate=True, visual_stage="stacking")
-        cube = np.stack(frame_stack, axis=0)
-        if method_key == "median":
-            stacked = np.median(cube, axis=0)
-        else:
-            stacked = np.mean(cube, axis=0)
+        stacked = integrate_stack_frames(frame_stack, method_key, sigma_low=4.0, sigma_high=3.0)
         stacked = np.clip(stacked, 0, 255).astype(np.uint8)
         _stack_progress("Stacking frames...", 97, 100, "Finalizing output", indeterminate=False, visual_stage="stacking")
 
@@ -23263,11 +23306,11 @@ class AstroApp(QMainWindow):
         stack_progress_dialog.close()
 
         self.add_thumbnail(f"Stack ({len(frame_stack)} frames)", self.processed_img)
-        mode_name = "median" if method_key == "median" else "average"
+        mode_name = {"median": "median", "average": "average", "mad_clip": "MAD-clipped average"}[method_key]
         align_name = "aligned" if align_frames else "no alignment"
         calibration_enabled = master_bias is not None or master_dark is not None or flat_norm is not None
         calibration_name = "with calibration" if calibration_enabled else "no calibration"
-        self.log(f"Stack ready: {len(frame_stack)} frames ({mode_name}, {align_name}, {calibration_name}).", "success")
+        self.log(f"Stack ready: {len(frame_stack)} frames ({mode_name}, {align_name}, {calibration_name}, {normalization_mode} normalization).", "success")
         if alignment_failures > 0:
             self.log(f"Alignment fallback used for {alignment_failures} frame(s).", "warning")
         if invalid_paths:
@@ -23302,12 +23345,14 @@ class AstroApp(QMainWindow):
             return
 
         method_key = str(params.get("method") or "median").strip().lower()
-        method_key = "average" if method_key == "average" else "median"
+        method_key = method_key if method_key in {"average", "median", "mad_clip"} else "median"
         align_frames = bool(params.get("align_frames", True))
         bayer_pattern = str(params.get("bayer_pattern") or "AUTO").strip().upper()
+        normalization_mode = str(params.get("normalization") or "none").strip().lower()
 
         self.solar_stack_method = method_key
         self.solar_stack_align_frames = align_frames
+        self.solar_stack_normalization = normalization_mode
         self.solar_stack_bayer_pattern = bayer_pattern
         self.solar_stack_source_path = source_path
 
@@ -23443,6 +23488,8 @@ class AstroApp(QMainWindow):
             frames = [cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR) for frame in frames]
             _stack_progress("3/4 Dodaj punkty wyrównania", 70, 100, "Mono gotowe", visual_stage="debayer")
 
+        frames = normalize_stack_frames(frames, normalization_mode)
+
         frame_stack = [frames[0].astype(np.float32)]
         alignment_failures = 0
 
@@ -23476,11 +23523,7 @@ class AstroApp(QMainWindow):
             frame_stack.extend(frame.astype(np.float32) for frame in frames[1:])
 
         _stack_progress("4/4 Stack", 92, 0, "Liczenie finalnego stacka...", indeterminate=True, visual_stage="stacking")
-        cube = np.stack(frame_stack, axis=0)
-        if method_key == "median":
-            stacked = np.median(cube, axis=0)
-        else:
-            stacked = np.mean(cube, axis=0)
+        stacked = integrate_stack_frames(frame_stack, method_key, sigma_low=4.0, sigma_high=3.0)
         stacked = np.clip(stacked, 0, 255).astype(np.uint8)
         _stack_progress("4/4 Stack", 97, 100, "Finalizacja wyniku", indeterminate=False, visual_stage="stacking")
 
@@ -23515,9 +23558,9 @@ class AstroApp(QMainWindow):
         stack_progress_dialog.close()
 
         self.add_thumbnail(f"Planetary Stack ({len(frame_stack)} frames)", self.processed_img)
-        mode_name = "median" if method_key == "median" else "average"
+        mode_name = {"median": "median", "average": "average", "mad_clip": "MAD-clipped average"}[method_key]
         align_name = "aligned" if align_frames else "no alignment"
-        self.log(f"Planetary stack ready: {len(frame_stack)} frames ({mode_name}, {align_name}).", "success")
+        self.log(f"Planetary stack ready: {len(frame_stack)} frames ({mode_name}, {align_name}, {normalization_mode} normalization).", "success")
         if alignment_failures > 0:
             self.log(f"Alignment fallback used for {alignment_failures} frame(s).", "warning")
         if mismatched_count > 0:

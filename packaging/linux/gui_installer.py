@@ -57,10 +57,10 @@ def write_launcher(install_dir: Path) -> Path:
 
 
 def resolve_icon(install_dir: Path) -> Path | None:
-    first = install_dir / "assets" / "favicon.ico"
+    first = install_dir / "_internal" / "favicon-32.png"
     if first.is_file():
         return first
-    second = install_dir / "_internal" / "assets" / "favicon.ico"
+    second = install_dir / "favicon-32.png"
     if second.is_file():
         return second
     return None

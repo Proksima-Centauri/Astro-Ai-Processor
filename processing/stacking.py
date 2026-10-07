@@ -128,7 +128,7 @@ def integrate_stack_frames(
     if len(shape) not in (2, 3) or any(frame.shape != shape for frame in arrays):
         raise ValueError("Stacking frames must have the same 2D/3D shape.")
     normalized_method = str(method or "median").strip().lower()
-    if normalized_method not in {"median", "average", "sigma_clip"}:
+    if normalized_method not in {"median", "average", "mad_clip"}:
         raise ValueError(f"Unsupported stacking method: {method}")
     if not np.isfinite(sigma_low) or not np.isfinite(sigma_high) or sigma_low < 0 or sigma_high < 0:
         raise ValueError("Sigma thresholds must be finite, non-negative values.")
@@ -143,7 +143,7 @@ def integrate_stack_frames(
         cube = np.stack([frame[row_start:row_end] for frame in arrays], axis=0)
         if normalized_method == "median":
             combined = np.median(cube, axis=0)
-        elif normalized_method == "sigma_clip":
+        elif normalized_method == "mad_clip":
             combined = _sigma_clipped_mean(cube, sigma_low, sigma_high)
         else:
             combined = np.mean(cube, axis=0, dtype=np.float32)

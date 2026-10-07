@@ -69,12 +69,12 @@ validate_source_dir() {
 }
 
 resolve_icon_path() {
-  if [[ -f "${INSTALL_DIR}/assets/favicon.ico" ]]; then
-    printf '%s\n' "${INSTALL_DIR}/assets/favicon.ico"
+  if [[ -f "${INSTALL_DIR}/_internal/favicon-32.png" ]]; then
+    printf '%s\n' "${INSTALL_DIR}/_internal/favicon-32.png"
     return
   fi
-  if [[ -f "${INSTALL_DIR}/_internal/assets/favicon.ico" ]]; then
-    printf '%s\n' "${INSTALL_DIR}/_internal/assets/favicon.ico"
+  if [[ -f "${INSTALL_DIR}/favicon-32.png" ]]; then
+    printf '%s\n' "${INSTALL_DIR}/favicon-32.png"
     return
   fi
   printf '%s\n' ""
