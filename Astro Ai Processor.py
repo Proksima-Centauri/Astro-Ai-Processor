@@ -11,6 +11,7 @@ import threading
 import re
 import shlex
 import math
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 import socket
@@ -6972,26 +6973,12 @@ class AIAssistantPanel(QFrame):
         self.setFrameShape(QFrame.StyledPanel)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
-        self.startup_splash_duration_ms = 5000
-        self.startup_splash_path = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            "assets",
-            "altair",
-            "init.png",
-        )
-
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
         self.stacked_layout = QStackedLayout()
         layout.addLayout(self.stacked_layout)
-
-        self.startup_splash_widget = AltairStartupWidget(
-            self.startup_splash_path,
-            star_point=(708.5, 218.5),
-        )
-        self.stacked_layout.addWidget(self.startup_splash_widget)
 
         self.content_widget = QWidget()
         self.stacked_layout.addWidget(self.content_widget)
@@ -7015,6 +7002,9 @@ class AIAssistantPanel(QFrame):
         self.input_text = QTextEdit()
         self.input_text.setFixedHeight(100)
         self.input_text.setPlaceholderText("Type your message here...")
+        self.input_text.setReadOnly(False)
+        self.input_text.setEnabled(True)
+        self.input_text.setFocusPolicy(Qt.StrongFocus)
         content_layout.addWidget(self.input_text)
 
         button_layout = QHBoxLayout()
@@ -7081,11 +7071,13 @@ class AIAssistantPanel(QFrame):
         self.pending_analysis_indicator_widget = None
         self.stt_worker = None
         self.ai_worker = None
+        self.file_search_worker = None
+        self.pending_frame_confirmation = None
         self.model_download_worker = None
         self._refresh_local_model_label()
         if not SPEECH_RECOGNITION_AVAILABLE:
             self.btn_voice.setToolTip("Voice to Text wymaga pakietu SpeechRecognition")
-        self._init_startup_splash()
+        self._show_chat_panel()
 
     def _refresh_local_model_label(self):
         model_file = str(getattr(self.app, "local_ai_model_file", "") or "").strip()
@@ -7100,6 +7092,21 @@ class AIAssistantPanel(QFrame):
             self.token_usage_bar.setValue(0)
             self.token_usage_bar.setToolTip(build_local_ai_missing_model_message())
             self.btn_download_model.setVisible(True)
+
+    def _release_worker_reference_after_stop(self, attr_name: str, worker):
+        if worker is None:
+            return
+        try:
+            if worker.isRunning():
+                QTimer.singleShot(
+                    25,
+                    lambda name=attr_name, thread=worker: self._release_worker_reference_after_stop(name, thread),
+                )
+                return
+        except RuntimeError:
+            pass
+        if getattr(self, attr_name, None) is worker:
+            setattr(self, attr_name, None)
 
     def on_download_local_model(self):
         if self.model_download_worker is not None and self.model_download_worker.isRunning():
@@ -7132,7 +7139,7 @@ class AIAssistantPanel(QFrame):
             self.status_label.setText("Pobieranie modelu nie powiodlo sie.")
             self.append_system_message(f"Blad pobierania modelu: {error}")
             self._refresh_local_model_label()
-            self.model_download_worker = None
+            self._release_worker_reference_after_stop("model_download_worker", self.model_download_worker)
             return
 
         saved_path = str(model_path or "").strip()
@@ -7143,22 +7150,11 @@ class AIAssistantPanel(QFrame):
         self.status_label.setText("Model Qwen pobrany i gotowy.")
         self.append_system_message(f"Model offline gotowy: {saved_path}")
         self._refresh_local_model_label()
-        self.model_download_worker = None
-
-    def _init_startup_splash(self):
-        if not os.path.exists(self.startup_splash_path):
-            self.stacked_layout.setCurrentWidget(self.content_widget)
-            return
-
-        if not self.startup_splash_widget.has_image():
-            self.stacked_layout.setCurrentWidget(self.content_widget)
-            return
-
-        self.stacked_layout.setCurrentWidget(self.startup_splash_widget)
-        QTimer.singleShot(self.startup_splash_duration_ms, self._show_chat_panel)
+        self._release_worker_reference_after_stop("model_download_worker", self.model_download_worker)
 
     def _show_chat_panel(self):
         self.stacked_layout.setCurrentWidget(self.content_widget)
+        QTimer.singleShot(0, self.input_text.setFocus)
 
 
     def _microphone_svg(self) -> str:
@@ -7353,6 +7349,26 @@ class AIAssistantPanel(QFrame):
         self.append_user_message(message)
         self.input_text.clear()
 
+        if self.pending_frame_confirmation is not None:
+            reply = _normalize_search_text(message).strip()
+            if re.match(r"^(?:tak|yes|y|otworz|zgadza sie)(?:\b|$)", reply):
+                self._confirm_pending_frame_candidate()
+                return
+            if re.match(r"^(?:nie|no|n|nie to|zly plik|zla klatka)(?:\b|$)", reply):
+                self._reject_pending_frame_candidate()
+                return
+            self._dismiss_pending_frame_confirmation()
+
+        frame_number = extract_frame_number_open_request(message)
+        if frame_number:
+            self._start_image_search(frame_number, match_mode="frame")
+            return
+
+        image_query = extract_image_open_request(message)
+        if image_query:
+            self._start_image_search(image_query)
+            return
+
         payload = self.get_context_payload()
         self.status_label.setText("")
         self._show_assistant_typing_indicator()
@@ -7366,6 +7382,174 @@ class AIAssistantPanel(QFrame):
         )
         self.ai_worker.finished_signal.connect(self.on_ai_finished)
         self.ai_worker.start()
+
+    def _start_image_search(self, filename: str, match_mode: str = "name"):
+        if self.app is None or not hasattr(self.app, "load_image_from_path"):
+            self.append_assistant_message("Nie mogę otworzyć obrazu bez aktywnego okna aplikacji.")
+            return
+        if self.file_search_worker is not None and self.file_search_worker.isRunning():
+            self.append_assistant_message("Już szukam poprzedniego pliku. Poczekaj na wynik.")
+            return
+
+        self._show_assistant_typing_indicator()
+        self.btn_send.setEnabled(False)
+        self.btn_run_ase.setEnabled(False)
+        if match_mode == "frame":
+            self.status_label.setText(f"Szukam klatki o numerze {filename}...")
+        else:
+            self.status_label.setText(f"Szukam pliku: {os.path.basename(filename)}")
+        self.file_search_worker = ImageFileSearchWorker(
+            filename,
+            get_image_search_roots(self.app),
+            match_mode=match_mode,
+        )
+        self.file_search_worker.finished_signal.connect(self._on_image_search_finished)
+        self.file_search_worker.start()
+
+    def _on_image_search_finished(self, requested_name: str, match_mode: str, matches, error: str):
+        self._hide_assistant_typing_indicator()
+        self.btn_send.setEnabled(True)
+        self.btn_run_ase.setEnabled(True)
+        self.status_label.setText("")
+        self._release_worker_reference_after_stop("file_search_worker", self.file_search_worker)
+
+        if error:
+            self.append_assistant_message(f"Wyszukiwanie pliku nie powiodło się: {error}")
+            return
+        paths = [str(path) for path in (matches or [])]
+        if not paths:
+            if match_mode == "frame":
+                self.append_assistant_message(f"Nie znalazłem obrazu zawierającego numer klatki {requested_name}.")
+            else:
+                self.append_assistant_message(
+                    f"Nie znalazłem pliku „{os.path.basename(requested_name)}” na dostępnych dyskach."
+                )
+            return
+        if match_mode == "frame":
+            self.pending_frame_confirmation = {
+                "paths": paths,
+                "index": 0,
+                "frame_number": requested_name,
+                "choice_row": None,
+            }
+            self._show_pending_frame_candidate()
+            return
+        if len(paths) > 1:
+            listed_paths = "\n".join(f"• {path}" for path in paths[:8])
+            suffix = "\n…" if len(paths) > 8 else ""
+            self.append_assistant_message(
+                f"Znalazłem kilka plików pasujących do „{os.path.basename(requested_name)}”. Wybierz właściwy:\n"
+                f"{listed_paths}{suffix}"
+            )
+            options = []
+            for path in paths[:8]:
+                parent_name = os.path.basename(os.path.dirname(path)) or os.path.dirname(path)
+                label = f"{os.path.basename(path)} — {parent_name}"
+                options.append((label, lambda selected_path=path: self._open_selected_image(selected_path)))
+            self._append_assistant_choice_buttons(options)
+            return
+
+        self._open_selected_image(paths[0])
+
+    def _append_assistant_choice_buttons(self, choices):
+        if not choices:
+            return None
+        row = QWidget()
+        row_layout = QVBoxLayout(row) if len(choices) > 2 else QHBoxLayout(row)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setSpacing(6)
+        for label, callback in choices:
+            button = QPushButton(str(label))
+            button.setToolTip(str(label))
+
+            def _invoke_choice(_checked=False, handler=callback, choice_row=row):
+                for choice_button in choice_row.findChildren(QPushButton):
+                    choice_button.setEnabled(False)
+                handler()
+
+            button.clicked.connect(_invoke_choice)
+            row_layout.addWidget(button)
+        row_layout.addStretch(1)
+        self.chat_layout.insertWidget(max(0, self.chat_layout.count() - 1), row)
+        self._scroll_chat_to_bottom()
+        return row
+
+    def _open_selected_image(self, path: str):
+        try:
+            self.app.load_image_from_path(path)
+        except Exception as exc:
+            self.append_assistant_message(f"Nie udało się otworzyć pliku „{path}”: {exc}")
+            return
+
+        current_path = str(getattr(self.app, "current_image_path", "") or "")
+        if (
+            current_path
+            and getattr(self.app, "processed_img", None) is not None
+            and os.path.normcase(os.path.abspath(current_path)) == os.path.normcase(os.path.abspath(path))
+        ):
+            self.append_assistant_message(f"Znalazłem i otworzyłem obraz: {path}")
+        else:
+            self.append_assistant_message(f"Znalazłem „{path}”, ale aplikacja nie mogła go wczytać.")
+
+    def _dismiss_pending_frame_confirmation(self):
+        pending = self.pending_frame_confirmation
+        self.pending_frame_confirmation = None
+        if not pending:
+            return
+        row = pending.get("choice_row")
+        if row is not None:
+            row.setEnabled(False)
+            row.hide()
+            row.deleteLater()
+
+    def _show_pending_frame_candidate(self):
+        pending = self.pending_frame_confirmation
+        if not pending:
+            return
+        index = int(pending.get("index", 0))
+        paths = pending.get("paths") or []
+        if index < 0 or index >= len(paths):
+            self._dismiss_pending_frame_confirmation()
+            return
+        path = str(paths[index])
+        frame_number = str(pending.get("frame_number") or "")
+        self.append_assistant_message(
+            f"Czy chodziło Ci o klatkę {frame_number}: „{os.path.basename(path)}”\n{os.path.dirname(path)}?"
+        )
+        pending["choice_row"] = self._append_assistant_choice_buttons([
+            ("Tak, otwórz", self._confirm_pending_frame_candidate),
+            ("Nie", self._reject_pending_frame_candidate),
+        ])
+
+    def _confirm_pending_frame_candidate(self):
+        pending = self.pending_frame_confirmation
+        if not pending:
+            return
+        paths = pending.get("paths") or []
+        index = int(pending.get("index", 0))
+        path = str(paths[index]) if 0 <= index < len(paths) else ""
+        self._dismiss_pending_frame_confirmation()
+        if path:
+            self._open_selected_image(path)
+
+    def _reject_pending_frame_candidate(self):
+        pending = self.pending_frame_confirmation
+        if not pending:
+            return
+        next_index = int(pending.get("index", 0)) + 1
+        paths = pending.get("paths") or []
+        frame_number = str(pending.get("frame_number") or "")
+        self._dismiss_pending_frame_confirmation()
+        if next_index < len(paths):
+            self.pending_frame_confirmation = {
+                "paths": paths,
+                "index": next_index,
+                "frame_number": frame_number,
+                "choice_row": None,
+            }
+            self._show_pending_frame_candidate()
+        else:
+            self.append_assistant_message("W porządku. Podaj nazwę pliku lub inny numer klatki, a poszukam ponownie.")
 
     def on_analyze(self):
         if self.app is None:
@@ -7448,7 +7632,7 @@ class AIAssistantPanel(QFrame):
         self._hide_analysis_chat_indicator()
         self.status_label.setText("")
 
-        for attr_name in ("ai_worker", "stt_worker", "model_download_worker"):
+        for attr_name in ("ai_worker", "stt_worker", "model_download_worker", "file_search_worker"):
             worker = getattr(self, attr_name, None)
             if worker is None:
                 continue
@@ -9037,6 +9221,28 @@ class LocalAIWorker(QThread):
             self.finished_signal.emit(result, "", meta)
         except Exception as e:
             self.finished_signal.emit("", str(e), {})
+
+
+class ImageFileSearchWorker(QThread):
+    finished_signal = pyqtSignal(str, str, object, str)
+
+    def __init__(self, filename: str, roots, match_mode: str = "name"):
+        super().__init__()
+        self.filename = str(filename or "").strip()
+        self.roots = list(roots or [])
+        self.match_mode = str(match_mode or "name").strip().lower()
+
+    def run(self):
+        try:
+            matches = find_image_paths_by_name(
+                self.filename,
+                self.roots,
+                should_cancel=self.isInterruptionRequested,
+                match_mode=self.match_mode,
+            )
+            self.finished_signal.emit(self.filename, self.match_mode, matches, "")
+        except Exception as exc:
+            self.finished_signal.emit(self.filename, self.match_mode, [], str(exc))
 
 
 class LocalModelDownloadWorker(QThread):
@@ -11306,6 +11512,224 @@ def _is_fits_path(path: str) -> bool:
 
 def _is_supported_image_path(path: str) -> bool:
     return os.path.isfile(path) and os.path.splitext(path)[1].lower() in IMAGE_EXTENSIONS
+
+
+def _normalize_search_text(text: str) -> str:
+    value = str(text or "").replace("ł", "l").replace("Ł", "L")
+    return "".join(
+        char for char in unicodedata.normalize("NFKD", value).casefold()
+        if not unicodedata.combining(char)
+    )
+
+
+def extract_image_open_request(message: str) -> str:
+    """Extract an image filename from a direct Polish/English open request."""
+    raw = str(message or "").strip()
+    normalized = _normalize_search_text(raw)
+    if not re.search(r"\b(?:otworz|otwoz|wczytaj|zaladuj|open|load)\b", normalized):
+        return ""
+
+    extension_pattern = r"(?:png|jpe?g|tiff?|webp|fits?|fts)"
+    candidates = [
+        rf"[\"'](?P<target>[^\"'\r\n]+\.{extension_pattern})[\"']",
+        rf"(?:obraz(?:u)?|zdj[eę]cie|plik(?:u)?|image|photo|file)\s+(?P<target>[^\r\n,!?;]*?\.{extension_pattern})(?=$|[\s,!?;])",
+        rf"(?<![\w])(?P<target>[^\s\"'<>|]+\.{extension_pattern})(?=$|[\s,!?;])",
+    ]
+    for pattern in candidates:
+        match = re.search(pattern, raw, flags=re.IGNORECASE)
+        if not match:
+            continue
+        target = str(match.group("target") or "").strip().strip("\"'").rstrip(".,;:!?)]}")
+        if target and os.path.splitext(target)[1].lower() in IMAGE_EXTENSIONS:
+            return target
+
+    quoted_name = re.search(
+        r"(?:obraz(?:u)?|zdj[eę]cie|plik(?:u)?|image|photo|file)\s+[\"'](?P<target>[^\"']+)[\"']",
+        raw,
+        flags=re.IGNORECASE,
+    )
+    if quoted_name:
+        return str(quoted_name.group("target") or "").strip()
+
+    stem_match = re.search(
+        r"(?:obraz(?:u)?|zdj[eę]cie|plik(?:u)?|image|photo|file)\s+(?:(?:o\s+nazwie|nazwa)\s+)?(?P<target>[\w.-]+(?:\s+[\w.-]+)?)",
+        raw,
+        flags=re.IGNORECASE,
+    )
+    if stem_match:
+        target = str(stem_match.group("target") or "").strip().rstrip(".,;:!?)]}")
+        extension = os.path.splitext(target)[1].lower()
+        if target and (not extension or extension in IMAGE_EXTENSIONS):
+            return target
+
+    command_tail = re.search(
+        r"\b(?:otw[oó]rz|otw[oó]ż|wczytaj|załaduj|zaladuj|open|load)\b\s+(?P<tail>.+)$",
+        raw,
+        flags=re.IGNORECASE,
+    )
+    if command_tail:
+        tokens = re.findall(r"[^\s,!?;]+", command_tail.group("tail"))
+        filler_words = {
+            "mi", "proszę", "prosze", "obraz", "obrazu", "plik", "pliku", "zdjęcie", "zdjecie",
+            "image", "photo", "file", "the", "please", "now", "teraz", "o", "nazwie",
+        }
+        while tokens and _normalize_search_text(tokens[0].strip("\"'()[]{}")) in filler_words:
+            tokens.pop(0)
+        target_tokens = [token.strip("\"'()[]{}.,") for token in tokens[:2]]
+        target = " ".join(token for token in target_tokens if token).rstrip(".,;:!?)]}")
+        if target and (any(char.isdigit() for char in target) or "_" in target or "/" in target or "\\" in target):
+            extension = os.path.splitext(target)[1].lower()
+            if not extension or extension in IMAGE_EXTENSIONS:
+                return target
+    return ""
+
+
+def extract_frame_number_open_request(message: str) -> str:
+    """Extract a frame number from a direct image-open request."""
+    normalized = _normalize_search_text(message)
+    if not re.search(r"\b(?:otworz|otwoz|wczytaj|zaladuj|open|load)\b", normalized):
+        return ""
+    match = re.search(
+        r"\b(?:klatk(?:a|e|i)|kadr(?:u|ze)?|frame)\b\s*(?:(?:o\s+)?(?:numer(?:ze|u)?|nr|number|no)\s*)?(?P<number>\d{1,6})\b",
+        normalized,
+    )
+    return str(match.group("number")) if match else ""
+
+
+def get_image_search_roots(app=None) -> list[str]:
+    """Return likely user image locations and available removable volumes."""
+    home = os.path.abspath(os.path.expanduser("~"))
+    candidates = []
+    current_image = str(getattr(app, "current_image_path", "") or "").strip() if app is not None else ""
+    if current_image:
+        candidates.append(os.path.dirname(os.path.abspath(current_image)))
+    configured_home = str(getattr(app, "home_folder", "") or "").strip() if app is not None else ""
+    if configured_home:
+        candidates.append(configured_home)
+    candidates.extend([
+        os.path.join(home, "Pictures"),
+        os.path.join(home, "Images"),
+        os.path.join(home, "Desktop"),
+        os.path.join(home, "Documents"),
+        home,
+        os.getcwd(),
+    ])
+
+    if os.name == "nt":
+        try:
+            import ctypes
+
+            drive_mask = int(ctypes.windll.kernel32.GetLogicalDrives())
+            candidates.extend(f"{chr(65 + index)}:\\" for index in range(26) if drive_mask & (1 << index))
+        except Exception:
+            candidates.append(os.environ.get("SystemDrive", "C:") + "\\")
+    else:
+        user_name = os.path.basename(home.rstrip(os.sep))
+        candidates.extend(("/media", "/mnt", "/data", "/Volumes", os.path.join("/run/media", user_name), os.path.abspath(os.sep)))
+
+    roots = []
+    seen = set()
+    for candidate in candidates:
+        root = os.path.abspath(os.path.expanduser(str(candidate or "")))
+        key = os.path.normcase(root)
+        if key in seen or not os.path.isdir(root):
+            continue
+        seen.add(key)
+        roots.append(root)
+    return roots
+
+
+def find_image_paths_by_name(
+    filename: str,
+    roots,
+    max_matches: int = 12,
+    should_cancel=None,
+    match_mode: str = "name",
+) -> list[str]:
+    """Search roots by exact image name/stem or frame-number token."""
+    requested = str(filename or "").strip().strip("\"'")
+    if not requested:
+        return []
+    mode = str(match_mode or "name").strip().lower()
+    if mode == "name" and _is_supported_image_path(requested):
+        return [os.path.abspath(requested)]
+
+    wanted_name = os.path.basename(requested).casefold()
+    wanted_extension = os.path.splitext(wanted_name)[1].lower()
+    if mode == "frame":
+        frame_number = re.sub(r"\D", "", wanted_name)
+        if not frame_number:
+            return []
+    elif mode != "name" or not wanted_name or (wanted_extension and wanted_extension not in IMAGE_EXTENSIONS):
+        return []
+    else:
+        frame_number = ""
+        wanted_stem = os.path.splitext(wanted_name)[0] if wanted_extension else wanted_name
+
+    excluded_dirs = {
+        "$recycle.bin", ".cache", ".git", ".local/share/trash", ".venv", "__pycache__",
+        "appdata", "applications", "bin", "boot", "dev", "etc", "lib", "lib64", "library",
+        "lost+found", "node_modules", "opt", "private", "proc", "program files", "program files (x86)",
+        "programdata", "run", "sbin", "snap", "system", "system volume information", "sys", "temp",
+        "tmp", "usr", "var", "venv", "windows",
+    }
+    matches = []
+    found = set()
+    scanned_roots = []
+    for raw_root in roots or []:
+        if should_cancel is not None and should_cancel():
+            break
+        root = os.path.abspath(os.path.expanduser(str(raw_root or "")))
+        if not os.path.isdir(root):
+            continue
+        try:
+            if any(os.path.commonpath((root, previous)) == previous for previous in scanned_roots):
+                continue
+        except (OSError, ValueError):
+            pass
+        previously_scanned_roots = list(scanned_roots)
+        scanned_roots.append(root)
+
+        def _ignore_walk_error(_error):
+            return None
+
+        for current_dir, dir_names, file_names in os.walk(root, topdown=True, followlinks=False, onerror=_ignore_walk_error):
+            if should_cancel is not None and should_cancel():
+                return sorted(matches, key=str.casefold)
+            retained_dirs = []
+            for name in dir_names:
+                if name.casefold() in excluded_dirs or name.casefold().startswith("$recycle"):
+                    continue
+                child_path = os.path.abspath(os.path.join(current_dir, name))
+                try:
+                    if any(os.path.commonpath((child_path, previous)) == previous for previous in previously_scanned_roots):
+                        continue
+                except (OSError, ValueError):
+                    pass
+                retained_dirs.append(name)
+            dir_names[:] = retained_dirs
+            for name in file_names:
+                extension = os.path.splitext(name)[1].lower()
+                if extension not in IMAGE_EXTENSIONS:
+                    continue
+                stem = os.path.splitext(name)[0]
+                if mode == "frame":
+                    if not re.search(rf"(?<!\d){re.escape(frame_number)}(?!\d)", stem):
+                        continue
+                elif wanted_extension:
+                    if name.casefold() != wanted_name:
+                        continue
+                elif stem.casefold() != wanted_stem:
+                    continue
+                full_path = os.path.abspath(os.path.join(current_dir, name))
+                key = os.path.normcase(full_path)
+                if key in found:
+                    continue
+                found.add(key)
+                matches.append(full_path)
+                if len(matches) >= max(1, int(max_matches)):
+                    return sorted(matches, key=str.casefold)
+    return sorted(matches, key=str.casefold)
 
 
 def _is_video_path(path: str) -> bool:
@@ -17012,6 +17436,104 @@ def get_dark_stylesheet() -> str:
         selection-color: #ffffff;
     }
 
+    QComboBox[commandMenu="true"],
+    QComboBox[commandPalette="true"] {
+        background-color: #1f1f1f;
+        color: #eeeeee;
+        border: 1px solid #454545;
+        border-radius: 5px;
+        padding: 6px 9px;
+        min-height: 26px;
+    }
+
+    QComboBox[commandMenu="true"]:hover {
+        background-color: #2b2b2b;
+        border-color: #606060;
+    }
+
+    QComboBox[commandMenu="true"] QAbstractItemView,
+    QComboBox[commandPalette="true"] QAbstractItemView {
+        background-color: #252526;
+        color: #eeeeee;
+        border: 1px solid #454545;
+        selection-background-color: #094771;
+        selection-color: #ffffff;
+        outline: none;
+        padding: 4px;
+    }
+
+    QComboBox[commandPalette="true"] {
+        background-color: #252526;
+        padding: 8px 12px;
+        min-height: 32px;
+    }
+
+    QComboBox[commandPalette="true"] QLineEdit {
+        background: transparent;
+        color: #eeeeee;
+        border: none;
+        padding: 2px 4px;
+        selection-background-color: #094771;
+    }
+
+    QComboBox[commandPalette="true"]:focus {
+        border: 1px solid #007acc;
+    }
+
+    QFrame#top_menu_bar {
+        background-color: #1e1e1e;
+        border: none;
+        border-bottom: 1px solid #2b2b2b;
+        border-radius: 0px;
+    }
+
+    QComboBox[commandMenu="true"] {
+        background: transparent;
+        color: #cccccc;
+        border: 1px solid transparent;
+        border-radius: 4px;
+        padding: 3px 6px;
+        min-height: 22px;
+    }
+
+    QComboBox[commandMenu="true"]:hover,
+    QComboBox[commandMenu="true"]:on,
+    QComboBox[commandMenu="true"]:focus {
+        background-color: #2a2d2e;
+        color: #ffffff;
+        border-color: #2a2d2e;
+    }
+
+    QComboBox[commandMenu="true"] QLineEdit {
+        background: transparent;
+        color: #cccccc;
+        border: none;
+        padding: 0px;
+    }
+
+    QComboBox[commandMenu="true"]::drop-down {
+        width: 0px;
+        border: none;
+    }
+
+    QComboBox[commandMenu="true"]::down-arrow {
+        image: none;
+        width: 0px;
+        height: 0px;
+    }
+
+    QComboBox[commandMenu="true"] QAbstractItemView::item {
+        color: #cccccc;
+        min-height: 24px;
+        padding: 5px 28px 5px 12px;
+        border: none;
+    }
+
+    QComboBox[commandMenu="true"] QAbstractItemView::item:selected {
+        background-color: #094771;
+        color: #ffffff;
+    }
+
     QPushButton {
         background-color: #3a3a3a;
         color: #f0f0f0;
@@ -17324,6 +17846,103 @@ def get_light_stylesheet() -> str:
     QCheckBox[rgbChannelToggle="true"]::indicator:checked {
         background: #007acc;
         border: 1px solid #000000;
+    }
+
+    QComboBox[commandMenu="true"],
+    QComboBox[commandPalette="true"] {
+        background-color: #ffffff;
+        color: #1f1f1f;
+        border: 1px solid #c6c6c6;
+        border-radius: 5px;
+        padding: 6px 9px;
+        min-height: 26px;
+    }
+
+    QComboBox[commandMenu="true"]:hover {
+        background-color: #f3f3f3;
+        border-color: #969696;
+    }
+
+    QComboBox[commandMenu="true"] QAbstractItemView,
+    QComboBox[commandPalette="true"] QAbstractItemView {
+        background-color: #ffffff;
+        color: #1f1f1f;
+        border: 1px solid #c6c6c6;
+        selection-background-color: #cce8ff;
+        selection-color: #111111;
+        outline: none;
+        padding: 4px;
+    }
+
+    QComboBox[commandPalette="true"] {
+        padding: 8px 12px;
+        min-height: 32px;
+    }
+
+    QComboBox[commandPalette="true"] QLineEdit {
+        background: transparent;
+        color: #1f1f1f;
+        border: none;
+        padding: 2px 4px;
+        selection-background-color: #cce8ff;
+    }
+
+    QComboBox[commandPalette="true"]:focus {
+        border: 1px solid #007acc;
+    }
+
+    QFrame#top_menu_bar {
+        background-color: #f3f3f3;
+        border: none;
+        border-bottom: 1px solid #d6d6d6;
+        border-radius: 0px;
+    }
+
+    QComboBox[commandMenu="true"] {
+        background: transparent;
+        color: #444444;
+        border: 1px solid transparent;
+        border-radius: 4px;
+        padding: 3px 6px;
+        min-height: 22px;
+    }
+
+    QComboBox[commandMenu="true"]:hover,
+    QComboBox[commandMenu="true"]:on,
+    QComboBox[commandMenu="true"]:focus {
+        background-color: #e5e5e5;
+        color: #1f1f1f;
+        border-color: #e5e5e5;
+    }
+
+    QComboBox[commandMenu="true"] QLineEdit {
+        background: transparent;
+        color: #444444;
+        border: none;
+        padding: 0px;
+    }
+
+    QComboBox[commandMenu="true"]::drop-down {
+        width: 0px;
+        border: none;
+    }
+
+    QComboBox[commandMenu="true"]::down-arrow {
+        image: none;
+        width: 0px;
+        height: 0px;
+    }
+
+    QComboBox[commandMenu="true"] QAbstractItemView::item {
+        color: #1f1f1f;
+        min-height: 24px;
+        padding: 5px 28px 5px 12px;
+        border: none;
+    }
+
+    QComboBox[commandMenu="true"] QAbstractItemView::item:selected {
+        background-color: #cce8ff;
+        color: #111111;
     }
     """
 
@@ -18510,6 +19129,9 @@ class AstroApp(QMainWindow):
         self._pending_astro_upscale_history_label = None
         self.analysis_worker = None
         self._analysis_request_id = 0
+        self._close_waiting_for_workers = False
+        self._close_after_workers_finished = False
+        self._close_poll_scheduled = False
 
         # ---------- obrazy ----------
         self.original_img = None
@@ -21938,6 +22560,57 @@ class AstroApp(QMainWindow):
         self._stop_qthread(getattr(self, "plate_solve_worker", None), "plate solve worker")
         self._stop_qthread(getattr(self, "_processing_worker", None), "image processing worker")
         self._stop_qthread(getattr(self, "analysis_worker", None), "image analysis worker")
+        self._stop_qthread(getattr(self, "astro_upscale_worker", None), "Astro Upscale worker")
+
+    def _active_background_qthreads(self):
+        candidates = [
+            getattr(self, name, None)
+            for name in (
+                "worker",
+                "starnet_worker",
+                "deepsnr_worker",
+                "fly3d_worker",
+                "plate_solve_worker",
+                "_processing_worker",
+                "analysis_worker",
+                "astro_upscale_worker",
+                "arduino_joystick_worker",
+            )
+        ]
+        assistant = getattr(self, "ai_assistant_panel", None)
+        if assistant is not None:
+            candidates.extend(
+                getattr(assistant, name, None)
+                for name in ("ai_worker", "stt_worker", "model_download_worker", "file_search_worker")
+            )
+        active = []
+        seen = set()
+        for thread in candidates:
+            if not isinstance(thread, QThread) or id(thread) in seen:
+                continue
+            seen.add(id(thread))
+            try:
+                if thread.isRunning():
+                    active.append(thread)
+            except RuntimeError:
+                continue
+        return active
+
+    def _schedule_close_after_workers(self):
+        if not self._close_waiting_for_workers or self._close_poll_scheduled:
+            return
+        self._close_poll_scheduled = True
+        QTimer.singleShot(100, self._finish_close_after_workers)
+
+    def _finish_close_after_workers(self):
+        self._close_poll_scheduled = False
+        if not self._close_waiting_for_workers:
+            return
+        if self._active_background_qthreads():
+            self._schedule_close_after_workers()
+            return
+        self._close_after_workers_finished = True
+        self.close()
 
     def _current_topbar_button_order(self) -> list:
         layout = getattr(self, "top_actions_layout", None)
@@ -22029,9 +22702,29 @@ class AstroApp(QMainWindow):
         )
 
     def closeEvent(self, event):
+        if not self._close_after_workers_finished:
+            active_threads = self._active_background_qthreads()
+            if active_threads:
+                event.ignore()
+                if not self._close_waiting_for_workers:
+                    self._close_waiting_for_workers = True
+                    self.setEnabled(False)
+                    self.log("Finishing background tasks before closing...", "warning")
+                    joystick_worker = getattr(self, "arduino_joystick_worker", None)
+                    for thread in active_threads:
+                        try:
+                            if thread is joystick_worker and hasattr(thread, "stop"):
+                                thread.stop()
+                            thread.requestInterruption()
+                            thread.finished.connect(self._schedule_close_after_workers)
+                        except RuntimeError:
+                            continue
+                return
         self._save_topbar_button_order()
         self._shutdown_background_workers()
         self.disconnect_arduino_joystick()
+        self._close_waiting_for_workers = False
+        self._close_after_workers_finished = False
         super().closeEvent(event)
 
     def init_ui(self):
@@ -22395,6 +23088,233 @@ class AstroApp(QMainWindow):
                 button.setIcon(QIcon(icon_path))
                 button.setIconSize(QSize(16, 16))
 
+        command_palette_row = QFrame()
+        command_palette_row.setObjectName("command_palette_row")
+        command_palette_layout = QHBoxLayout(command_palette_row)
+        command_palette_layout.setContentsMargins(8, 4, 8, 4)
+        command_palette_layout.addStretch(1)
+
+        self.command_palette = QComboBox()
+        self.command_palette.setObjectName("commandPalette")
+        self.command_palette.setProperty("commandPalette", True)
+        self.command_palette.setEditable(True)
+        self.command_palette.setInsertPolicy(QComboBox.NoInsert)
+        self.command_palette.setMinimumWidth(520)
+        self.command_palette.setMaximumWidth(720)
+        self.command_palette.setMinimumHeight(42)
+        self.command_palette.setMaxVisibleItems(14)
+        self.command_palette.setToolTip("Paleta poleceń · Ctrl+Shift+P")
+        self.command_palette.lineEdit().setPlaceholderText("Wyszukaj polecenie… np. redukcja gwiazd (Ctrl+Shift+P)")
+        command_completer = self.command_palette.completer()
+        command_completer.setCompletionMode(QCompleter.PopupCompletion)
+        command_completer.setFilterMode(Qt.MatchContains)
+        command_completer.setCaseSensitivity(Qt.CaseInsensitive)
+
+        command_palette_entries = [
+            ("Otwórz obraz — Open", self.action_open),
+            ("Zapisz obraz — Save", self.action_save),
+            ("Zapisz jako — Save As", self.action_save_as),
+            ("Cofnij — Undo", self.action_undo),
+            ("Ponów — Redo", self.action_redo),
+            ("Kadruj obraz — Crop", self.action_crop),
+            ("Obróć obraz — Rotate", self.action_rotate),
+            ("Redukcja gwiazd — Star Shrink", self.action_star_shrink),
+            ("Usuń gwiazdy — StarNet++", self.action_starnet),
+            ("Odszumianie — deepSNR", self.action_deepsnr),
+            ("Powiększ obraz — Astro Upscale", self.action_astro_upscale),
+            ("Korekcja tła — Background Extraction", self.action_background_extraction),
+            ("Usuwanie gradientu — Background Extraction", self.action_background_extraction),
+            ("Wyostrzanie — Deconvolution", self.action_deconvolution),
+            ("Rozciągnij histogram — AutoStretch", self.action_stretch),
+            ("Poziomy — Levels", self.action_levels),
+            ("Krzywe — Curves", self.action_curves),
+            ("Kalibracja koloru — Color Calibration", self.action_color_calibration),
+            ("Asystent AI — AI Assistant", self.action_ai_assistant),
+            ("Rozmycie — Gaussian Blur", self.action_blur),
+            ("Kontrast lokalny — Local Contrast", self.action_local_contrast),
+            ("Stack klatek — Frame Stack", self.action_stack),
+            ("Mozaika klatek — Frame Mosaic", self.action_mosaic),
+            ("Rozwiąż astrometrię — Plate Solving", self.action_plate_solve),
+            ("Animacja 3D — 3D FLY", self.action_3d_fly),
+            ("Ustawienia — Preferences", self.action_preferences),
+        ]
+        for label, action in command_palette_entries:
+            self.command_palette.addItem(label)
+            item_index = self.command_palette.count() - 1
+            model_item = self.command_palette.model().item(item_index)
+            if model_item is not None:
+                model_item.setEnabled(action.isEnabled())
+            action.changed.connect(
+                lambda a=action, c=self.command_palette, i=item_index: (
+                    c.model().item(i).setEnabled(a.isEnabled())
+                    if c.model().item(i) is not None
+                    else None
+                )
+            )
+        self.command_palette.setCurrentIndex(-1)
+        self.command_palette.clearEditText()
+
+        def _run_command_palette_action(index):
+            if index < 0 or index >= len(command_palette_entries):
+                return
+            action = command_palette_entries[index][1]
+            if not action.isEnabled():
+                return
+            self.command_palette.setCurrentIndex(-1)
+            self.command_palette.clearEditText()
+            action.trigger()
+
+        self._command_palette_queued_index = None
+        self._command_palette_dispatch_scheduled = False
+
+        def _dispatch_command_palette_action():
+            self._command_palette_dispatch_scheduled = False
+            index = self._command_palette_queued_index
+            self._command_palette_queued_index = None
+            if index is not None:
+                _run_command_palette_action(index)
+
+        def _queue_command_palette_action(index):
+            if index < 0 or index >= len(command_palette_entries):
+                return
+            self._command_palette_queued_index = index
+            if not self._command_palette_dispatch_scheduled:
+                self._command_palette_dispatch_scheduled = True
+                QTimer.singleShot(0, _dispatch_command_palette_action)
+
+        def _run_command_palette_query():
+            query = str(self.command_palette.currentText() or "").strip().casefold()
+            if not query:
+                self.command_palette.showPopup()
+                return
+            matches = [
+                index for index, (label, _action) in enumerate(command_palette_entries)
+                if query in label.casefold()
+            ]
+            if len(matches) == 1:
+                _queue_command_palette_action(matches[0])
+            else:
+                self.command_palette.showPopup()
+
+        self.command_palette.activated.connect(_queue_command_palette_action)
+        self.command_palette.lineEdit().returnPressed.connect(_run_command_palette_query)
+        self.action_command_palette = QAction("Command Palette", self)
+        self.action_command_palette.setShortcut("Ctrl+Shift+P")
+
+        def _focus_command_palette():
+            self.command_palette.setFocus(Qt.ShortcutFocusReason)
+            self.command_palette.showPopup()
+
+        self.action_command_palette.triggered.connect(_focus_command_palette)
+        self.addAction(self.action_command_palette)
+        command_palette_layout.addWidget(self.command_palette)
+        command_palette_layout.addStretch(1)
+
+        menu_bar = QFrame()
+        menu_bar.setObjectName("top_menu_bar")
+        menu_layout = QHBoxLayout(menu_bar)
+        menu_layout.setContentsMargins(8, 2, 8, 2)
+        menu_layout.setSpacing(4)
+        self.top_menu_combos = {}
+
+        def _add_menu_combo(title, entries):
+            combo = QComboBox()
+            combo.setObjectName(f"menu_combo_{title.lower()}")
+            combo.setProperty("commandMenu", True)
+            combo.setFixedWidth({"file": 62, "edit": 60, "view": 64, "image": 68, "ai": 48, "tools": 70}.get(title.lower(), 64))
+            combo.setMinimumHeight(28)
+            combo.setCursor(Qt.PointingHandCursor)
+            combo.setToolTip(f"{title} menu")
+            combo.addItem(title)
+            combo.view().setRowHidden(0, True)
+            for label, action in entries:
+                combo.addItem(label)
+                model_item = combo.model().item(combo.count() - 1)
+                if model_item is not None:
+                    model_item.setEnabled(action.isEnabled())
+                item_index = combo.count() - 1
+                action.changed.connect(
+                    lambda a=action, c=combo, i=item_index: (
+                        c.model().item(i).setEnabled(a.isEnabled())
+                        if c.model().item(i) is not None
+                        else None
+                    )
+                )
+
+            def _on_menu_action_selected(index, menu_combo=combo, menu_entries=entries):
+                if index <= 0:
+                    return
+                menu_combo.setCurrentIndex(0)
+                action = menu_entries[index - 1][1]
+                if action.isEnabled():
+                    action.trigger()
+
+            combo.activated.connect(_on_menu_action_selected)
+            self.top_menu_combos[title.lower()] = combo
+            menu_layout.addWidget(combo)
+
+        _add_menu_combo("File", [
+            ("Open", self.action_open),
+            ("Save", self.action_save),
+            ("Save As...", self.action_save_as),
+            ("Home Folder", self.action_set_home_folder),
+            ("Exit", self.action_exit),
+        ])
+        _add_menu_combo("Edit", [
+            ("Undo", self.action_undo),
+            ("Redo", self.action_redo),
+            ("Paste Into Selected Layer", self.action_paste_layer),
+            ("New Layer", self.action_new_layer),
+            ("Delete Layer", self.action_delete_layer),
+            ("Adjustment Levels", self.action_adjustment_levels),
+            ("Adjustment Curves", self.action_adjustment_curves),
+        ])
+        _add_menu_combo("View", [
+            ("Zoom In", self.action_view_zoom_in),
+            ("Zoom Out", self.action_view_zoom_out),
+            ("Fit to Window", self.action_view_zoom_fit),
+            ("Histogram", self.action_histogram),
+            ("Console", self.action_console),
+        ])
+        _add_menu_combo("Image", [
+            ("Crop", self.action_crop),
+            ("Rotate", self.action_rotate),
+            ("Levels", self.action_levels),
+            ("Curves", self.action_curves),
+            ("AutoStretch", self.action_stretch),
+            ("GHS Stretch", self.action_ghs),
+            ("Color Calibration", self.action_color_calibration),
+            ("Correction", self.action_correction),
+            ("Star Correction", self.action_star_correction),
+        ])
+        _add_menu_combo("AI", [
+            ("AI Assistant", self.action_ai_assistant),
+            ("Magic Filter", self.action_magic_filter),
+            ("Astro Upscale", self.action_astro_upscale),
+            ("Star Shrink", self.action_star_shrink),
+            ("StarNet++", self.action_starnet),
+            ("deepSNR", self.action_deepsnr),
+            ("Background Extraction", self.action_background_extraction),
+            ("Deconvolution", self.action_deconvolution),
+            ("Local Contrast", self.action_local_contrast),
+            ("Gaussian Blur", self.action_blur),
+        ])
+        _add_menu_combo("Tools", [
+            ("Plate Solving", self.action_plate_solve),
+            ("Frame Mosaic", self.action_mosaic),
+            ("Frame Stack", self.action_stack),
+            ("Planetary Stack", self.action_solar_stack),
+            ("Time-lapse Movie", self.action_timelapse),
+            ("3D FLY", self.action_3d_fly),
+            ("SVG Brush", self.action_svg_brush),
+            ("Photoshop Menu", self.action_photoshop_menu),
+            ("Script Editor", self.action_script_editor),
+            ("Preferences", self.action_preferences),
+        ])
+        menu_layout.addStretch(1)
+
+        main_layout.addWidget(command_palette_row)
+        main_layout.addWidget(menu_bar)
         main_layout.addWidget(top_actions_bar)
 
 
@@ -22444,58 +23364,6 @@ class AstroApp(QMainWindow):
         thumbnails_scroll.setWidget(self.thumbnails_container)
         top_panel_layout.addWidget(thumbnails_scroll, 1)
 
-        main_layout.addWidget(top_panel)
-
-        center_layout = QHBoxLayout()
-
-        left_panel = QFrame()
-        left_layout = QVBoxLayout(left_panel)
-        left_layout.setContentsMargins(8, 8, 8, 8)
-        left_layout.setSpacing(6)
-
-        workflow_title = QLabel("Przetwarzanie krok po kroku")
-        left_layout.addWidget(workflow_title)
-
-        self.processing_steps_tabs = QTabWidget()
-        self.processing_steps_tabs.setTabPosition(QTabWidget.West)
-        self.processing_steps_tabs.tabBar().setUsesScrollButtons(True)
-
-        self.processing_step_specs = [
-            ("1", "Otwórz zdjęcie"),
-            ("2", "Kadruj"),
-            ("3", "Skalibruj kolor"),
-            ("4", "Wyostrz"),
-            ("5", "Odszum"),
-            ("6", "Usuń gwiazdy"),
-            ("7", "Rozciągnij"),
-            ("8", "Przywróć gwiazdy"),
-            ("9", "Końcowa korekcja"),
-            ("10", "Export"),
-        ]
-        self.processing_step_buttons = []
-
-        for step_index, (step_number, step_text) in enumerate(self.processing_step_specs):
-            step_page = QWidget()
-            step_page_layout = QVBoxLayout(step_page)
-            step_page_layout.setContentsMargins(10, 10, 10, 10)
-            step_desc = QLabel(f"Krok {step_number}: {step_text}")
-            step_desc.setWordWrap(True)
-            step_page_layout.addWidget(step_desc)
-
-            btn_step_action = QPushButton("Wykonaj krok")
-            btn_step_action.clicked.connect(lambda _checked=False, idx=step_index: self._run_processing_step(idx))
-            step_page_layout.addWidget(btn_step_action)
-            self.processing_step_buttons.append(btn_step_action)
-
-            step_page_layout.addStretch(1)
-            self.processing_steps_tabs.addTab(step_page, step_number)
-
-        left_layout.addWidget(self.processing_steps_tabs, 1)
-        self.processing_steps_tabs.currentChanged.connect(self._on_processing_step_tab_changed)
-
-        left_panel.setMinimumWidth(220)
-        left_panel.setMaximumWidth(360)
-
         right_panel = QFrame()
         right_layout = QVBoxLayout(right_panel)
         right_layout.setContentsMargins(0, 0, 0, 0)
@@ -22522,24 +23390,28 @@ class AstroApp(QMainWindow):
         self.viewer.view.set_pick_mode(False)
         self.latest_plate_solve_result = None
 
-        # Splitter umoĹĽliwia zmianÄ™ rozmiaru paneli poprzez przeciÄ…gniÄ™cie
-        splitter = QSplitter(Qt.Horizontal)
-        splitter.addWidget(left_panel)
-        splitter.addWidget(self.viewer)
-        splitter.addWidget(right_panel)
-        splitter.setStretchFactor(0, 0)  # Lewy panel workflow
-        splitter.setStretchFactor(1, 1)  # Viewer rozciÄ…gniÄ™ty
-        splitter.setStretchFactor(2, 0)  # Prawy panel narzedzi
-        splitter.setCollapsible(0, True)  # MoĹĽliwoĹ›Ä‡ schowania lewego panelu
-        splitter.setCollapsible(1, False)  # Viewer nie moĹĽe byÄ‡ schowany
-        splitter.setCollapsible(2, True)  # MoĹĽliwoĹ›Ä‡ schowania prawego panelu
-        splitter.setSizes([280, 1060, 350])  # DomyĹ›lne rozmiary
+        center_splitter = QSplitter(Qt.Horizontal)
+        center_splitter.addWidget(self.viewer)
+        center_splitter.addWidget(right_panel)
+        center_splitter.setStretchFactor(0, 1)
+        center_splitter.setStretchFactor(1, 0)
+        center_splitter.setCollapsible(0, False)
+        center_splitter.setCollapsible(1, True)
+        center_splitter.setSizes([1060, 350])
 
-        center_layout.addWidget(splitter)
-
-        main_layout.addLayout(center_layout, 1)
+        self.workspace_splitter = QSplitter(Qt.Vertical)
+        self.workspace_splitter.addWidget(center_splitter)
+        self.workspace_splitter.addWidget(top_panel)
+        self.workspace_splitter.setChildrenCollapsible(False)
+        self.workspace_splitter.setStretchFactor(0, 1)
+        self.workspace_splitter.setStretchFactor(1, 0)
+        self.workspace_splitter.setCollapsible(0, False)
+        self.workspace_splitter.setCollapsible(1, True)
+        self.workspace_splitter.setSizes([650, 190])
+        main_layout.addWidget(self.workspace_splitter, 1)
 
         bottom_panel = QFrame()
+        bottom_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         bottom_layout = QHBoxLayout(bottom_panel)
         bottom_layout.setContentsMargins(10, 6, 10, 6)
         bottom_layout.setSpacing(8)
@@ -22584,53 +23456,6 @@ class AstroApp(QMainWindow):
         self.setCentralWidget(main_widget)
 
         self.update_menu_actions()
-        self._on_processing_step_tab_changed(self.processing_steps_tabs.currentIndex())
-
-    def _on_processing_step_tab_changed(self, index: int):
-        if not hasattr(self, "processing_step_specs"):
-            return
-        if index < 0 or index >= len(self.processing_step_specs):
-            return
-        step_number, step_text = self.processing_step_specs[index]
-        self.log(f"Workflow: krok {step_number} - {step_text}")
-
-    def _run_processing_step(self, step_index: int):
-        if not hasattr(self, "processing_step_specs"):
-            return
-        if step_index < 0 or step_index >= len(self.processing_step_specs):
-            return
-
-        step_number, step_text = self.processing_step_specs[step_index]
-
-        try:
-            if step_index == 0:
-                self.load_image()
-            elif step_index == 1:
-                self.crop_image_dialog()
-            elif step_index == 2:
-                self.show_color_calibration_dialog()
-            elif step_index == 3:
-                self.run_deconvolution_onnx()
-            elif step_index == 4:
-                self.run_magic()
-            elif step_index == 5:
-                self.run_starnet()
-            elif step_index == 6:
-                self.apply_stretch(mode="autostretch")
-            elif step_index == 7:
-                if not getattr(self, "undo_stack", []):
-                    self.log("Przywracanie gwiazd: brak poprzedniego kroku do cofnięcia.", "warning")
-                    return
-                self.undo()
-            elif step_index == 8:
-                self.show_correction_panels()
-            elif step_index == 9:
-                self.save_image_as()
-            else:
-                return
-            self.log(f"Workflow uruchomiony: krok {step_number} - {step_text}")
-        except Exception as exc:
-            self.log(f"Workflow krok {step_number} ({step_text}) nie powiódł się: {exc}", "error")
 
     def on_viewer_image_clicked(self, x, y):
      """ObsĹ‚uga klikniÄ™cia na obraz - alternatywa dla PixInsight i Photoshopa"""
