@@ -68,7 +68,7 @@ LOCAL_AI_DOWNLOAD_SOURCES = {
 }
 APP_VERSION = "1.0.0"
 APP_UPDATE_PAGE_URL = "https://proksima-centauri.github.io/Astro-Ai-Processor/"
-LOCAL_AI_DEFAULT_N_CTX = 3072
+LOCAL_AI_DEFAULT_N_CTX = 4096
 LOCAL_AI_DEFAULT_MAX_TOKENS = 900
 LOCAL_AI_DEFAULT_TEMPERATURE = 0.2
 LOCAL_AI_DEFAULT_TOP_P = 0.92
@@ -9169,9 +9169,21 @@ class LocalAIAssistant:
             f"KONTEKST JSON:\n{json.dumps(payload, ensure_ascii=False, separators=(',', ':'))}\n\n"
             "ODPOWIEDZ:"
         )
+        prompt_token_count = len(self._llm.tokenize(full_prompt.encode("utf-8"), add_bos=True))
+        reserved_tokens = 16
+        available_completion_tokens = self.n_ctx - prompt_token_count - reserved_tokens
+        if available_completion_tokens < 1:
+            raise RuntimeError(
+                f"Prompt zajmuje {prompt_token_count} tokenów i nie mieści się w oknie {self.n_ctx}. "
+                "Skróć pytanie lub zmniejsz kontekst obrazu."
+            )
+        effective_max_tokens = min(
+            int(max(1, max_tokens)),
+            available_completion_tokens,
+        )
         output = self._llm(
             full_prompt,
-            max_tokens=int(max(64, max_tokens)),
+            max_tokens=effective_max_tokens,
             temperature=float(max(0.0, min(1.2, temperature))),
             top_p=float(max(0.5, min(1.0, LOCAL_AI_DEFAULT_TOP_P))),
             stop=["\nSYSTEM:", "\nUSER:"],
