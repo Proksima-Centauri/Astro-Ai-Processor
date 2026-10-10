@@ -1,12 +1,13 @@
-# Astro AI Processor
+
+<p align="center">
+  <img src="favicon-32.png" alt="Astro AI Processor application icon" width="120" />
+</p>
+# Astro AI Processor 
 
 > **Astro AI Processor is a desktop astrophotography image processing application.**
 
 Astro AI Processor processes and analyzes astrophotography images with FITS support, astronomy-specific analysis, plate solving, star tools, denoising, and traditional image-editing tools.
 
-<p align="center">
-  <img src="favicon-32.png" alt="Astro AI Processor application icon" width="120" />
-</p>
 
 Language versions: [EN](README.en.md), [PL](README.pl.md), [DE](README.de.md), [ES](README.es.md), [FR](README.fr.md), [IT](README.it.md), [NL](README.nl.md), [PT](README.pt.md), [CS](README.cs.md), [TR](README.tr.md), [JA](README.ja.md), [RU](README.ru.md), [UK](README.uk.md).
 
