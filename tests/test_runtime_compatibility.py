@@ -125,6 +125,25 @@ try:
         source = np.arange(64 * 64 * 3, dtype=np.uint8).reshape(64, 64, 3)
         assert module.safe_imwrite(str(image_path), source)
         window.load_image_from_path(str(image_path))
+        window.viewer.set_compare_enabled(True)
+        view = window.viewer.view
+        view.fit_to_window()
+        for _ in range(4):
+            view.zoom_in()
+        view.pan_by(73, -41)
+        app.processEvents()
+        original_scale = view.transform().m11()
+        original_center = view.mapToScene(view.viewport().rect().center())
+        original_viewport_size = view.viewport().size()
+        for mode in ("autostretch", "histogram", "linear"):
+            window.apply_stretch(mode=mode, commit=False)
+            app.processEvents()
+            current_center = view.mapToScene(view.viewport().rect().center())
+            assert abs(current_center.x() - original_center.x()) < 1.1, mode
+            assert abs(current_center.y() - original_center.y()) < 1.1, mode
+            assert abs(view.transform().m11() - original_scale) < 1e-9, mode
+            assert view.viewport().size() == original_viewport_size, mode
+
         window.create_new_layer()
         window.select_layer(window.layer_order[-1])
         window.delete_selected_layer()

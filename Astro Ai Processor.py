@@ -16424,24 +16424,7 @@ class SingleViewer(QGraphicsView):
             self._centered_once = True
             return
 
-        hbar = self.horizontalScrollBar()
-        vbar = self.verticalScrollBar()
-        old_h = hbar.value()
-        old_v = vbar.value()
-        old_h_max = hbar.maximum()
-        old_v_max = vbar.maximum()
-
         self.centerOn(current_center)
-
-        if old_h_max > 0 and hbar.maximum() > 0:
-            hbar.setValue(int(old_h / old_h_max * hbar.maximum()))
-        else:
-            hbar.setValue(old_h)
-
-        if old_v_max > 0 and vbar.maximum() > 0:
-            vbar.setValue(int(old_v / old_v_max * vbar.maximum()))
-        else:
-            vbar.setValue(old_v)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton and self.svg_brush_mode and not self.roi_pick_mode and not self.pick_mode:
@@ -16676,6 +16659,9 @@ class BlendViewer(QWidget):
         self.slider.setRange(0, 100)
         self.slider.setValue(50)
         self.slider.setMinimumWidth(300)
+        slider_size_policy = self.slider.sizePolicy()
+        slider_size_policy.setRetainSizeWhenHidden(True)
+        self.slider.setSizePolicy(slider_size_policy)
         self.slider.valueChanged.connect(self.update_blend)
         self.slider.setVisible(False)
         layout.addWidget(self.slider)
