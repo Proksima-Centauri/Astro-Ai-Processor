@@ -1,18 +1,28 @@
 # -*- mode: python ; coding: utf-8 -*-
 
-from PyInstaller.utils.hooks import collect_submodules
+import importlib.util
+import sys
+
+from PyInstaller.utils.hooks import collect_dynamic_libs, collect_submodules
+
+
+llama_binaries = []
+llama_hiddenimports = []
+if importlib.util.find_spec('llama_cpp') is not None:
+    llama_binaries = collect_dynamic_libs('llama_cpp')
+    llama_hiddenimports = collect_submodules('llama_cpp')
 
 
 a = Analysis(
     ['Astro Ai Processor.py'],
     pathex=[],
-    binaries=[],
+    binaries=llama_binaries,
     datas=[
         ('assets', 'assets'),
         ('favicon-32.png', '.'),
         ('3d_fly_help.md', '.'),
     ],
-    hiddenimports=collect_submodules('processing'),
+    hiddenimports=collect_submodules('processing') + llama_hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -33,7 +43,7 @@ exe = EXE(
     strip=False,
     upx=True,
     icon='favicon-32.png',
-    console=True,
+    console=sys.platform != 'win32',
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
