@@ -9,3 +9,4 @@ __pycache__/
 /config
 /astro_magic_config.json
 /update_api.db
+/update_api_server.py
