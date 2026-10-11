@@ -9083,6 +9083,11 @@ def build_local_ai_system_prompt() -> str:
 
 
 def _get_local_ai_models_dir() -> str:
+    if sys.platform == "win32" and getattr(sys, "frozen", False):
+        app_data = os.environ.get("LOCALAPPDATA") or os.path.join(
+            os.path.expanduser("~"), "AppData", "Local"
+        )
+        return os.path.join(app_data, "Astro AI Processor", "models")
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), "models")
 
 

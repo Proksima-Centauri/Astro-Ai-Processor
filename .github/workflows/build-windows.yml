@@ -54,10 +54,10 @@ jobs:
       - name: Package build output
         shell: pwsh
         run: |
-          $source = "dist/Astro AI Processor"
-          if (!(Test-Path $source)) { throw "Build output not found: $source" }
+          $exe = "dist/Astro AI Processor.exe"
+          if (!(Test-Path $exe)) { throw "One-file Windows build not found: $exe" }
           New-Item -ItemType Directory -Force -Path "dist/windows" | Out-Null
-          Compress-Archive -Path "$source/*" -DestinationPath "dist/windows/Astro-AI-Processor-windows.zip" -Force
+          Compress-Archive -Path $exe -DestinationPath "dist/windows/Astro-AI-Processor-windows.zip" -Force
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

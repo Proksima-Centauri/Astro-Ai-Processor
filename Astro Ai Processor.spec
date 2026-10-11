@@ -32,11 +32,8 @@ a = Analysis(
 )
 pyz = PYZ(a.pure)
 
-exe = EXE(
-    pyz,
-    a.scripts,
-    [],
-    exclude_binaries=True,
+is_windows = sys.platform == 'win32'
+exe_options = dict(
     name='Astro AI Processor',
     debug=False,
     bootloader_ignore_signals=False,
@@ -50,12 +47,18 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
 )
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.datas,
-    strip=False,
-    upx=True,
-    upx_exclude=[],
-    name='Astro AI Processor',
-)
+
+if is_windows:
+    # Bundle the interpreter, assets, and llama.cpp DLLs into one Windows executable.
+    exe = EXE(pyz, a.scripts, a.binaries, a.datas, [], **exe_options)
+else:
+    exe = EXE(pyz, a.scripts, [], exclude_binaries=True, **exe_options)
+    coll = COLLECT(
+        exe,
+        a.binaries,
+        a.datas,
+        strip=False,
+        upx=True,
+        upx_exclude=[],
+        name='Astro AI Processor',
+    )

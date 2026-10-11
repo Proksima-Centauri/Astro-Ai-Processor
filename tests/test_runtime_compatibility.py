@@ -73,6 +73,14 @@ def test_failed_save_keeps_the_previous_document_path(tmp_path):
     assert app.current_save_path == "previous.png"
 
 
+def test_frozen_windows_model_directory_is_persistent(monkeypatch, tmp_path):
+    monkeypatch.setattr(APP_MODULE.sys, "platform", "win32")
+    monkeypatch.setattr(APP_MODULE.sys, "frozen", True, raising=False)
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+
+    assert APP_MODULE._get_local_ai_models_dir() == str(tmp_path / "Astro AI Processor" / "models")
+
+
 GUI_SMOKE_SCRIPT = r'''
 import importlib.abc
 import importlib.util
