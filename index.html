@@ -800,11 +800,13 @@
       font-weight: 700;
     }
 
-    .download-platform svg {
+    .download-platform svg,
+    .download-platform img {
       display: block;
       width: 40px;
       height: 40px;
       flex: 0 0 auto;
+      object-fit: contain;
     }
 
     .download-option .btn {
@@ -1257,15 +1259,7 @@
         </article>
         <article class="download-option">
           <div class="download-platform">
-            <svg viewBox="0 0 48 48" role="img" aria-label="Linux">
-              <ellipse cx="24" cy="23" rx="14" ry="19" fill="#171b27" stroke="#dbe7ff" stroke-width="1.5"/>
-              <ellipse cx="24" cy="18" rx="9" ry="10" fill="#f4f7ff"/>
-              <ellipse cx="20.5" cy="17" rx="1.3" ry="2" fill="#172033"/>
-              <ellipse cx="27.5" cy="17" rx="1.3" ry="2" fill="#172033"/>
-              <path d="m21 21 3 2 3-2-3 5z" fill="#ffb900"/>
-              <ellipse cx="24" cy="34" rx="7" ry="6" fill="#f4f7ff"/>
-              <path d="m13 40 8-2 2 3-10 1zm22 0-8-2-2 3 10 1z" fill="#ffb900"/>
-            </svg>
+            <img src="assets/website/download/linux.png" alt="" aria-hidden="true">
             <span id="txtDownloadLinux">Linux</span>
           </div>
           <a class="btn" id="btnDownloadLinux" href="https://drive.google.com/file/d/1kQIBxSWHUmUXAVNI-UZbxsIL72CGZc1D/view?usp=drive_link" target="_blank" rel="noopener noreferrer">Pobierz dla Linux</a>
