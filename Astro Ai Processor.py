@@ -96,7 +96,7 @@ def normalize_deepsnr_strength(raw_value) -> int:
     return max(1, min(2, value))
 
 
-def style_rgb_channel_checkbox(checkbox: QCheckBox, channel: str):
+def style_rgb_channel_checkbox(checkbox: "QCheckBox", channel: str):
     channel_name = str(channel or "").strip().upper()
     palette = {
         "R": ("#ff6b6b", "#2a1a1a"),
