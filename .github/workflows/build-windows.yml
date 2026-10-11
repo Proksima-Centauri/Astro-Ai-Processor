@@ -35,9 +35,18 @@ jobs:
           export CMAKE_BUILD_PARALLEL_LEVEL=2
           python -m pip install --no-binary=llama-cpp-python -r requirements.txt
           python -m pip install pyinstaller
+          python -m pip install -r requirements-dev.txt
 
       - name: Verify Windows runtime dependencies
         run: python -c "import llama_cpp, pyaudio, speech_recognition; print('llama.cpp, PyAudio and SpeechRecognition are available')"
+
+      - name: Check undefined names and duplicate methods
+        run: python -m ruff check --target-version py311 --select F821,F822,F823,F722,F811 "Astro Ai Processor.py" processing deep_sky_catalog.py packaging tests update_notifier.py update_api_server.py
+
+      - name: Test source startup and image processing on Windows
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python -m pytest -q
 
       - name: Build app with PyInstaller
         run: pyinstaller --noconfirm --clean "Astro Ai Processor.spec"

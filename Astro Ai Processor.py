@@ -1,4 +1,6 @@
-﻿import sys
+﻿from __future__ import annotations
+
+import sys
 import os
 import json
 import ast
@@ -177,7 +179,9 @@ def _qt_message_handler(_msg_type, _context, message):
         return
     if "Wayland does not support QWindow::requestActivate()" in text:
         return
-    sys.stderr.write(text + "\n")
+    stream = sys.stderr or sys.__stderr__
+    if stream is not None:
+        stream.write(text + "\n")
 
 
 qInstallMessageHandler(_qt_message_handler)
@@ -4831,7 +4835,7 @@ class Fly3DDialog(QDialog):
     def _build_auto_edge_blur_mask_for_layer(self, layer_path: str, strength: float) -> np.ndarray | None:
         if not layer_path or not os.path.exists(layer_path):
             return None
-        cut = cv2.imread(layer_path, cv2.IMREAD_UNCHANGED)
+        cut = safe_imread(layer_path, cv2.IMREAD_UNCHANGED)
         if cut is None or cut.ndim < 3:
             return None
 
@@ -5064,7 +5068,7 @@ class Fly3DDialog(QDialog):
     def _compose_cut_preview_layer(self, path: str, blur_sigma: float = 0.0) -> np.ndarray | None:
         if not path or not os.path.exists(path):
             return None
-        cut_img = cv2.imread(path, cv2.IMREAD_UNCHANGED)
+        cut_img = safe_imread(path, cv2.IMREAD_UNCHANGED)
         if cut_img is None:
             return None
         if cut_img.ndim < 3:
@@ -5449,7 +5453,7 @@ class Fly3DDialog(QDialog):
             starmask_u8 = self._build_starmask_from_starless(original_before_starless, starless_u8)
             if isinstance(starmask_u8, np.ndarray) and starmask_u8.size > 0 and int(np.count_nonzero(starmask_u8)) > 0:
                 candidate = self._auto_starmask_output_path()
-                if cv2.imwrite(candidate, starmask_u8):
+                if safe_imwrite(candidate, starmask_u8):
                     auto_mask_path = os.path.abspath(candidate)
                     self.edit_stars_mask_path.setText(auto_mask_path)
 
@@ -5515,7 +5519,7 @@ class Fly3DDialog(QDialog):
         if isinstance(cached, dict) and cached.get("preview_shape") == preview_shape:
             return cached
 
-        layer = cv2.imread(path, cv2.IMREAD_UNCHANGED)
+        layer = safe_imread(path, cv2.IMREAD_UNCHANGED)
         if layer is None or layer.ndim < 3:
             return None
 
@@ -6636,7 +6640,7 @@ class Fly3DDialog(QDialog):
             out_path = os.path.join(out_dir, f"{base_name}_{suffix}.png")
             suffix += 1
 
-        if not cv2.imwrite(out_path, cut_rgba):
+        if not safe_imwrite(out_path, cut_rgba):
             QMessageBox.warning(self, "Wytnij", "Nie udało się zapisać PNG wycinka.")
             return
 
@@ -6699,7 +6703,7 @@ class Fly3DDialog(QDialog):
             abs_path = os.path.abspath(path)
             if abs_path in existing:
                 continue
-            layer = cv2.imread(abs_path, cv2.IMREAD_UNCHANGED)
+            layer = safe_imread(abs_path, cv2.IMREAD_UNCHANGED)
             if layer is None:
                 continue
             self._append_cut_thumbnail(abs_path, layer)
@@ -6844,7 +6848,7 @@ class AltairStartupWidget(QWidget):
 
     def _prepare_logo_layer(self, image_path: str):
         try:
-            raw = cv2.imread(image_path, cv2.IMREAD_COLOR)
+            raw = safe_imread(image_path, cv2.IMREAD_COLOR)
             if raw is None or raw.size == 0:
                 return
 
@@ -8591,7 +8595,7 @@ class PlateSolveWorker(QThread):
         temp_dir = tempfile.mkdtemp(prefix="astro_plate_solve_")
         try:
             input_path = os.path.join(temp_dir, "input.jpg")
-            cv2.imwrite(input_path, self.img)
+            safe_imwrite(input_path, self.img)
             scale_low = max(0.05, scale_arcsec * 0.7)
             scale_high = scale_arcsec * 1.3
             command = [
@@ -8669,7 +8673,7 @@ class PlateSolveWorker(QThread):
         upload_temp_dir = tempfile.mkdtemp(prefix="astro_plate_upload_")
         temp_path = os.path.join(upload_temp_dir, "input.jpg")
         try:
-            cv2.imwrite(temp_path, self.img)
+            safe_imwrite(temp_path, self.img)
 
             upload_fields = {
                 "allow_commercial_use": "n",
@@ -9647,7 +9651,7 @@ class StarNetWorker(QThread):
                     self.finished_signal.emit(None, "Could not prepare temporary pre-stretched input for StarNet++.")
                     return
                 input_for_starnet = prepared_input
-            if not cv2.imwrite(input_path, input_for_starnet):
+            if not safe_imwrite(input_path, input_for_starnet):
                 self.finished_signal.emit(None, "Could not write temporary StarNet++ input.")
                 return
 
@@ -9888,7 +9892,7 @@ def run_starnet_sync_for_image(
             if prepared_input is None:
                 return None, "Could not prepare temporary pre-stretched input for StarNet++."
             input_16 = prepared_input
-        if not cv2.imwrite(input_path, input_16):
+        if not safe_imwrite(input_path, input_16):
             return None, "Could not write temporary StarNet++ input."
 
         creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
@@ -10228,7 +10232,7 @@ class Fly3DWorker(QThread):
     def _build_layer_from_cut(self, base: np.ndarray, path: str):
         if not path or not os.path.exists(path):
             return None
-        cut = cv2.imread(path, cv2.IMREAD_UNCHANGED)
+        cut = safe_imread(path, cv2.IMREAD_UNCHANGED)
         if cut is None or cut.ndim < 3:
             return None
 
@@ -10324,7 +10328,7 @@ class Fly3DWorker(QThread):
         return files
 
     def _extract_starfield_layer(self, source_path: str, width: int, height: int) -> tuple[np.ndarray, np.ndarray] | None:
-        img = cv2.imread(source_path, cv2.IMREAD_UNCHANGED)
+        img = safe_imread(source_path, cv2.IMREAD_UNCHANGED)
         if img is None:
             return None
 
@@ -11938,16 +11942,34 @@ def safe_fits_read(path: str):
     return data
 
 
-def safe_imread(path: str):
+def safe_imread(path: str, flags: int = cv2.IMREAD_ANYDEPTH | cv2.IMREAD_ANYCOLOR):
     """Wczytywanie pliku z polskimi znakami."""
     if _is_fits_path(path):
         return safe_fits_read(path)
 
-    with open(path, "rb") as f:
-        data = f.read()
+    try:
+        with open(path, "rb") as f:
+            data = f.read()
+    except OSError:
+        return None
+    if not data:
+        return None
     img_array = np.frombuffer(data, np.uint8)
-    img = cv2.imdecode(img_array, cv2.IMREAD_ANYDEPTH | cv2.IMREAD_ANYCOLOR)
+    img = cv2.imdecode(img_array, flags)
     return img
+
+
+def safe_imwrite(path: str, img: np.ndarray) -> bool:
+    """Encode images without relying on OpenCV's Windows pathname handling."""
+    try:
+        extension = os.path.splitext(path)[1]
+        ok, encoded = cv2.imencode(extension, img)
+        if not ok:
+            return False
+        encoded.tofile(path)
+        return True
+    except (OSError, cv2.error):
+        return False
 
 
 def normalize_to_uint8_gray(img: np.ndarray) -> np.ndarray:
@@ -16220,45 +16242,6 @@ class PhotoshopMenuPanel(QFrame):
             self.host.select_layer(key)
         self.update_from_app(self.host)
 
-    def update_from_app(self, app):
-        active_layers = app.get_active_layers() if hasattr(app, "get_active_layers") else ["background"]
-        for key, _title in self.LAYER_DEFS:
-            row = self.layer_rows.get(key)
-            if row is not None:
-                row.setVisible(key in active_layers)
-            eye = self.layer_eye_buttons.get(key)
-            if eye is not None:
-                is_visible = app.layer_visibility.get(key, True) if hasattr(app, "layer_visibility") else True
-                eye.blockSignals(True)
-                eye.setChecked(is_visible)
-                eye.setText("đź‘" if is_visible else "â—‹")
-                eye.blockSignals(False)
-
-        self._set_thumbnail("background", app.original_img)
-        self._set_thumbnail("blur", app.layer_images.get("blur") if hasattr(app, "layer_images") else app.magic_img)
-        self._set_thumbnail("stars", app.layer_images.get("stars") if hasattr(app, "layer_images") else app.magic_img)
-        self._set_thumbnail("curves", app.processed_img)
-
-        if app.original_img is None:
-            info = "No image loaded"
-        else:
-            h, w = app.original_img.shape[:2]
-            channels = 1 if app.original_img.ndim == 2 else app.original_img.shape[2]
-            save_path = app.current_save_path if app.current_save_path else "Not saved"
-            starnet = app.starnet_path if app.starnet_path else "Not selected"
-            info = (
-                f"Size: {w} x {h}\n"
-                f"Channels: {channels}\n"
-                f"Undo: {len(app.undo_stack)}\n"
-                f"Redo: {len(app.redo_stack)}\n"
-                f"Save path: {save_path}\n"
-                f"StarNet++: {starnet}"
-            )
-        self.info_label.setText(info)
-
-        history = getattr(app, "history_items", [])
-        self.history_text.setPlainText("\n".join(history[-18:]) if history else "No history yet")
-
     def _set_thumbnail(self, key, img):
         label = self.layer_thumbs.get(key)
         if label is None:
@@ -16281,139 +16264,6 @@ class PhotoshopMenuPanel(QFrame):
         painter.drawPixmap(x, y, thumb)
         painter.end()
         label.setPixmap(canvas)
-
-    def update_from_app(self, app):
-        active_layers = app.get_active_layers() if hasattr(app, "get_active_layers") else ["background"]
-        layer_titles = getattr(app, "layer_titles", {})
-        default_titles = dict(self.LAYER_DEFS)
-        layer_keys = list(getattr(app, "layer_order", []))
-        for key in default_titles:
-            if key not in layer_keys:
-                layer_keys.append(key)
-
-        for stale_key in list(self.layer_rows):
-            if stale_key not in layer_keys:
-                self._remove_layer_row(stale_key)
-
-        for key in layer_keys:
-            title = layer_titles.get(key, default_titles.get(key, key.replace("_", " ").title()))
-            self._ensure_layer_row(key, title)
-
-            row = self.layer_rows.get(key)
-            if row is not None:
-                row.setVisible(key in active_layers)
-
-            eye = self.layer_eye_buttons.get(key)
-            if eye is not None:
-                is_visible = app.layer_visibility.get(key, True) if hasattr(app, "layer_visibility") else True
-                eye.blockSignals(True)
-                eye.setChecked(is_visible)
-                eye.setText("Ä‘Ĺşâ€Â" if is_visible else "Ă˘â€”â€ą")
-                eye.blockSignals(False)
-
-        self._set_thumbnail("background", app.original_img)
-        self._set_thumbnail("blur", app.layer_images.get("blur") if hasattr(app, "layer_images") else app.magic_img)
-        self._set_thumbnail("stars", app.layer_images.get("stars") if hasattr(app, "layer_images") else app.magic_img)
-        self._set_thumbnail("curves", app.processed_img)
-
-        if app.original_img is None:
-            info = "No image loaded"
-        else:
-            h, w = app.original_img.shape[:2]
-            channels = 1 if app.original_img.ndim == 2 else app.original_img.shape[2]
-            save_path = app.current_save_path if app.current_save_path else "Not saved"
-            starnet = app.starnet_path if app.starnet_path else "Not selected"
-            info = (
-                f"Size: {w} x {h}\n"
-                f"Channels: {channels}\n"
-                f"Undo: {len(app.undo_stack)}\n"
-                f"Redo: {len(app.redo_stack)}\n"
-                f"Save path: {save_path}\n"
-                f"StarNet++: {starnet}"
-            )
-        self.info_label.setText(info)
-
-        history = getattr(app, "history_items", [])
-        self.history_text.setPlainText("\n".join(history[-18:]) if history else "No history yet")
-
-
-    def update_from_app(self, app):
-        active_layers = app.get_active_layers() if hasattr(app, "get_active_layers") else ["background"]
-        layer_titles = getattr(app, "layer_titles", {})
-        default_titles = dict(self.LAYER_DEFS)
-        layer_keys = list(getattr(app, "layer_order", []))
-        for key in default_titles:
-            if key not in layer_keys:
-                layer_keys.append(key)
-
-        for stale_key in list(self.layer_rows):
-            if stale_key not in layer_keys:
-                self._remove_layer_row(stale_key)
-
-        for key in layer_keys:
-            title = layer_titles.get(key, default_titles.get(key, key.replace("_", " ").title()))
-            self._ensure_layer_row(key, title)
-
-            row = self.layer_rows.get(key)
-            if row is not None:
-                row.setVisible(key in active_layers)
-
-            eye = self.layer_eye_buttons.get(key)
-            if eye is not None:
-                is_visible = app.layer_visibility.get(key, True) if hasattr(app, "layer_visibility") else True
-                eye.blockSignals(True)
-                eye.setChecked(is_visible)
-                self._set_eye_icon(eye, is_visible)
-                eye.blockSignals(False)
-
-        self._set_thumbnail("background", app.original_img)
-        self._set_thumbnail("blur", app.layer_images.get("blur") if hasattr(app, "layer_images") else app.magic_img)
-        self._set_thumbnail("stars", app.layer_images.get("stars") if hasattr(app, "layer_images") else app.magic_img)
-        self._set_thumbnail("curves", app.processed_img)
-
-        source_img = app.original_img if app.original_img is not None else app.magic_img
-        for key, title in (("r", "Red"), ("g", "Green"), ("b", "Blue")):
-            row = self.channel_rows.get(key)
-            if row is not None:
-                row.setVisible(True)
-
-            visible = app.channel_visibility.get(key, True) if hasattr(app, "channel_visibility") else True
-            eye = self.channel_eye_buttons.get(key)
-            if eye is not None:
-                eye.blockSignals(True)
-                eye.setChecked(visible)
-                self._set_eye_icon(eye, visible)
-                eye.blockSignals(False)
-
-            thumb = self.channel_thumbs.get(key)
-            if thumb is not None:
-                thumb.setPixmap(self._channel_preview(source_img, key, visible))
-
-            label = self.channel_labels.get(key)
-            if label is not None:
-                label.setText(f"{title} channel")
-                label.setStyleSheet("" if visible else "color: #8a8a8a;")
-
-        if app.original_img is None:
-            info = "No image loaded"
-        else:
-            h, w = app.original_img.shape[:2]
-            channels = 1 if app.original_img.ndim == 2 else app.original_img.shape[2]
-            save_path = app.current_save_path if app.current_save_path else "Not saved"
-            starnet = app.starnet_path if app.starnet_path else "Not selected"
-            info = (
-                f"Size: {w} x {h}\n"
-                f"Channels: {channels}\n"
-                f"Undo: {len(app.undo_stack)}\n"
-                f"Redo: {len(app.redo_stack)}\n"
-                f"Save path: {save_path}\n"
-                f"StarNet++: {starnet}"
-            )
-        self.info_label.setText(info)
-
-        history = getattr(app, "history_items", [])
-        self.history_text.setPlainText("\n".join(history[-18:]) if history else "No history yet")
-
 
     def update_from_app(self, app):
         active_layers = app.get_active_layers() if hasattr(app, "get_active_layers") else ["background"]
@@ -18961,7 +18811,7 @@ class AstroApp(QMainWindow):
         temp_dir = tempfile.mkdtemp(prefix=f"astro_{prefix}_")
         temp_path = os.path.join(temp_dir, "input.tif")
         export_img = normalize_to_uint16_bgr(source_img)
-        if not cv2.imwrite(temp_path, export_img):
+        if not safe_imwrite(temp_path, export_img):
             shutil.rmtree(temp_dir, ignore_errors=True)
             return ""
         return temp_path
@@ -19077,7 +18927,7 @@ class AstroApp(QMainWindow):
                     if input_u8 is not None and output_u8 is not None:
                         repaired_u8, repaired = repair_deepsnr_missing_patch(input_u8, output_u8)
                         if repaired:
-                            cv2.imwrite(output_path, repaired_u8)
+                            safe_imwrite(output_path, repaired_u8)
                 except Exception:
                     repaired = False
                     compare_before_u8 = None
@@ -20320,8 +20170,8 @@ class AstroApp(QMainWindow):
 
                 base_name = os.path.splitext(os.path.basename(in_path))[0]
                 out_path = os.path.join(out_dir, base_name + ".png")
-                if not cv2.imwrite(out_path, frame_u16):
-                    raise RuntimeError("cv2.imwrite returned False")
+                if not safe_imwrite(out_path, frame_u16):
+                    raise RuntimeError("Could not write PNG image")
                 saved_count += 1
             except Exception as exc:
                 error_details.append(f"{os.path.basename(in_path)}: {exc}")
@@ -26519,134 +26369,12 @@ class AstroApp(QMainWindow):
         painter.end()
         return overlay
 
-    def _apply_mask_blend(self, base_img, layer_img, layer_mask):
-        try:
-            if base_img is None or layer_img is None:
-                return base_img
-            if layer_mask is None:
-                return layer_img.copy()
-            mask = layer_mask.astype(np.float32)
-            if mask.ndim == 2:
-                mask = mask[:, :, None]
-            mask = np.clip(mask, 0.0, 1.0)
-            return np.clip(base_img.astype(np.float32) * (1.0 - mask) + layer_img.astype(np.float32) * mask, 0, 255).astype(np.uint8)
-        except Exception:
-            return layer_img.copy() if isinstance(layer_img, np.ndarray) else base_img
-
     def _build_color_corrections_label(self):
         return "Corrections"
-
-    def _update_models_label(self):
-        return
-
-    def cancel_params_preview(self):
-        self.preview_override_img = None
-        if hasattr(self, "params_preview_timer") and self.params_preview_timer.isActive():
-            self.params_preview_timer.stop()
-        if hasattr(self, "corrections_timer") and self.corrections_timer.isActive():
-            self.corrections_timer.stop()
 
     def _finalize_camera_raw_hsl(self):
         self.preview_override_img = None
         self.apply_full_processing_async()
-
-    def add_thumbnail(self, label, image):
-        if image is None:
-            return
-        if not hasattr(self, "processing_history"):
-            self.processing_history = []
-        self.processing_history.append((str(label), image.copy() if isinstance(image, np.ndarray) else image))
-        max_items = int(getattr(self, "max_thumbnails", 15) or 15)
-        if len(self.processing_history) > max_items:
-            self.processing_history = self.processing_history[-max_items:]
-
-    def update_menu_actions(self):
-        has_image = isinstance(getattr(self, "magic_img", None), np.ndarray)
-        for action_name in ("action_save", "action_save_as", "action_undo", "action_redo"):
-            action = getattr(self, action_name, None)
-            if action is not None:
-                action.setEnabled(has_image)
-
-    def undo(self):
-        if not hasattr(self, "undo_stack") or not self.undo_stack:
-            return
-        if isinstance(self.magic_img, np.ndarray):
-            self.redo_stack.append(self.magic_img.copy())
-        self.magic_img = self.undo_stack.pop()
-        self.apply_full_processing()
-
-    def redo(self):
-        if not hasattr(self, "redo_stack") or not self.redo_stack:
-            return
-        if isinstance(self.magic_img, np.ndarray):
-            self.undo_stack.append(self.magic_img.copy())
-        self.magic_img = self.redo_stack.pop()
-        self.apply_full_processing()
-
-    def save_image_to_path(self, path):
-        if self.processed_img is None or not path:
-            return
-        ext = os.path.splitext(path)[1].lower()
-        if ext not in (".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".webp", ".fit", ".fits", ".fts"):
-            path = f"{path}.png"
-
-        image_to_save = self.processed_img
-        native_result = getattr(self, "_bge_save_image", None)
-        native_snapshot = getattr(self, "_bge_save_magic_snapshot", None)
-        if (
-            isinstance(native_result, np.ndarray)
-            and isinstance(native_snapshot, np.ndarray)
-            and isinstance(self.magic_img, np.ndarray)
-            and getattr(self, "_bge_save_processing_revision", None) == getattr(self, "_processing_revision", None)
-            and np.array_equal(self.magic_img, native_snapshot)
-        ):
-            image_to_save = native_result
-
-        if _is_fits_path(path):
-            try:
-                if not safe_fits_write(path, image_to_save, header=getattr(self, "current_fits_header", None)):
-                    self.log("Save failed: could not write FITS image.", "error")
-                    return
-            except Exception as exc:
-                self.log(f"Save failed: {path} ({exc})", "error")
-                return
-            self.current_save_path = path
-            self.log(f"Saved: {os.path.basename(path)}", "success")
-            return
-
-        if np.issubdtype(image_to_save.dtype, np.floating):
-            self.log("Saving floating-point background results requires FITS format.", "error")
-            return
-        ok, encoded = cv2.imencode(os.path.splitext(path)[1] or ".png", image_to_save)
-        if not ok:
-            self.log("Save failed: encoder error.", "error")
-            return
-        encoded.tofile(path)
-        self.current_save_path = path
-        self.log(f"Saved: {os.path.basename(path)}", "success")
-
-    def save_image_as(self):
-        if self.processed_img is None:
-            self.log("Save As skipped: no image loaded.", "warning")
-            return
-        start_dir = self._get_default_dialog_directory()
-        path, _ = QFileDialog.getSaveFileName(
-            self,
-            "Save Image",
-            start_dir,
-            "Images (*.png *.jpg *.jpeg *.bmp *.tif *.tiff *.webp);;FITS Images (*.fit *.fits *.fts)",
-            options=get_safe_file_dialog_options(),
-        )
-        self.save_image_to_path(str(path or "").strip())
-
-    def save_image(self):
-        if self.processed_img is None:
-            self.log("Save skipped: no image loaded.", "warning")
-            return
-        if getattr(self, "current_save_path", None):
-            self.save_image_to_path(self.current_save_path)
-        else:
-            self.save_image_as()
 
     def run_star_shrink(self):
         if self.magic_img is None:
@@ -26829,14 +26557,14 @@ class AstroApp(QMainWindow):
                 except Exception:
                     pass
 
-                saved_starless = isinstance(starless_u8, np.ndarray) and cv2.imwrite(starless_path, starless_u8)
+                saved_starless = isinstance(starless_u8, np.ndarray) and safe_imwrite(starless_path, starless_u8)
                 if saved_starless:
                     self.log(f"Starless saved: {starless_path}", "success")
                 else:
                     self.log("Starless save failed: could not write TIFF output file.", "warning")
 
                 mask_path = self._auto_starmask_output_path(starless_path)
-                saved_mask = cv2.imwrite(mask_path, starmask_u8)
+                saved_mask = safe_imwrite(mask_path, starmask_u8)
                 if saved_mask:
                     self.log(f"StarMask generated: {mask_path}", "success")
                 else:
@@ -26910,17 +26638,17 @@ class AstroApp(QMainWindow):
             self.log("Save skipped: path is empty.", "warning")
             return
 
-        self.current_save_path = normalized_path
         try:
-            if _is_fits_path(self.current_save_path):
-                if not safe_fits_write(self.current_save_path, self.processed_img, header=getattr(self, "current_fits_header", None)):
+            if _is_fits_path(normalized_path):
+                if not safe_fits_write(normalized_path, self.processed_img, header=getattr(self, "current_fits_header", None)):
                     raise RuntimeError("Failed to write FITS image.")
             else:
-                if not cv2.imwrite(self.current_save_path, self.processed_img):
+                if not safe_imwrite(normalized_path, self.processed_img):
                     raise RuntimeError("Failed to write image file.")
         except Exception as exc:
-            self.log(f"Save failed: {self.current_save_path} ({exc})", "error")
+            self.log(f"Save failed: {normalized_path} ({exc})", "error")
             return
+        self.current_save_path = normalized_path
         self.log(f"Image saved as: {self.current_save_path}", "success")
 
     def _restore_magic_state(self, img):
