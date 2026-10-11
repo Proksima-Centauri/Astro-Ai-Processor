@@ -88,7 +88,7 @@
             {
               "@type": "Question",
               "name": "Which operating systems does Astro AI Processor support?",
-              "acceptedAnswer": { "@type": "Answer", "text": "Astro AI Processor supports Linux and Windows. The download link on this page currently provides a Linux build." }
+              "acceptedAnswer": { "@type": "Answer", "text": "Astro AI Processor supports Linux and Windows. A Linux build is available below; the Windows download link will be added shortly." }
             }
           ]
         }
@@ -770,6 +770,61 @@
       font-size: 0.95rem;
     }
 
+    .download-options {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(180px, 1fr));
+      gap: 12px;
+      flex: 1;
+      max-width: 560px;
+    }
+
+    .download-option {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      min-width: 0;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(8, 12, 25, 0.42);
+      text-align: center;
+    }
+
+    .download-platform {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 1.05rem;
+      font-weight: 700;
+    }
+
+    .download-platform svg {
+      display: block;
+      width: 40px;
+      height: 40px;
+      flex: 0 0 auto;
+    }
+
+    .download-option .btn {
+      width: 100%;
+      text-align: center;
+    }
+
+    .download-option button.btn {
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .download-option button.btn:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+      box-shadow: none;
+      transform: none;
+    }
+
     .update-api {
       padding: 20px;
       margin-bottom: 24px;
@@ -987,6 +1042,11 @@
         flex-direction: column;
         align-items: flex-start;
       }
+
+      .download-options {
+        width: 100%;
+        max-width: none;
+      }
     }
 
     @media (max-width: 620px) {
@@ -1002,6 +1062,10 @@
 
       .comparison-selector-buttons > button {
         flex: 1;
+      }
+
+      .download-options {
+        grid-template-columns: 1fr;
       }
     }
   </style>
@@ -1032,7 +1096,7 @@
           obsługą FITS, plate solvingiem, narzędziami do pracy z gwiazdami i odszumianiem.
         </p>
         <div class="actions">
-          <a class="btn" id="btnDownloadHero" href="https://drive.google.com/file/d/1kQIBxSWHUmUXAVNI-UZbxsIL72CGZc1D/view?usp=drive_link" target="_blank" rel="noopener noreferrer">Pobierz wersje Linux</a>
+          <a class="btn" id="btnDownloadHero" href="#download">Wybierz system i pobierz</a>
           <a class="btn secondary" id="btnDocs" href="README.pl.md">Czytaj dokumentacje</a>
         </div>
       </div>
@@ -1173,12 +1237,40 @@
       </div>
     </section>
 
-    <section class="download card">
+    <section class="download card" id="download">
       <div>
         <h2 id="txtDownloadTitle">Gotowe do pobrania i uruchomienia</h2>
-        <p id="txtDownloadBody">Pobierasz gotowa wersje Linux z Google Drive (folder z aplikacja i <code>_internal</code>).</p>
+        <p id="txtDownloadBody">Wybierz system operacyjny, aby pobrać Astro AI Processor. Link do wersji Windows pojawi się wkrótce.</p>
       </div>
-      <a class="btn" id="btnDownloadNow" href="https://drive.google.com/file/d/1kQIBxSWHUmUXAVNI-UZbxsIL72CGZc1D/view?usp=drive_link" target="_blank" rel="noopener noreferrer">Pobierz teraz</a>
+      <div class="download-options" id="downloadOptions" role="group" aria-label="Pobieranie dla Windows i Linux">
+        <article class="download-option">
+          <div class="download-platform">
+            <svg viewBox="0 0 40 40" role="img" aria-label="Windows">
+              <path fill="#00a4ef" d="M3 7.5 17 5.5v13H3z"/>
+              <path fill="#7fba00" d="M19 5.2 37 2.5v16H19z"/>
+              <path fill="#ffb900" d="M3 20h14v13L3 31z"/>
+              <path fill="#f25022" d="M19 20h18v17.5L19 34.8z"/>
+            </svg>
+            <span id="txtDownloadWindows">Windows</span>
+          </div>
+          <button class="btn" id="btnDownloadWindows" type="button" disabled>Link wkrótce</button>
+        </article>
+        <article class="download-option">
+          <div class="download-platform">
+            <svg viewBox="0 0 48 48" role="img" aria-label="Linux">
+              <ellipse cx="24" cy="23" rx="14" ry="19" fill="#171b27" stroke="#dbe7ff" stroke-width="1.5"/>
+              <ellipse cx="24" cy="18" rx="9" ry="10" fill="#f4f7ff"/>
+              <ellipse cx="20.5" cy="17" rx="1.3" ry="2" fill="#172033"/>
+              <ellipse cx="27.5" cy="17" rx="1.3" ry="2" fill="#172033"/>
+              <path d="m21 21 3 2 3-2-3 5z" fill="#ffb900"/>
+              <ellipse cx="24" cy="34" rx="7" ry="6" fill="#f4f7ff"/>
+              <path d="m13 40 8-2 2 3-10 1zm22 0-8-2-2 3 10 1z" fill="#ffb900"/>
+            </svg>
+            <span id="txtDownloadLinux">Linux</span>
+          </div>
+          <a class="btn" id="btnDownloadLinux" href="https://drive.google.com/file/d/1kQIBxSWHUmUXAVNI-UZbxsIL72CGZc1D/view?usp=drive_link" target="_blank" rel="noopener noreferrer">Pobierz dla Linux</a>
+        </article>
+      </div>
     </section>
 
     <section class="faq card" id="faq">
@@ -1383,7 +1475,7 @@
         txtEyebrow: "Astrofotografia Desktop",
         txtHeroTagline: "Desktopowa obróbka astrofotografii z opcjonalnymi narzędziami AI",
         txtHeroLead: "Astro AI Processor łączy klasyczne narzędzia przetwarzania obrazu z analizą astronomiczną (FWHM/SNR), obsługą FITS, plate solvingiem, narzędziami do pracy z gwiazdami i odszumianiem.",
-        btnDownloadHero: "Pobierz wersje Linux",
+        btnDownloadHero: "Wybierz system i pobierz",
         btnDocs: "Czytaj dokumentacje",
         txtFeature1Title: "Workflow od razu po starcie",
         txtFeature1Body: "Wczytaj obraz, popraw tonalnosc, uruchom analize i zapisz wynik bez opuszczania aplikacji.",
@@ -1421,11 +1513,15 @@
         txtFlyTitle: "Podglad efektu 3D FLY",
         txtFlyBody: "Zobacz, jak wyglada finalna animacja wygenerowana narzedziem 3D FLY.",
         txtDownloadTitle: "Gotowe do pobrania i uruchomienia",
-        txtDownloadBody: "Pobierasz gotowa wersje Linux z Google Drive (folder z aplikacja i <code>_internal</code>).",
-        btnDownloadNow: "Pobierz teraz",
+        txtDownloadBody: "Wybierz system operacyjny, aby pobrać Astro AI Processor. Link do wersji Windows pojawi się wkrótce.",
+        txtDownloadWindows: "Windows",
+        btnDownloadWindows: "Link wkrótce",
+        txtDownloadLinux: "Linux",
+        btnDownloadLinux: "Pobierz dla Linux",
+        txtDownloadOptionsLabel: "Pobieranie dla Windows i Linux",
         txtFaqTitle: "FAQ",
         txtFaqQ1: "Jakie systemy operacyjne obsługuje Astro AI Processor?",
-        txtFaqA1: "Astro AI Processor obsługuje Linux i Windows. Link pobierania na tej stronie udostępnia obecnie wersję dla Linuxa.",
+        txtFaqA1: "Astro AI Processor obsługuje Linux i Windows. Wersja Linux jest dostępna poniżej; link do Windows pojawi się wkrótce.",
         txtFaqQ2: "Czy aplikacja dziala offline?",
         txtFaqA2: "Tak. Wiekszosc narzedzi dziala lokalnie, a internet jest potrzebny tylko dla funkcji online, takich jak Astrometry.net i sprawdzanie aktualizacji.",
         txtFaqQ3: "Czy Astro AI Processor obsługuje obrazy FITS?",
@@ -1457,7 +1553,7 @@
         txtFaqQ16: "Czy Astro AI Processor odszumia astrofotografie?",
         txtFaqA16: "Tak. Opcjonalna integracja deepSNR umożliwia odszumianie astrofotografii i wymaga narzędzia deepSNR CLI.",
         txtFaqQ17: "Czy Astro AI Processor jest darmowy?",
-        txtFaqA17: "Kod źródłowy Astro AI Processor jest dostępny na licencji GNU GPL v3, a ta strona udostępnia wersję dla Linuxa. Aktualne informacje o dystrybucji i ewentualnej cenie sprawdź w repozytorium.",
+        txtFaqA17: "Kod źródłowy Astro AI Processor jest dostępny na licencji GNU GPL v3. Wersja Linux jest dostępna poniżej, a link do Windows pojawi się wkrótce.",
         txtAboutTitle: "O Astro AI Processor",
         txtAboutIntro: "Astro AI Processor to desktopowa aplikacja do obróbki astrofotografii rozwijana pod marką AstroPhotoSoft. Poznaj program lub przejdź do dokumentacji produktu.",
         btnAboutPage: "O Astro AI Processor",
@@ -1475,7 +1571,7 @@
         txtEyebrow: "Desktop Astrophotography",
         txtHeroTagline: "Desktop astrophotography image processing with optional AI tools",
         txtHeroLead: "Astro AI Processor combines traditional image-processing tools with astronomy-specific analysis (FWHM/SNR), FITS support, astronomical plate solving, star processing and denoising.",
-        btnDownloadHero: "Download Linux build",
+        btnDownloadHero: "Choose system and download",
         btnDocs: "Read docs",
         txtFeature1Title: "Workflow from the first launch",
         txtFeature1Body: "Load an image, correct tone, run analysis, and save results without leaving the app.",
@@ -1513,11 +1609,15 @@
         txtFlyTitle: "3D FLY effect preview",
         txtFlyBody: "See how the final animation generated with 3D FLY looks.",
         txtDownloadTitle: "Ready to download and run",
-        txtDownloadBody: "Download a ready Linux build from Google Drive (folder with app and <code>_internal</code>).",
-        btnDownloadNow: "Download now",
+        txtDownloadBody: "Choose your operating system to download Astro AI Processor. The Windows link will be added soon.",
+        txtDownloadWindows: "Windows",
+        btnDownloadWindows: "Link coming soon",
+        txtDownloadLinux: "Linux",
+        btnDownloadLinux: "Download for Linux",
+        txtDownloadOptionsLabel: "Downloads for Windows and Linux",
         txtFaqTitle: "FAQ",
         txtFaqQ1: "Which operating systems does Astro AI Processor support?",
-        txtFaqA1: "Astro AI Processor supports Linux and Windows. The download link on this page currently provides a Linux build.",
+        txtFaqA1: "Astro AI Processor supports Linux and Windows. A Linux build is available below; the Windows download link will be added shortly.",
         txtFaqQ2: "Does the app work offline?",
         txtFaqA2: "Yes. Most tools run locally, and internet is only needed for online features like Astrometry.net and update checks.",
         txtFaqQ3: "Does Astro AI Processor support FITS images?",
@@ -1549,7 +1649,7 @@
         txtFaqQ16: "Can Astro AI Processor denoise astrophotography?",
         txtFaqA16: "Yes. The optional deepSNR integration provides astrophotography denoising and requires the deepSNR command-line tool.",
         txtFaqQ17: "Is Astro AI Processor free?",
-        txtFaqA17: "Astro AI Processor source code is licensed under GNU GPL v3, and this page links to a Linux build. Check the repository for current distribution and pricing details.",
+        txtFaqA17: "Astro AI Processor source code is licensed under GNU GPL v3. The Linux build is available below; the Windows download link will be added shortly.",
         txtAboutTitle: "About Astro AI Processor",
         txtAboutIntro: "Astro AI Processor is a desktop astrophotography image processing application developed under the AstroPhotoSoft brand. Read more about the application or browse the product documentation.",
         btnAboutPage: "About Astro AI Processor",
@@ -1601,6 +1701,10 @@
       const comparisonSelector = document.querySelector("[data-comparison-selector]");
       if (comparisonSelector) {
         comparisonSelector.setAttribute("aria-label", dict.txtComparisonSelectorLabel);
+      }
+      const downloadOptions = document.getElementById("downloadOptions");
+      if (downloadOptions) {
+        downloadOptions.setAttribute("aria-label", dict.txtDownloadOptionsLabel);
       }
       document.querySelectorAll("[data-compare-controls]").forEach((controls) => {
         controls.setAttribute("aria-label", dict.txtZoomToolbar);
