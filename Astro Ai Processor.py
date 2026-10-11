@@ -7078,6 +7078,8 @@ class AIAssistantPanel(QFrame):
         if not SPEECH_RECOGNITION_AVAILABLE:
             self.btn_voice.setToolTip("Voice to Text wymaga pakietu SpeechRecognition")
         self._show_chat_panel()
+        if sys.platform.startswith("win"):
+            self.append_assistant_message("Przepraszamy, Asystent AI jest niedostępny w wersji Windows.")
 
     def _refresh_local_model_label(self):
         model_file = str(getattr(self.app, "local_ai_model_file", "") or "").strip()
