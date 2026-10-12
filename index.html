@@ -179,24 +179,6 @@
       background: #03040a;
     }
 
-    .lang-bar {
-      display: flex;
-      justify-content: flex-end;
-      margin: 0 auto 12px;
-      width: min(1080px, 92vw);
-    }
-
-    .lang-select {
-      border: 1px solid var(--line);
-      border-radius: 10px;
-      background: rgba(16, 23, 41, 0.82);
-      color: var(--text);
-      padding: 8px 12px;
-      font-family: "Space Grotesk", "Segoe UI", sans-serif;
-      font-size: 0.92rem;
-      cursor: pointer;
-    }
-
     .scroll-hint {
       position: fixed;
       left: 50%;
@@ -1080,12 +1062,6 @@
 </head>
 <body>
   <div class="stars" aria-hidden="true"></div>
-  <div class="lang-bar">
-    <select id="langSelect" class="lang-select" aria-label="Wybierz jezyk strony">
-      <option value="pl">Polski</option>
-      <option value="en">English</option>
-    </select>
-  </div>
   <main class="wrap">
     <section class="intro card">
       <video autoplay muted playsinline controls preload="metadata">
@@ -1666,6 +1642,300 @@
         txtAboutYoutubeLabel: "Subscribe on YouTube.",
         txtAboutGithubLabel: "Astro AI Processor on GitHub.",
       },
+      de: {
+        langCode: "de",
+        txtComparisonSelectorLabel: "Vergleichsobjekt auswählen",
+        pageTitle: "Astro AI Processor — Bildverarbeitung für Astrofotografie",
+        pageDescription: "Astro AI Processor ist eine Desktop-Anwendung zur Bearbeitung von Astrofotografien mit FITS-Unterstützung, Plate Solving, Sternwerkzeugen, Entrauschung und Bildanalyse.",
+        docsHref: "docs/",
+        scrollHint: "NACH UNTEN SCROLLEN",
+        txtEyebrow: "Desktop-Astrofotografie",
+        txtHeroTagline: "Desktop-Bildverarbeitung für Astrofotografie mit optionalen KI-Werkzeugen",
+        txtHeroLead: "Astro AI Processor verbindet klassische Bildverarbeitung mit astronomischer Analyse (FWHM/SNR), FITS-Unterstützung, Plate Solving, Sternwerkzeugen und Entrauschung.",
+        btnDownloadHero: "System auswählen und herunterladen",
+        btnDocs: "Dokumentation lesen",
+        txtFeature1Title: "Direkt startklarer Workflow",
+        txtFeature1Body: "Laden Sie ein Bild, korrigieren Sie die Tonwerte, starten Sie eine Analyse und speichern Sie das Ergebnis, ohne die App zu verlassen.",
+        txtFeature2Title: "Astronomie- und KI-Werkzeuge",
+        txtFeature2Body: "Astro AI Processor integriert Astrometry.net, StarNet++, deepSNR und den lokalen Altair-Assistenten (GGUF).",
+        txtFeature3Title: "Formate und Ebenen",
+        txtFeature3Body: "Astro AI Processor unterstützt astronomische FITS-Dateien (<code>.fits</code>, <code>.fit</code>, <code>.fts</code>), TIFF und PNG sowie Ebenen und einen Bearbeitungsverlauf.",
+        txtCompare1Title: "Astrofotografien entrauschen — deepSNR",
+        txtCompare1Body: "Vergleichen Sie eine astronomische Aufnahme vor und nach der deepSNR-Entrauschung.",
+        txtCompare2Title: "Sterne in Astrofotos verkleinern — Star Shrink",
+        txtCompare2Body: "Sehen Sie, wie Star Shrink die Sterngröße in einer astronomischen Aufnahme verändert.",
+        txtCompare3Title: "Hintergrundkorrektur für astronomische Bilder",
+        txtCompare3Body: "Vergleichen Sie das Originalbild mit dem Ergebnis der Hintergrundkorrektur.",
+        txtCompare4Title: "Astro Upscale — Astrofotos vergrößern",
+        txtCompare4Body: "Vergleichen Sie das Original mit der 4×-Version. Zoomen Sie hinein, um Pixel zu prüfen.",
+        txtTagBefore: "Vorher",
+        txtTagAfter: "Nach KI",
+        txtTagCorrected: "Korrigiert",
+        txtZoomIn: "Vergrößern",
+        txtZoomOut: "Verkleinern",
+        txtPanToggle: "Verschieben aktivieren",
+        txtPanEnabled: "Verschieben deaktivieren",
+        txtZoomReset: "Ansicht zurücksetzen",
+        txtZoomHelp: "Mausrad: Zoom; bei aktivem Verschieben ziehen: Ansicht verschieben",
+        txtZoomLevel: "Zoomstufe",
+        txtZoomToolbar: "Zoom- und Verschiebesteuerung",
+        txtRoadmapTitle: "Entwicklungs-Roadmap",
+        txtRoadmapBody: "Visueller Projektzeitplan.",
+        txtRoadmapItem0Title: "Präsentation von Astro AI Processor beim Astronomietreffen XXX OZMA",
+        txtRoadmapItem1Title: "Neue Produktwebsite",
+        txtRoadmapItem1Body: "Start der Website mit Introvideo, KI-Vergleich und Download-Schaltflächen.",
+        txtRoadmapSoon: "Demnächst",
+        txtRoadmapItem2Title: "Windows-Version hinzugefügt",
+        txtRoadmapItem2Body: "Die Astro AI Processor-Version für Windows ist jetzt verfügbar.",
+        txtRoadmapItem3Title: "Online-Version",
+        txtRoadmapItem3Body: "Eine Online-Version der Anwendung wird verfügbar sein.",
+        txtFlyTitle: "3D-FLY-Effektvorschau",
+        txtFlyBody: "Sehen Sie sich die fertige Animation an, die mit 3D FLY erstellt wurde.",
+        txtDownloadTitle: "Bereit zum Herunterladen und Starten",
+        txtDownloadBody: "Wählen Sie ein Betriebssystem, um Astro AI Processor für Windows oder Linux herunterzuladen.",
+        txtDownloadWindows: "Windows",
+        btnDownloadWindows: "Für Windows herunterladen",
+        txtDownloadLinux: "Linux",
+        btnDownloadLinux: "Für Linux herunterladen",
+        txtDownloadOptionsLabel: "Downloads für Windows und Linux",
+        txtFaqTitle: "FAQ",
+        txtFaqQ1: "Welche Betriebssysteme unterstützt Astro AI Processor?",
+        txtFaqA1: "Astro AI Processor unterstützt Linux und Windows. Links zu beiden Versionen finden Sie unten.",
+        txtFaqQ2: "Funktioniert die App offline?",
+        txtFaqA2: "Ja. Die meisten Werkzeuge laufen lokal; Internet wird nur für Online-Funktionen wie Astrometry.net und Update-Prüfungen benötigt.",
+        txtFaqQ3: "Unterstützt Astro AI Processor FITS-Bilder?",
+        txtFaqA3: "Ja. Astro AI Processor unterstützt FITS-Dateien (.fits, .fit, .fts) sowie PNG, JPG und TIFF.",
+        txtFaqQ4: "Kann ich Ergebnisse vor und nach der KI vergleichen?",
+        txtFaqA4: "Ja. Die Website und die App bieten Vorher/Nachher-Vergleiche, mit denen Sie Entrauschung und andere KI-Werkzeuge beurteilen können.",
+        txtFaqQ5: "Brauche ich eine GPU für KI-Werkzeuge?",
+        txtFaqA5: "Nein, aber eine Grafikkarte beschleunigt einige Vorgänge deutlich. Die App funktioniert auch auf der CPU, jedoch langsamer.",
+        txtFaqQ6: "Wie funktioniert ein Update?",
+        txtFaqA6: "Die Versionsprüfung erfolgt über die Update-API. Bei einer neuen Version laden Sie das Paket herunter und ersetzen den App-Ordner.",
+        txtFaqQ7: "Kann ich Vorgänge rückgängig machen und wiederholen?",
+        txtFaqA7: "Ja. Der Bearbeitungsverlauf unterstützt Rückgängig/Wiederholen, damit Sie Einstellungen sicher ausprobieren können.",
+        txtFaqQ8: "Unterstützt die App Plate Solving?",
+        txtFaqA8: "Ja. Astro AI Processor unterstützt Plate Solving mit solve-field vor Ort oder dem Astrometry.net-Dienst.",
+        txtFaqQ9: "Wo finde ich Dokumentation und Anleitungen?",
+        txtFaqA9: "Die Dokumentation finden Sie in den README-Dateien und über die Schaltfläche „Dokumentation lesen“ auf der Startseite.",
+        txtFaqQ10: "Kann ich mit einem vorbereiteten Bild 3D-FLY-Animationen erstellen?",
+        txtFaqA10: "Ja. Mit 3D FLY können Sie aus einem vorbereiteten Bild eine Animation rendern und als Videodatei speichern.",
+        txtFaqQ11: "Was ist Astro AI Processor?",
+        txtFaqA11: "Astro AI Processor ist eine Desktop-Anwendung zur Bearbeitung und Analyse von Astrofotografien mit klassischen Bildwerkzeugen, astronomischer Analyse und optionalen KI-Werkzeugen.",
+        txtFaqQ12: "Ist Astro AI Processor eine Astrofotografie-Software?",
+        txtFaqA12: "Ja. Die Desktop-Software zur Astrofotografie unterstützt FITS, Sternanalyse und Plate Solving.",
+        txtFaqQ13: "Was kann Astro AI Processor?",
+        txtFaqA13: "Die Anwendung bearbeitet und analysiert astronomische Bilder, verarbeitet FITS, misst Stern- und Bildwerte, führt Plate Solving durch und bietet optionale Werkzeuge zum Entfernen von Sternen und zur Entrauschung.",
+        txtFaqQ14: "Verwendet Astro AI Processor KI?",
+        txtFaqA14: "Ja. Optionale KI-Werkzeuge sind deepSNR, StarNet++ und der lokale Altair-Assistent. Astro Upscale ist eine herkömmliche, nicht-generative Bildvergrößerung. Einige Werkzeuge benötigen separate Komponenten oder Modelle.",
+        txtFaqQ15: "Kann Astro AI Processor Sterne entfernen?",
+        txtFaqA15: "Ja. Die App kann StarNet++ zum Entfernen von Sternen verwenden, wenn das Kommandozeilenprogramm installiert und eingerichtet ist.",
+        txtFaqQ16: "Kann Astro AI Processor Astrofotografien entrauschen?",
+        txtFaqA16: "Ja. Die optionale deepSNR-Integration entrauscht Astrofotografien und benötigt das deepSNR-Kommandozeilenprogramm.",
+        txtFaqQ17: "Ist Astro AI Processor kostenlos?",
+        txtFaqA17: "Der Quellcode von Astro AI Processor steht unter der GNU GPL v3. Links zu Linux- und Windows-Versionen finden Sie unten.",
+        txtAboutTitle: "Über Astro AI Processor",
+        txtAboutIntro: "Astro AI Processor ist eine Desktop-Anwendung zur Astrofotografie-Bearbeitung, entwickelt unter der Marke AstroPhotoSoft. Erfahren Sie mehr über die Anwendung oder lesen Sie die Produktdokumentation.",
+        btnAboutPage: "Über Astro AI Processor",
+        btnDocumentation: "Dokumentation",
+        txtAboutYoutubeLabel: "Auf YouTube abonnieren.",
+        txtAboutGithubLabel: "Astro AI Processor auf GitHub.",
+      },
+      es: {
+        langCode: "es",
+        txtComparisonSelectorLabel: "Elige una imagen para comparar",
+        pageTitle: "Astro AI Processor — Procesamiento de imágenes astronómicas",
+        pageDescription: "Astro AI Processor es una aplicación de escritorio para procesar astrofotografías, con compatibilidad FITS, resolución astrométrica, herramientas para estrellas, reducción de ruido y análisis de imágenes.",
+        docsHref: "docs/",
+        scrollHint: "DESPLAZAR HACIA ABAJO",
+        txtEyebrow: "Astrofotografía de escritorio",
+        txtHeroTagline: "Procesamiento de astrofotografía con herramientas de IA opcionales",
+        txtHeroLead: "Astro AI Processor combina herramientas clásicas de imagen con análisis astronómico (FWHM/SNR), compatibilidad FITS, resolución astrométrica, herramientas para estrellas y reducción de ruido.",
+        btnDownloadHero: "Elige sistema y descarga",
+        btnDocs: "Leer documentación",
+        txtFeature1Title: "Flujo de trabajo desde el inicio",
+        txtFeature1Body: "Carga una imagen, corrige los tonos, ejecuta un análisis y guarda el resultado sin salir de la aplicación.",
+        txtFeature2Title: "Herramientas de astronomía e IA",
+        txtFeature2Body: "Astro AI Processor integra Astrometry.net, StarNet++, deepSNR y el asistente local Altair (GGUF).",
+        txtFeature3Title: "Formatos y capas",
+        txtFeature3Body: "Astro AI Processor admite FITS astronómicos (<code>.fits</code>, <code>.fit</code>, <code>.fts</code>), TIFF y PNG, además de capas e historial de edición.",
+        txtCompare1Title: "Reducción de ruido en astrofotografía — deepSNR",
+        txtCompare1Body: "Compara una imagen astronómica antes y después de reducir el ruido con deepSNR.",
+        txtCompare2Title: "Reducción de estrellas — Star Shrink",
+        txtCompare2Body: "Observa cómo Star Shrink cambia el tamaño de las estrellas en una imagen astronómica.",
+        txtCompare3Title: "Corrección del fondo de imágenes astronómicas",
+        txtCompare3Body: "Compara la imagen original con el resultado de la corrección del fondo.",
+        txtCompare4Title: "Astro Upscale — ampliación de astrofotografías",
+        txtCompare4Body: "Compara la imagen original con la versión 4×. Usa el zoom para ver los píxeles.",
+        txtTagBefore: "Antes",
+        txtTagAfter: "Después de IA",
+        txtTagCorrected: "Corregido",
+        txtZoomIn: "Acercar",
+        txtZoomOut: "Alejar",
+        txtPanToggle: "Activar desplazamiento",
+        txtPanEnabled: "Desactivar desplazamiento",
+        txtZoomReset: "Restablecer vista",
+        txtZoomHelp: "Rueda del ratón: zoom; arrastra con el desplazamiento activado: mover imagen",
+        txtZoomLevel: "Nivel de zoom",
+        txtZoomToolbar: "Controles de zoom y desplazamiento",
+        txtRoadmapTitle: "Hoja de ruta",
+        txtRoadmapBody: "Cronología visual del proyecto.",
+        txtRoadmapItem0Title: "Presentación de Astro AI Processor en el encuentro astronómico XXX OZMA",
+        txtRoadmapItem1Title: "Nueva web del producto",
+        txtRoadmapItem1Body: "Lanzamiento de la página con vídeo introductorio, comparación de IA y botones de descarga.",
+        txtRoadmapSoon: "Próximamente",
+        txtRoadmapItem2Title: "Añadida la versión para Windows",
+        txtRoadmapItem2Body: "La versión de Astro AI Processor para Windows ya está disponible.",
+        txtRoadmapItem3Title: "Versión en línea",
+        txtRoadmapItem3Body: "Habrá una versión en línea de la aplicación.",
+        txtFlyTitle: "Vista previa del efecto 3D FLY",
+        txtFlyBody: "Descubre cómo es la animación final creada con 3D FLY.",
+        txtDownloadTitle: "Lista para descargar y usar",
+        txtDownloadBody: "Elige un sistema operativo para descargar Astro AI Processor para Windows o Linux.",
+        txtDownloadWindows: "Windows",
+        btnDownloadWindows: "Descargar para Windows",
+        txtDownloadLinux: "Linux",
+        btnDownloadLinux: "Descargar para Linux",
+        txtDownloadOptionsLabel: "Descargas para Windows y Linux",
+        txtFaqTitle: "Preguntas frecuentes",
+        txtFaqQ1: "¿Qué sistemas operativos admite Astro AI Processor?",
+        txtFaqA1: "Astro AI Processor admite Linux y Windows. Abajo están los enlaces para ambos sistemas.",
+        txtFaqQ2: "¿La aplicación funciona sin conexión?",
+        txtFaqA2: "Sí. La mayoría de las herramientas funcionan localmente; Internet solo se necesita para funciones en línea como Astrometry.net y las actualizaciones.",
+        txtFaqQ3: "¿Astro AI Processor admite imágenes FITS?",
+        txtFaqA3: "Sí. Admite archivos FITS (.fits, .fit, .fts), además de PNG, JPG y TIFF.",
+        txtFaqQ4: "¿Puedo comparar los resultados antes y después de la IA?",
+        txtFaqA4: "Sí. La página y la aplicación incluyen comparaciones antes/después para evaluar la reducción de ruido y otras herramientas de IA.",
+        txtFaqQ5: "¿Necesito una GPU para usar la IA?",
+        txtFaqA5: "No es obligatorio, pero una GPU acelera mucho algunas operaciones. La aplicación también funciona con CPU, aunque más despacio.",
+        txtFaqQ6: "¿Cómo se actualiza la aplicación?",
+        txtFaqA6: "La comprobación de versiones se realiza mediante la API de actualizaciones. Cuando haya una nueva versión, descarga el paquete y sustituye la carpeta de la aplicación.",
+        txtFaqQ7: "¿Puedo deshacer y rehacer operaciones?",
+        txtFaqA7: "Sí. El historial de edición permite deshacer y rehacer para probar distintos ajustes de forma segura.",
+        txtFaqQ8: "¿La aplicación admite resolución astrométrica?",
+        txtFaqA8: "Sí. Astro AI Processor permite resolver imágenes con solve-field local o con el servicio Astrometry.net.",
+        txtFaqQ9: "¿Dónde encuentro la documentación y las guías?",
+        txtFaqA9: "Encontrarás la documentación en los archivos README y en el botón «Leer documentación» de la página principal.",
+        txtFaqQ10: "¿Puedo crear animaciones 3D FLY a partir de una imagen?",
+        txtFaqA10: "Sí. 3D FLY crea una animación a partir de una imagen preparada y permite guardarla como vídeo.",
+        txtFaqQ11: "¿Qué es Astro AI Processor?",
+        txtFaqA11: "Astro AI Processor es una aplicación de escritorio para procesar y analizar astrofotografías con herramientas de imagen, análisis astronómico e IA opcional.",
+        txtFaqQ12: "¿Astro AI Processor es un programa para astrofotografía?",
+        txtFaqA12: "Sí. Es un programa de escritorio para procesar astrofotografías, con compatibilidad FITS, análisis estelar y resolución astrométrica.",
+        txtFaqQ13: "¿Qué se puede hacer con Astro AI Processor?",
+        txtFaqA13: "Permite editar y analizar imágenes astronómicas, procesar FITS, medir estrellas e imágenes, resolver astrometría y usar herramientas opcionales para eliminar estrellas y reducir ruido.",
+        txtFaqQ14: "¿Astro AI Processor utiliza IA?",
+        txtFaqA14: "Sí. Incluye integraciones opcionales con deepSNR y StarNet++ y el asistente local Altair. Astro Upscale es un reescalado tradicional, no generativo. Algunas herramientas requieren componentes o modelos adicionales.",
+        txtFaqQ15: "¿Astro AI Processor puede eliminar estrellas?",
+        txtFaqA15: "Sí. Puede integrar StarNet++ para eliminar estrellas si la herramienta de línea de comandos está instalada y configurada.",
+        txtFaqQ16: "¿Astro AI Processor reduce el ruido de astrofotografías?",
+        txtFaqA16: "Sí. La integración opcional deepSNR reduce el ruido y requiere la herramienta de línea de comandos deepSNR.",
+        txtFaqQ17: "¿Astro AI Processor es gratuito?",
+        txtFaqA17: "El código fuente de Astro AI Processor está bajo la licencia GNU GPL v3. Abajo encontrarás los enlaces para Linux y Windows.",
+        txtAboutTitle: "Acerca de Astro AI Processor",
+        txtAboutIntro: "Astro AI Processor es una aplicación de escritorio para procesar astrofotografías, desarrollada bajo la marca AstroPhotoSoft. Conoce la aplicación o consulta la documentación del producto.",
+        btnAboutPage: "Acerca de Astro AI Processor",
+        btnDocumentation: "Documentación",
+        txtAboutYoutubeLabel: "Suscríbete en YouTube.",
+        txtAboutGithubLabel: "Astro AI Processor en GitHub.",
+      },
+      fr: {
+        langCode: "fr",
+        txtComparisonSelectorLabel: "Choisir l’image à comparer",
+        pageTitle: "Astro AI Processor — Traitement d’images d’astrophotographie",
+        pageDescription: "Astro AI Processor est une application de bureau de traitement d’astrophotographies avec prise en charge FITS, résolution astrométrique, outils pour les étoiles, réduction du bruit et analyse d’images.",
+        docsHref: "docs/",
+        scrollHint: "FAITES DÉFILER VERS LE BAS",
+        txtEyebrow: "Astrophotographie sur ordinateur",
+        txtHeroTagline: "Traitement d’astrophotographies avec outils d’IA en option",
+        txtHeroLead: "Astro AI Processor associe des outils classiques de traitement d’image à l’analyse astronomique (FWHM/SNR), la prise en charge FITS, la résolution astrométrique, des outils stellaires et la réduction du bruit.",
+        btnDownloadHero: "Choisir un système et télécharger",
+        btnDocs: "Lire la documentation",
+        txtFeature1Title: "Un flux de travail immédiat",
+        txtFeature1Body: "Chargez une image, corrigez les tons, lancez une analyse et enregistrez le résultat sans quitter l’application.",
+        txtFeature2Title: "Outils d’astronomie et d’IA",
+        txtFeature2Body: "Astro AI Processor intègre Astrometry.net, StarNet++, deepSNR et l’assistant local Altair (GGUF).",
+        txtFeature3Title: "Formats et calques",
+        txtFeature3Body: "Astro AI Processor prend en charge les fichiers FITS astronomiques (<code>.fits</code>, <code>.fit</code>, <code>.fts</code>), TIFF et PNG, ainsi que les calques et l’historique des modifications.",
+        txtCompare1Title: "Réduction du bruit en astrophotographie — deepSNR",
+        txtCompare1Body: "Comparez une image astronomique avant et après la réduction du bruit avec deepSNR.",
+        txtCompare2Title: "Réduction des étoiles — Star Shrink",
+        txtCompare2Body: "Découvrez comment Star Shrink modifie la taille des étoiles sur une image astronomique.",
+        txtCompare3Title: "Correction du fond d’image astronomique",
+        txtCompare3Body: "Comparez l’image originale au résultat de la correction du fond.",
+        txtCompare4Title: "Astro Upscale — agrandissement d’astrophotographies",
+        txtCompare4Body: "Comparez l’image originale à la version 4×. Zoomez pour examiner les pixels.",
+        txtTagBefore: "Avant",
+        txtTagAfter: "Après l’IA",
+        txtTagCorrected: "Corrigé",
+        txtZoomIn: "Zoom avant",
+        txtZoomOut: "Zoom arrière",
+        txtPanToggle: "Activer le déplacement",
+        txtPanEnabled: "Désactiver le déplacement",
+        txtZoomReset: "Réinitialiser la vue",
+        txtZoomHelp: "Molette : zoom ; faites glisser pour déplacer l’image lorsque le mode est activé",
+        txtZoomLevel: "Niveau de zoom",
+        txtZoomToolbar: "Commandes de zoom et de déplacement",
+        txtRoadmapTitle: "Feuille de route",
+        txtRoadmapBody: "Chronologie visuelle du projet.",
+        txtRoadmapItem0Title: "Présentation d’Astro AI Processor lors du rassemblement astronomique XXX OZMA",
+        txtRoadmapItem1Title: "Nouveau site du produit",
+        txtRoadmapItem1Body: "Lancement du site avec vidéo d’introduction, comparaison IA et boutons de téléchargement.",
+        txtRoadmapSoon: "Bientôt",
+        txtRoadmapItem2Title: "Version Windows ajoutée",
+        txtRoadmapItem2Body: "La version Windows d’Astro AI Processor est désormais disponible.",
+        txtRoadmapItem3Title: "Version en ligne",
+        txtRoadmapItem3Body: "Une version en ligne de l’application sera disponible.",
+        txtFlyTitle: "Aperçu de l’effet 3D FLY",
+        txtFlyBody: "Découvrez l’animation finale créée avec 3D FLY.",
+        txtDownloadTitle: "Prêt à télécharger et à utiliser",
+        txtDownloadBody: "Choisissez un système d’exploitation pour télécharger Astro AI Processor pour Windows ou Linux.",
+        txtDownloadWindows: "Windows",
+        btnDownloadWindows: "Télécharger pour Windows",
+        txtDownloadLinux: "Linux",
+        btnDownloadLinux: "Télécharger pour Linux",
+        txtDownloadOptionsLabel: "Téléchargements pour Windows et Linux",
+        txtFaqTitle: "Questions fréquentes",
+        txtFaqQ1: "Quels systèmes d’exploitation Astro AI Processor prend-il en charge ?",
+        txtFaqA1: "Astro AI Processor prend en charge Linux et Windows. Les liens vers les deux versions sont ci-dessous.",
+        txtFaqQ2: "L’application fonctionne-t-elle hors ligne ?",
+        txtFaqA2: "Oui. La plupart des outils fonctionnent localement ; Internet n’est nécessaire que pour les fonctions en ligne comme Astrometry.net et la recherche de mises à jour.",
+        txtFaqQ3: "Astro AI Processor prend-il en charge les images FITS ?",
+        txtFaqA3: "Oui. Astro AI Processor prend en charge les fichiers FITS (.fits, .fit, .fts), ainsi que PNG, JPG et TIFF.",
+        txtFaqQ4: "Puis-je comparer les résultats avant et après l’IA ?",
+        txtFaqA4: "Oui. Le site et l’application proposent des comparaisons avant/après pour évaluer la réduction du bruit et les autres outils d’IA.",
+        txtFaqQ5: "Ai-je besoin d’un GPU pour utiliser l’IA ?",
+        txtFaqA5: "Ce n’est pas obligatoire, mais une carte graphique accélère fortement certaines opérations. L’application fonctionne aussi sur CPU, plus lentement.",
+        txtFaqQ6: "Comment mettre l’application à jour ?",
+        txtFaqA6: "La recherche de versions passe par l’API de mise à jour. Lorsqu’une nouvelle version est disponible, téléchargez le paquet et remplacez le dossier de l’application.",
+        txtFaqQ7: "Puis-je annuler et rétablir des opérations ?",
+        txtFaqA7: "Oui. L’historique de modification permet d’annuler et de rétablir des actions pour essayer différents réglages en toute sécurité.",
+        txtFaqQ8: "L’application prend-elle en charge la résolution astrométrique ?",
+        txtFaqA8: "Oui. Astro AI Processor permet la résolution avec solve-field en local ou le service Astrometry.net.",
+        txtFaqQ9: "Où trouver la documentation et les guides ?",
+        txtFaqA9: "La documentation se trouve dans les fichiers README et via le bouton « Lire la documentation » de la page d’accueil.",
+        txtFaqQ10: "Puis-je créer des animations 3D FLY à partir d’une image ?",
+        txtFaqA10: "Oui. 3D FLY crée une animation à partir d’une image préparée et permet de l’enregistrer en vidéo.",
+        txtFaqQ11: "Qu’est-ce qu’Astro AI Processor ?",
+        txtFaqA11: "Astro AI Processor est une application de bureau pour traiter et analyser des astrophotographies, avec des outils d’image classiques, une analyse astronomique et des outils d’IA en option.",
+        txtFaqQ12: "Astro AI Processor est-il un logiciel d’astrophotographie ?",
+        txtFaqA12: "Oui. Ce logiciel de bureau pour l’astrophotographie prend en charge FITS, l’analyse des étoiles et la résolution astrométrique.",
+        txtFaqQ13: "Que peut faire Astro AI Processor ?",
+        txtFaqA13: "Il permet de modifier et d’analyser des images astronomiques, de traiter des fichiers FITS, de mesurer les étoiles et les images, d’effectuer une résolution astrométrique et d’utiliser des outils optionnels de suppression des étoiles et de réduction du bruit.",
+        txtFaqQ14: "Astro AI Processor utilise-t-il l’IA ?",
+        txtFaqA14: "Oui. Les outils optionnels comprennent deepSNR, StarNet++ et l’assistant local Altair. Astro Upscale est un rééchantillonnage classique, non génératif. Certains outils nécessitent des composants ou modèles séparés.",
+        txtFaqQ15: "Astro AI Processor peut-il supprimer les étoiles ?",
+        txtFaqA15: "Oui. L’application peut utiliser StarNet++ pour supprimer les étoiles si son outil en ligne de commande est installé et configuré.",
+        txtFaqQ16: "Astro AI Processor réduit-il le bruit des astrophotographies ?",
+        txtFaqA16: "Oui. L’intégration optionnelle deepSNR réduit le bruit des astrophotographies et nécessite l’outil en ligne de commande deepSNR.",
+        txtFaqQ17: "Astro AI Processor est-il gratuit ?",
+        txtFaqA17: "Le code source d’Astro AI Processor est sous licence GNU GPL v3. Les liens vers les versions Linux et Windows sont ci-dessous.",
+        txtAboutTitle: "À propos d’Astro AI Processor",
+        txtAboutIntro: "Astro AI Processor est une application de bureau de traitement d’astrophotographies développée sous la marque AstroPhotoSoft. Découvrez l’application ou consultez sa documentation.",
+        btnAboutPage: "À propos d’Astro AI Processor",
+        btnDocumentation: "Documentation",
+        txtAboutYoutubeLabel: "Abonnez-vous sur YouTube.",
+        txtAboutGithubLabel: "Astro AI Processor sur GitHub.",
+      },
     };
 
     function setText(id, value, asHtml = false) {
@@ -1741,26 +2011,32 @@
       if (scrollHint) scrollHint.textContent = dict.scrollHint;
     }
 
-    const langSelect = document.getElementById("langSelect");
-    let savedLang = "pl";
-    try {
-      savedLang = localStorage.getItem("site_lang") || "pl";
-    } catch (_err) {
-      savedLang = "pl";
-    }
-    if (langSelect) {
-      langSelect.value = i18n[savedLang] ? savedLang : "pl";
-      langSelect.addEventListener("change", () => {
-        const nextLang = langSelect.value;
-        try {
-          localStorage.setItem("site_lang", nextLang);
-        } catch (_err) {
-          // ignore localStorage write issues
-        }
-        applyLanguage(nextLang);
+    const browserLanguage = (navigator.languages || [navigator.language || "en"])
+      .map((locale) => locale.toLowerCase().split("-")[0])
+      .find((language) => i18n[language]) || "en";
+    applyLanguage(browserLanguage);
+
+    const countryLanguages = {
+      PL: "pl",
+      DE: "de", AT: "de", CH: "de", LI: "de", LU: "de",
+      ES: "es", MX: "es", AR: "es", BO: "es", CL: "es", CO: "es",
+      CR: "es", CU: "es", DO: "es", EC: "es", SV: "es", GT: "es",
+      HN: "es", NI: "es", PA: "es", PY: "es", PE: "es", PR: "es",
+      UY: "es", VE: "es",
+      FR: "fr", BE: "fr", MC: "fr",
+    };
+    fetch("https://ipapi.co/country/")
+      .then((response) => {
+        if (!response.ok) throw new Error("IP country lookup failed");
+        return response.text();
+      })
+      .then((countryCode) => {
+        const language = countryLanguages[countryCode.trim().toUpperCase()] || "en";
+        applyLanguage(language);
+      })
+      .catch(() => {
+        // Keep the browser-language fallback when IP lookup is unavailable.
       });
-    }
-    applyLanguage(savedLang);
 
     function updateCompareBox(box) {
       const slider = box.querySelector(".compare-slider");
