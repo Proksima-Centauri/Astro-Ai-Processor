@@ -503,6 +503,30 @@ def svg_icon_from_text(svg_text: str, size: int = 18) -> QIcon:
     return QIcon(pixmap)
 
 
+def top_bar_svg_icon_with_accent(svg_path: str, accent_color: str, size: int = 64) -> QIcon:
+    fallback_icon = QIcon(svg_path)
+    if not SVG_AVAILABLE or QSvgRenderer is None:
+        return fallback_icon
+
+    try:
+        with open(svg_path, "r", encoding="utf-8") as icon_file:
+            svg_text = icon_file.read()
+        accent_hex = QColor(accent_color).name(QColor.HexRgb)
+        svg_text = re.sub(r"#57c7ff", accent_hex, svg_text, flags=re.IGNORECASE)
+        renderer = QSvgRenderer(QByteArray(svg_text.encode("utf-8")))
+        if not renderer.isValid():
+            return fallback_icon
+
+        pixmap = QPixmap(size, size)
+        pixmap.fill(Qt.transparent)
+        painter = QPainter(pixmap)
+        renderer.render(painter)
+        painter.end()
+        return QIcon(pixmap)
+    except Exception:
+        return fallback_icon
+
+
 def apply_dialog_window_flags(widget):
     widget.setWindowFlags(widget.windowFlags() & ~Qt.WindowContextHelpButtonHint)
 
@@ -13234,28 +13258,33 @@ def get_theme_stylesheet(theme_name: str, accent_name: str = "Ultra Blue") -> st
     else:
         base = get_dark_stylesheet()
     themed = _apply_accent_to_stylesheet(base, accent_name)
-    return themed + "\n" + """
-    QPushButton[featuredTopAction="true"] {
-        background-color: #173c50;
-        border: 2px solid #42c9f5;
+    accent = get_accent_colors(accent_name)
+    accent_color = QColor(accent["base"])
+    top_action_background = accent_color.darker(320).name(QColor.HexRgb)
+    top_action_hover_background = accent_color.darker(230).name(QColor.HexRgb)
+    top_action_pressed_background = accent_color.darker(400).name(QColor.HexRgb)
+    return themed + "\n" + f"""
+    QPushButton[featuredTopAction="true"] {{
+        background-color: {top_action_background};
+        border: 2px solid {accent["border"]};
         border-radius: 7px;
         padding: 2px;
-    }
+    }}
 
-    QPushButton[featuredTopAction="true"]:hover {
-        background-color: #205a74;
-        border-color: #8be3ff;
-    }
+    QPushButton[featuredTopAction="true"]:hover {{
+        background-color: {top_action_hover_background};
+        border-color: {accent["hover"]};
+    }}
 
-    QPushButton[featuredTopAction="true"]:pressed {
-        background-color: #0c2b3b;
-        border-color: #23addb;
-    }
+    QPushButton[featuredTopAction="true"]:pressed {{
+        background-color: {top_action_pressed_background};
+        border-color: {accent["base"]};
+    }}
 
-    QPushButton[featuredTopAction="true"]:disabled {
+    QPushButton[featuredTopAction="true"]:disabled {{
         background-color: #26343b;
-        border-color: #536a75;
-    }
+        border-color: {accent["pressed"]};
+    }}
     """
 
 
@@ -21565,6 +21594,19 @@ class AstroApp(QMainWindow):
             if dialog is not None:
                 self._translate_widgets_recursive(dialog)
 
+    def _refresh_topbar_icons(self):
+        icons_dir = getattr(self, "_top_button_icons_dir", "")
+        icon_files = getattr(self, "_top_button_icon_files", {})
+        accent_color = get_accent_colors(getattr(self, "accent_name", "Ultra Blue"))["base"]
+        for button_name, icon_file in icon_files.items():
+            button = getattr(self, button_name, None)
+            if button is None:
+                continue
+            icon_path = os.path.join(icons_dir, icon_file)
+            if os.path.exists(icon_path):
+                button.setIcon(top_bar_svg_icon_with_accent(icon_path, accent_color))
+                button.setIconSize(QSize(16, 16))
+
     def apply_dark_mode(self, enabled: bool):
         """Apply or remove dark mode stylesheet"""
         app = QApplication.instance()
@@ -21574,6 +21616,7 @@ class AstroApp(QMainWindow):
         self.dark_mode = enabled
         APP_PREFERENCES["theme_name"] = self.theme_name
         apply_theme_application(app, self.theme_name, self.accent_name)
+        self._refresh_topbar_icons()
 
     def toggle_dark_mode(self):
         """Toggle dark mode on/off"""
@@ -21608,6 +21651,7 @@ class AstroApp(QMainWindow):
         app = QApplication.instance()
         if app is not None:
             apply_theme_application(app, self.theme_name, self.accent_name)
+        self._refresh_topbar_icons()
         self._update_ui_language()
 
         save_config(
@@ -22972,14 +23016,9 @@ class AstroApp(QMainWindow):
             "btn_adj_levels_top": "levels.svg",
             "btn_adj_curves_top": "curves.svg",
         }
-        for button_name, icon_file in top_button_icons.items():
-            button = getattr(self, button_name, None)
-            if button is None:
-                continue
-            icon_path = os.path.join(icons_dir, icon_file)
-            if os.path.exists(icon_path):
-                button.setIcon(QIcon(icon_path))
-                button.setIconSize(QSize(16, 16))
+        self._top_button_icons_dir = icons_dir
+        self._top_button_icon_files = top_button_icons
+        self._refresh_topbar_icons()
 
         command_palette_row = QFrame()
         command_palette_row.setObjectName("command_palette_row")
