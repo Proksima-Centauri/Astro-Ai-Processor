@@ -13233,7 +13233,30 @@ def get_theme_stylesheet(theme_name: str, accent_name: str = "Ultra Blue") -> st
         base = get_midnight_stylesheet()
     else:
         base = get_dark_stylesheet()
-    return _apply_accent_to_stylesheet(base, accent_name)
+    themed = _apply_accent_to_stylesheet(base, accent_name)
+    return themed + "\n" + """
+    QPushButton[featuredTopAction="true"] {
+        background-color: #173c50;
+        border: 2px solid #42c9f5;
+        border-radius: 7px;
+        padding: 2px;
+    }
+
+    QPushButton[featuredTopAction="true"]:hover {
+        background-color: #205a74;
+        border-color: #8be3ff;
+    }
+
+    QPushButton[featuredTopAction="true"]:pressed {
+        background-color: #0c2b3b;
+        border-color: #23addb;
+    }
+
+    QPushButton[featuredTopAction="true"]:disabled {
+        background-color: #26343b;
+        border-color: #536a75;
+    }
+    """
 
 
 def get_theme_palette(theme_name: str, accent_name: str = "Ultra Blue") -> QPalette:
@@ -22826,6 +22849,21 @@ class AstroApp(QMainWindow):
         self.btn_levels_top = _add_top_btn("Levels", action=self.action_levels)
         self.btn_curves_top = _add_top_btn("Curves", action=self.action_curves)
         self.btn_ghs_top = _add_top_btn("GHS", action=self.action_ghs)
+
+        featured_top_actions = (
+            self.btn_open,
+            self.btn_save,
+            self.btn_save_as,
+            self.btn_deepsnr_top,
+            self.btn_background_extraction_top,
+            self.btn_corr_top,
+            self.btn_shrink_top,
+            self.btn_astro_upscale_top,
+        )
+        for button in featured_top_actions:
+            button.setProperty("featuredTopAction", True)
+            button.style().unpolish(button)
+            button.style().polish(button)
 
         top_actions_layout.addSpacing(8)
 
