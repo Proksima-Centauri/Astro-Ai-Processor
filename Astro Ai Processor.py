@@ -287,10 +287,6 @@ I18N = {
     "top_levels": {"pl": "Poziomy", "en": "Levels"},
     "top_curves": {"pl": "Krzywe", "en": "Curves"},
     "top_ghs": {"pl": "GHS", "en": "GHS"},
-    "top_new_layer": {"pl": "Nowa warstwa", "en": "New Layer"},
-    "top_delete_layer": {"pl": "Usuń warstwę", "en": "Delete Layer"},
-    "top_adj_levels": {"pl": "Warstwa Poziomy", "en": "Adj Levels"},
-    "top_adj_curves": {"pl": "Warstwa Krzywe", "en": "Adj Curves"},
     "top_exit": {"pl": "Wyjście", "en": "Exit"},
     "connect_joystick": {"pl": "Połącz joystick", "en": "Connect Joystick"},
     "disconnect_joystick": {"pl": "Rozłącz joystick", "en": "Disconnect Joystick"},
@@ -21495,10 +21491,6 @@ class AstroApp(QMainWindow):
             ("btn_levels_top", "top_levels", "Levels"),
             ("btn_curves_top", "top_curves", "Curves"),
             ("btn_ghs_top", "top_ghs", "GHS"),
-            ("btn_new_layer_top", "top_new_layer", "New Layer"),
-            ("btn_delete_layer_top", "top_delete_layer", "Delete Layer"),
-            ("btn_adj_levels_top", "top_adj_levels", "Adj Levels"),
-            ("btn_adj_curves_top", "top_adj_curves", "Adj Curves"),
             ("btn_exit_top", "top_exit", "Exit"),
         ]
         for attr, key, default in button_map:
@@ -22876,13 +22868,6 @@ class AstroApp(QMainWindow):
             button.style().unpolish(button)
             button.style().polish(button)
 
-        top_actions_layout.addSpacing(8)
-
-        self.btn_new_layer_top = _add_top_btn("New Layer", action=self.action_new_layer)
-        self.btn_delete_layer_top = _add_top_btn("Delete Layer", action=self.action_delete_layer)
-        self.btn_adj_levels_top = _add_top_btn("Adj Levels", action=self.action_adjustment_levels)
-        self.btn_adj_curves_top = _add_top_btn("Adj Curves", action=self.action_adjustment_curves)
-
         top_button_attrs = [
             "btn_open",
             "btn_save",
@@ -22918,10 +22903,6 @@ class AstroApp(QMainWindow):
             "btn_levels_top",
             "btn_curves_top",
             "btn_ghs_top",
-            "btn_new_layer_top",
-            "btn_delete_layer_top",
-            "btn_adj_levels_top",
-            "btn_adj_curves_top",
         ]
         for attr_name in top_button_attrs:
             button = getattr(self, attr_name, None)
@@ -22968,16 +22949,12 @@ class AstroApp(QMainWindow):
             "btn_stack_top": "mosaic.svg",
             "btn_solar_stack_top": "mosaic.svg",
             "btn_timelapse_top": "mosaic.svg",
-            "btn_corr_top": "correction.svg",
+            "btn_corr_top": "levels.svg",
             "btn_star_corr_top": "shrink.svg",
             "btn_calib_top": "correction.svg",
             "btn_levels_top": "levels.svg",
             "btn_curves_top": "curves.svg",
             "btn_ghs_top": "levels.svg",
-            "btn_new_layer_top": "new_layer.svg",
-            "btn_delete_layer_top": "delete_layer.svg",
-            "btn_adj_levels_top": "levels.svg",
-            "btn_adj_curves_top": "curves.svg",
         }
         self._top_button_icons_dir = icons_dir
         self._top_button_icon_files = top_button_icons
