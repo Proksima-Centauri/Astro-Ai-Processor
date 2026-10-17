@@ -275,8 +275,7 @@ I18N = {
     "top_background_extraction": {"pl": "Tło", "en": "BG"},
     "top_deconvolution": {"pl": "Dekonw.", "en": "Deconv"},
     "top_local_contrast": {"pl": "Lokalny", "en": "Local"},
-    "top_rotate": {"pl": "Obrót", "en": "Rotate"},
-    "top_crop": {"pl": "Kadr", "en": "Crop"},
+    "top_crop_rotate": {"pl": "Kadrowanie / obrót", "en": "Crop / Rotate"},
     "top_mosaic": {"pl": "Mozaika", "en": "Mosaic"},
     "top_stack_frames": {"pl": "Stack", "en": "Stack"},
     "top_solar_stack": {"pl": "Układ Sł.", "en": "Planetary"},
@@ -15934,7 +15933,6 @@ class PhotoshopMenuPanel(QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.host = parent
-        self.layer_thumbs = {}
         self.layer_names = {}
         self.layer_rows = {}
         self.layer_eye_buttons = {}
@@ -16238,24 +16236,18 @@ class PhotoshopMenuPanel(QFrame):
         eye.setFixedSize(28, 28)
         eye.clicked.connect(lambda checked, layer_key=key: self._toggle_layer(layer_key, checked))
         self._set_eye_icon(eye, True)
-        thumb = ClickableLabel()
-        thumb.setFixedSize(58, 38)
-        thumb.setStyleSheet("background: #161616; border: 1px solid #555555; border-radius: 4px;")
         name = QLabel(title)
         name.setProperty("layerName", True)
-        thumb.clicked.connect(lambda layer_key=key: self._select_layer(layer_key))
         name.mousePressEvent = lambda event, layer_key=key: self._select_layer(layer_key)
         row.mousePressEvent = lambda event, layer_key=key: self._handle_layer_row_click(event, layer_key)
-        for widget in (row, thumb, name):
+        for widget in (row, name):
             widget.setContextMenuPolicy(Qt.CustomContextMenu)
             widget.customContextMenuRequested.connect(
                 lambda pos, layer_key=key, source_widget=widget: self._show_layer_context_menu(layer_key, source_widget, pos)
             )
         layout.addWidget(eye)
-        layout.addWidget(thumb)
         layout.addWidget(name)
         layout.addStretch(1)
-        self.layer_thumbs[key] = thumb
         self.layer_names[key] = name
         self.layer_rows[key] = row
         self.layer_eye_buttons[key] = eye
@@ -16280,7 +16272,6 @@ class PhotoshopMenuPanel(QFrame):
 
     def _remove_layer_row(self, key):
         row = self.layer_rows.pop(key, None)
-        self.layer_thumbs.pop(key, None)
         self.layer_names.pop(key, None)
         self.layer_eye_buttons.pop(key, None)
         if row is not None:
@@ -16298,29 +16289,6 @@ class PhotoshopMenuPanel(QFrame):
         if self.host is not None and hasattr(self.host, "select_layer"):
             self.host.select_layer(key)
         self.update_from_app(self.host)
-
-    def _set_thumbnail(self, key, img):
-        label = self.layer_thumbs.get(key)
-        if label is None:
-            return
-        if img is None:
-            label.clear()
-            label.setStyleSheet("background: #000000; border: 2px solid #000000;")
-            return
-
-        if isinstance(img, QPixmap):
-            pix = img
-        else:
-            pix = np_to_qpixmap(img)
-        thumb = pix.scaled(54, 34, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-        canvas = QPixmap(58, 38)
-        canvas.fill(QColor(22, 22, 22))
-        painter = QPainter(canvas)
-        x = (58 - thumb.width()) // 2
-        y = (38 - thumb.height()) // 2
-        painter.drawPixmap(x, y, thumb)
-        painter.end()
-        label.setPixmap(canvas)
 
     def update_from_app(self, app):
         active_layers = app.get_active_layers() if hasattr(app, "get_active_layers") else ["background"]
@@ -16353,11 +16321,6 @@ class PhotoshopMenuPanel(QFrame):
                 eye.setChecked(is_visible)
                 self._set_eye_icon(eye, is_visible)
                 eye.blockSignals(False)
-
-        self._set_thumbnail("background", app.original_img)
-        self._set_thumbnail("blur", app.layer_images.get("blur") if hasattr(app, "layer_images") else app.magic_img)
-        self._set_thumbnail("stars", app.layer_images.get("stars") if hasattr(app, "layer_images") else app.magic_img)
-        self._set_thumbnail("curves", app.processed_img)
 
         source_img = app.original_img if app.original_img is not None else app.magic_img
         for key, title in (("r", "Red"), ("g", "Green"), ("b", "Blue")):
@@ -21522,8 +21485,7 @@ class AstroApp(QMainWindow):
             ("btn_deconvolution_top", "top_deconvolution", "Deconv"),
             ("btn_local_contrast_top", "top_local_contrast", "Local"),
             ("btn_svg_brush_top", "top_svg_brush", "SVG Brush"),
-            ("btn_rotate_top", "top_rotate", "Rotate"),
-            ("btn_crop_top", "top_crop", "Crop"),
+            ("btn_crop_top", "top_crop_rotate", "Crop / Rotate"),
             ("btn_mosaic_top", "top_mosaic", "Mosaic"),
             ("btn_stack_top", "top_stack_frames", "Stack"),
             ("btn_solar_stack_top", "top_solar_stack", "Planetary"),
@@ -22881,8 +22843,15 @@ class AstroApp(QMainWindow):
         self.btn_deconvolution_top = _add_top_btn("Deconv", action=self.action_deconvolution)
         self.btn_local_contrast_top = _add_top_btn("Local", action=self.action_local_contrast)
         self.btn_svg_brush_top = _add_top_btn("SVG PĘDZEL", action=self.action_svg_brush)
-        self.btn_rotate_top = _add_top_btn("Rotate", action=self.action_rotate)
-        self.btn_crop_top = _add_top_btn("Crop", action=self.action_crop)
+        self.btn_crop_top = _add_top_btn("Crop / Rotate")
+        self.crop_rotate_menu = QMenu(self)
+        self.crop_rotate_menu.addAction(self.action_crop)
+        self.crop_rotate_menu.addAction(self.action_rotate)
+        self.btn_crop_top.clicked.connect(
+            lambda: self.crop_rotate_menu.exec_(
+                self.btn_crop_top.mapToGlobal(QPoint(0, self.btn_crop_top.height()))
+            )
+        )
         self.btn_mosaic_top = _add_top_btn("Mosaic", action=self.action_mosaic)
         self.btn_stack_top = _add_top_btn("Stack", action=self.action_stack)
         self.btn_solar_stack_top = _add_top_btn("Planetary", action=self.action_solar_stack)
@@ -22941,7 +22910,6 @@ class AstroApp(QMainWindow):
             "btn_deconvolution_top",
             "btn_local_contrast_top",
             "btn_svg_brush_top",
-            "btn_rotate_top",
             "btn_crop_top",
             "btn_mosaic_top",
             "btn_stack_top",
@@ -22999,7 +22967,6 @@ class AstroApp(QMainWindow):
             "btn_deconvolution_top": "deconvolution.svg",
             "btn_local_contrast_top": "blur.svg",
             "btn_svg_brush_top": "svg_brush.svg",
-            "btn_rotate_top": "rotate.svg",
             "btn_crop_top": "crop.svg",
             "btn_mosaic_top": "mosaic.svg",
             "btn_stack_top": "mosaic.svg",
