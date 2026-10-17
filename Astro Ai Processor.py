@@ -21472,7 +21472,6 @@ class AstroApp(QMainWindow):
             ("btn_console_top", "top_console", "Console"),
             ("btn_menu_top", "top_menu", "Menu"),
             ("btn_hist_top", "top_histogram", "Histogram"),
-            ("btn_ai_top", "top_ai", "AI"),
             ("btn_magic_top", "top_magic", "Magic"),
             ("btn_astro_upscale_top", "top_astro_upscale", "Astro Upscale"),
             ("btn_shrink_top", "top_shrink", "Shrink"),
@@ -22826,7 +22825,6 @@ class AstroApp(QMainWindow):
         self.btn_console_top = _add_top_btn("Console", action=self.action_console)
         self.btn_menu_top = _add_top_btn("Menu", action=self.action_photoshop_menu)
         self.btn_hist_top = _add_top_btn("Histogram", action=self.action_histogram)
-        self.btn_ai_top = _add_top_btn("AI", action=self.action_ai_assistant)
 
         top_actions_layout.addSpacing(8)
 
@@ -22897,7 +22895,6 @@ class AstroApp(QMainWindow):
             "btn_console_top",
             "btn_menu_top",
             "btn_hist_top",
-            "btn_ai_top",
             "btn_magic_top",
             "btn_astro_upscale_top",
             "btn_shrink_top",
@@ -22954,7 +22951,6 @@ class AstroApp(QMainWindow):
             "btn_console_top": "console.svg",
             "btn_menu_top": "menu.svg",
             "btn_hist_top": "histogram.svg",
-            "btn_ai_top": "ai.svg",
             "btn_magic_top": "magic.svg",
             "btn_astro_upscale_top": "astro_upscale.svg",
             "btn_shrink_top": "shrink.svg",
