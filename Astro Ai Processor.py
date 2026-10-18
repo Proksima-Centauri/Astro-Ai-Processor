@@ -26,6 +26,7 @@ from datetime import datetime, timedelta, timezone
 import numpy as np
 import cv2
 from processing.color_processor import ColorProcessor
+from processing.preview import PreviewCache, parameter_key
 from processing.image_analysis import compute_image_analysis_metrics
 from processing.image_effects import _normalize_mask01, local_contrast_enhancement, neutralize_background
 from processing.stretch import stretch_image
@@ -13588,7 +13589,7 @@ class LevelsWindow(QDialog):
         self._session_dirty = False
         self._preview_timer = QTimer(self)
         self._preview_timer.setSingleShot(True)
-        self._preview_timer.setInterval(45)
+        self._preview_timer.setInterval(16)
         self._preview_timer.timeout.connect(self._emit_live_preview)
 
         main_layout = QVBoxLayout(self)
@@ -13725,7 +13726,8 @@ class LevelsWindow(QDialog):
     def _on_levels_changed(self):
         self._sync_level_spins()
         self._session_dirty = True
-        self._preview_timer.start()
+        if not self._preview_timer.isActive():
+            self._preview_timer.start()
 
     def _emit_live_preview(self):
         if self.parent is None:
@@ -14669,7 +14671,7 @@ class CurvesWindow(QDialog):
         self._session_dirty = False
         self._preview_timer = QTimer(self)
         self._preview_timer.setSingleShot(True)
-        self._preview_timer.setInterval(45)
+        self._preview_timer.setInterval(16)
         self._preview_timer.timeout.connect(self._emit_live_preview)
 
         main_layout = QVBoxLayout(self)
@@ -14816,7 +14818,8 @@ class CurvesWindow(QDialog):
     def _on_curves_changed(self):
         self.curves_widget.update()
         self._session_dirty = True
-        self._preview_timer.start()
+        if not self._preview_timer.isActive():
+            self._preview_timer.start()
 
     def _emit_live_preview(self):
         if self.parent is None:
@@ -18377,6 +18380,10 @@ class AstroApp(QMainWindow):
         if self.magic_img is None:
             return
 
+        if hasattr(self, "_interactive_preview_cache"):
+            self._interactive_preview_cache.clear()
+        self._interactive_before_key = None
+
         self._processing_revision += 1
         self._pending_processing_job = None
         self.cancel_params_preview()
@@ -18433,6 +18440,8 @@ class AstroApp(QMainWindow):
     def apply_full_processing_async(self):
         if self.magic_img is None:
             return
+
+        self._interactive_before_key = None
 
         self.cancel_params_preview()
         base_img = self.get_effective_magic_img()
@@ -18516,43 +18525,55 @@ class AstroApp(QMainWindow):
         if self.magic_img is None:
             return
 
-        base_img = self.preview_override_img.copy() if getattr(self, "preview_override_img", None) is not None else self.get_effective_magic_img()
-        if base_img is None:
-            return
-
-        preview_img = self.get_preview_image(base_img)
-        display_base_img = self.apply_channel_visibility(preview_img)
-        self.viewer.set_before(np_to_qpixmap(display_base_img))
-
+        cache = getattr(self, "_interactive_preview_cache", None)
+        if cache is None:
+            cache = self._interactive_preview_cache = PreviewCache()
+        override = getattr(self, "preview_override_img", None)
+        if override is not None:
+            cache.clear()
+        sources = (self.original_img, self.magic_img, override) + tuple(
+            item for key in ("blur", "stars") for item in (self.layer_images.get(key), self.layer_masks.get(key)))
+        source_key = (cache.generation, tuple(id(item) for item in sources),
+                      tuple(self.layer_order), parameter_key(self.layer_visibility))
+        cache.sources = sources
+        # Simple documents can be resized directly, avoiding a full-size copy.
+        def prepare_source():
+            if override is not None:
+                base = override
+            elif self.layer_visibility.get("background", True) and not any(
+                    key in self.layer_order for key in ("blur", "stars")):
+                base = self.magic_img
+            else:
+                base = self.get_effective_magic_img()
+            return PreviewCache.resize(base)
+        preview_img = cache.stage("source", source_key, prepare_source)
+        before_key = (source_key, parameter_key(self.channel_visibility),
+                      self.display_stretch_mode, self.display_stretch_linked)
+        before = cache.stage("before", before_key, lambda: np_to_qpixmap(self.apply_channel_visibility(preview_img)))
+        # BlendViewer.set_before clears After, so update Before only when needed.
+        if getattr(self, "_interactive_before_key", None) != before_key:
+            self.viewer.set_before(before)
+            self._interactive_before_key = before_key
         basic_params = self._inject_background_calibration(self.camera_raw_panel.get_params())
         hsl_params = self.hsl_panel.get_params()
-
-        img = ColorProcessor.apply_camera_raw_and_hsl(
-            preview_img,
-            basic_params,
-            hsl_params,
-            self.ghs_params,
-        )
-
         levels = self.levels_window.levels_widget.get_params()
-        img = apply_levels(
-            img,
-            levels["black"],
-            levels["gamma"],
-            levels["white"],
-            levels["channels"]
-        )
-
-        if hasattr(self, "curves_window"):
-            curves = self.curves_window.get_params()
-            if self.layer_visibility.get("curves", True):
-                img = apply_curves_lut(img, curves["points"], curves["channels"], curves["curve_mode"])
-
+        curves = self.curves_window.get_params() if hasattr(self, "curves_window") and self.layer_visibility.get("curves", True) else None
+        img, result_key = cache.process(preview_img, source_key, basic_params, hsl_params, self.ghs_params, levels, curves)
         if levels.get("autostretch", False):
-            img = stretch_image(img, "autostretch")
-
-        preview_processed = restore_processed_dtype(img, base_img.dtype)
-        display_img = self.apply_channel_visibility(self._apply_display_stretch(preview_processed))
+            img = cache.stage("autostretch", result_key, lambda: stretch_image(img, "autostretch"))
+        preview_processed = restore_processed_dtype(img, self.magic_img.dtype)
+        display_key = (result_key, levels.get("autostretch", False), self.display_stretch_mode,
+                       self.display_stretch_linked, parameter_key(self.channel_visibility))
+        def prepare_display():
+            if self.display_stretch_mode == "linear":
+                display = preview_processed
+            else:
+                # Only screen rendering may use a smaller statistical sample.
+                small = PreviewCache.resize(preview_processed, 600)
+                display = self._apply_display_stretch(small)
+                display = cv2.resize(display, (preview_processed.shape[1], preview_processed.shape[0]), interpolation=cv2.INTER_LINEAR)
+            return self.apply_channel_visibility(display)
+        display_img = cache.stage("display", display_key, prepare_display)
         if preview_processed is not None:
             self.viewer.set_after(np_to_qpixmap(display_img, apply_display_stretch=False))
 
@@ -20876,6 +20897,7 @@ class AstroApp(QMainWindow):
         self.levels_window.show()
         self.levels_window.raise_()
         self.levels_window.activateWindow()
+        self.apply_preview_processing()
         self.log("Levels window opened.")
 
     def show_curves_window(self):
@@ -20886,6 +20908,7 @@ class AstroApp(QMainWindow):
         self.curves_window.show()
         self.curves_window.raise_()
         self.curves_window.activateWindow()
+        self.apply_preview_processing()
         self.log("Curves window opened.")
 
     def show_ghs_dialog(self):
@@ -20894,6 +20917,7 @@ class AstroApp(QMainWindow):
         self.ghs_dialog.show()
         self.ghs_dialog.raise_()
         self.ghs_dialog.activateWindow()
+        self.apply_preview_processing()
         self.log("GHS dialog opened.")
 
     def _on_bottom_stretch_selected(self, index):
@@ -26585,6 +26609,9 @@ class AstroApp(QMainWindow):
     def on_params_changed(self):
         if self.magic_img is None:
             return
+        # In-flight full-size results belong to the previous parameter edit.
+        self._processing_revision += 1
+        self._pending_processing_job = None
         self.apply_preview_processing()
         self.params_preview_timer.start()
         self.corrections_timer.stop()
