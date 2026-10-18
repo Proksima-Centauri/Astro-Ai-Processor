@@ -10,11 +10,13 @@ def _to_uint8_lut_source(img: np.ndarray) -> np.ndarray:
         return arr
 
     if np.issubdtype(arr.dtype, np.floating):
-        work = np.nan_to_num(arr.astype(np.float32), nan=0.0, posinf=1.0, neginf=0.0)
+        work = arr.astype(np.float32)
+        np.nan_to_num(work, copy=False, nan=0.0, posinf=1.0, neginf=0.0)
         max_value = float(np.max(work)) if work.size else 0.0
         if max_value <= 1.0 + 1e-6:
-            work = work * 255.0
-        return np.clip(work, 0.0, 255.0).astype(np.uint8)
+            work *= 255.0
+        np.clip(work, 0.0, 255.0, out=work)
+        return work.astype(np.uint8)
 
     if np.issubdtype(arr.dtype, np.integer):
         info = np.iinfo(arr.dtype)
@@ -37,14 +39,24 @@ def apply_levels(img: np.ndarray, black: int, gamma: float, white: int, channels
     value_range = float(np.iinfo(img.dtype).max) if is_integer else 1.0
 
     def apply_to_channel(channel_img):
-        img_f = np.nan_to_num(channel_img.astype(np.float32) / value_range, nan=0.0, posinf=1.0, neginf=0.0)
-
-        img_f = (img_f - black / 255.0) / max(1e-6, (white - black) / 255.0)
-        img_f = np.clip(img_f, 0, 1)
-        img_f = img_f ** (1.0 / max(0.01, gamma))
+        img_f = channel_img.astype(np.float32)
+        if value_range != 1.0:
+            img_f /= value_range
+        np.nan_to_num(img_f, copy=False, nan=0.0, posinf=1.0, neginf=0.0)
+        if black != 0:
+            img_f -= black / 255.0
+        span = max(1e-6, (white - black) / 255.0)
+        if span != 1.0:
+            img_f /= span
+        np.clip(img_f, 0, 1, out=img_f)
+        if gamma != 1.0:
+            np.power(img_f, 1.0 / max(0.01, gamma), out=img_f)
 
         if is_integer:
-            return np.clip(np.rint(img_f * value_range), 0, value_range).astype(img.dtype)
+            img_f *= value_range
+            np.rint(img_f, out=img_f)
+            np.clip(img_f, 0, value_range, out=img_f)
+            return img_f.astype(img.dtype)
         return img_f.astype(img.dtype, copy=False)
 
     if channels is None or img.ndim == 2:
@@ -133,6 +145,9 @@ def apply_curves_lut(img: np.ndarray, points, channels=None, curve_mode="linear"
     source = _to_uint8_lut_source(img)
     lut = build_curve_lut(points, curve_mode)
     if source.ndim == 2:
+        return cv2.LUT(source, lut)
+    if source.shape[2] == 3 and (channels is None or (
+            len(channels) == 3 and set(name.lower() for name in channels) == {"r", "g", "b"})):
         return cv2.LUT(source, lut)
 
     out = source.copy()

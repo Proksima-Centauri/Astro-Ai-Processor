@@ -264,6 +264,12 @@ class ColorProcessor:
         img = cls._to_float01(image)
         params = basic_params if isinstance(basic_params, dict) else {}
 
+        def clip_owned(work):
+            # _to_float01 owns its output; subsequent stages never expose input
+            # views. Reuse this buffer instead of allocating after each stage.
+            np.clip(work, 0.0, 1.0, out=work)
+            return work.astype(np.float32, copy=False)
+
         exposure = float(params.get("exposure", 0.0))
         if abs(exposure) > 1e-6:
             img = img * (2.0 ** exposure)
@@ -285,7 +291,7 @@ class ColorProcessor:
             if abs(delta) > 1e-6:
                 img[:, :, ch] *= 1.0 + delta
 
-        img = cls._clip01(img)
+        img = clip_owned(img)
 
         saturation = float(params.get("saturation", 0.0))
         vibrance = float(params.get("vibrance", 0.0))
@@ -327,8 +333,8 @@ class ColorProcessor:
             )
             img = img_u8.astype(np.float32) / 255.0
 
-        img = cls._apply_star_correction(cls._clip01(img), params)
+        img = cls._apply_star_correction(clip_owned(img), params)
 
-        img = cls._apply_hsl(cls._clip01(img), hsl_params)
-        img = cls._apply_ghs(cls._clip01(img), ghs_params)
-        return cls._clip01(img)
+        img = cls._apply_hsl(clip_owned(img), hsl_params)
+        img = cls._apply_ghs(clip_owned(img), ghs_params)
+        return clip_owned(img)
