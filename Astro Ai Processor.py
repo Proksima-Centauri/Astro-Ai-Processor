@@ -27,6 +27,8 @@ import numpy as np
 import cv2
 from processing.color_processor import ColorProcessor
 from processing.preview import PreviewCache, parameter_key
+from processing.export import normalized_to_uint16
+from processing.pipeline import process_image
 from processing.image_analysis import compute_image_analysis_metrics
 from processing.image_effects import _normalize_mask01, local_contrast_enhancement, neutralize_background
 from processing.stretch import stretch_image
@@ -425,10 +427,14 @@ def _to_display_uint8(image: np.ndarray) -> np.ndarray:
         return np.clip(np.rint(arr.astype(np.float32) * (255.0 / maximum)), 0.0, 255.0).astype(np.uint8)
 
     if np.issubdtype(arr.dtype, np.floating):
-        finite = np.nan_to_num(arr.astype(np.float32), nan=0.0, posinf=0.0, neginf=0.0)
+        finite = arr.astype(np.float32)
+        np.nan_to_num(finite, copy=False, nan=0.0, posinf=0.0, neginf=0.0)
         if finite.size and (float(finite.min()) < 0.0 or float(finite.max()) > 1.0):
             finite = normalize_to_linear_bgr(finite)
-        return np.clip(np.rint(finite * 255.0), 0.0, 255.0).astype(np.uint8)
+        finite *= 255.0
+        np.rint(finite, out=finite)
+        np.clip(finite, 0.0, 255.0, out=finite)
+        return finite.astype(np.uint8)
 
     return normalize_to_uint8_bgr(arr)
 
@@ -8290,33 +8296,15 @@ class ImageProcessingWorker(QThread):
 
     def run(self):
         try:
-            img = ColorProcessor.apply_camera_raw_and_hsl(
+            self.result = process_image(
                 self.job["image"],
                 self.job["basic_params"],
                 self.job["hsl_params"],
                 self.job["ghs_params"],
+                self.job["levels"],
+                self.job.get("curves"),
+                self.job.get("curves_visible", True),
             )
-            levels = self.job["levels"]
-            img = apply_levels(
-                img,
-                levels["black"],
-                levels["gamma"],
-                levels["white"],
-                levels["channels"],
-            )
-            curves = self.job.get("curves")
-            if curves and self.job.get("curves_visible", True):
-                img = apply_curves_lut(
-                    img,
-                    curves["points"],
-                    curves["channels"],
-                    curves["curve_mode"],
-                )
-            if levels.get("autostretch", False):
-                img = stretch_image(img, "autostretch")
-            if self.job["image"].dtype == np.uint8:
-                img = np.clip(np.rint(img * 255.0), 0, 255).astype(np.uint8)
-            self.result = img
         except Exception as exc:
             self.error = str(exc)
 
@@ -12095,13 +12083,7 @@ def normalize_to_uint16_bgr(img: np.ndarray) -> np.ndarray:
     if linear is None:
         return None
 
-    if np.issubdtype(linear.dtype, np.unsignedinteger):
-        source_max = float(np.iinfo(linear.dtype).max)
-        scaled = linear.astype(np.float64) * (65535.0 / source_max)
-    else:
-        scaled = np.asarray(linear, dtype=np.float64) * 65535.0
-
-    return np.clip(np.rint(scaled), 0.0, 65535.0).astype(np.uint16)
+    return normalized_to_uint16(linear)
 
 
 def normalize_to_linear_bgr(img: np.ndarray) -> np.ndarray:
@@ -12118,7 +12100,8 @@ def normalize_to_linear_bgr(img: np.ndarray) -> np.ndarray:
     if np.issubdtype(arr.dtype, np.unsignedinteger):
         result = arr.copy()
     else:
-        result = np.nan_to_num(arr.astype(np.float32), nan=0.0, posinf=0.0, neginf=0.0)
+        result = arr.astype(np.float32)
+        np.nan_to_num(result, copy=False, nan=0.0, posinf=0.0, neginf=0.0)
         minimum = float(np.min(result))
         maximum = float(np.max(result))
         if minimum < 0.0 or maximum > 1.0:
@@ -15337,7 +15320,7 @@ class GHSDialog(QDialog):
             source = cv2.cvtColor(source, cv2.COLOR_GRAY2BGR)
         if source.ndim == 3 and source.shape[2] > 3:
             source = source[:, :, :3]
-        self.preview_widget.set_image(source)
+        self.preview_widget.set_image(PreviewCache.resize(source))
         self.preview_widget.set_params(self.get_params())
 
     def _refresh_labels(self):
@@ -15358,8 +15341,8 @@ class GHSDialog(QDialog):
         params = self.get_params()
         self.preview_widget.set_params(params)
         if self.parent is not None and hasattr(self.parent, "set_ghs_params"):
-            self.parent.set_ghs_params(params, apply_processing=True)
-            self._refresh_histogram_preview(getattr(self.parent, "processed_img", None))
+            self.parent.set_ghs_params(params, apply_processing=False)
+            self.parent.on_params_changed()
 
     def _apply(self):
         if self.parent is not None and hasattr(self.parent, "set_ghs_params"):
@@ -18397,35 +18380,16 @@ class AstroApp(QMainWindow):
         basic_params = self._inject_background_calibration(self.camera_raw_panel.get_params())
         hsl_params = self.hsl_panel.get_params()
 
-        img = ColorProcessor.apply_camera_raw_and_hsl(
-            base_img,
-            basic_params,
-            hsl_params,
-            self.ghs_params,
-        )
-
-        # đź”Ą DODAJ LEVELS
         levels = self.levels_window.levels_widget.get_params()
-        img = apply_levels(
-            img,
-            levels["black"],
-            levels["gamma"],
-            levels["white"],
-            levels["channels"]
-        )
-
+        curves = None
         if hasattr(self, "curves_window"):
             curves = self.curves_window.get_params()
             if curves["points"]:
                 self.add_layer("curves")
-            if self.layer_visibility.get("curves", True):
-                img = apply_curves_lut(img, curves["points"], curves["channels"], curves["curve_mode"])
-
-        if levels.get("autostretch", False):
-            img = stretch_image(img, "autostretch")
-
-        img = restore_processed_dtype(img, base_img.dtype)
+        img = process_image(base_img, basic_params, hsl_params, self.ghs_params,
+                            levels, curves, self.layer_visibility.get("curves", True))
         self.processed_img = img
+        self._full_processing_dirty = False
         self.analysis_dirty = True
         display_img = self.apply_channel_visibility(self._apply_display_stretch(img))
 
@@ -18453,7 +18417,9 @@ class AstroApp(QMainWindow):
         if curves and curves["points"]:
             self.add_layer("curves")
 
-        display_base_img = self.apply_channel_visibility(base_img)
+        # Full-resolution pixels are processed in the worker; Before rendering
+        # only needs a screen-sized image on the GUI thread.
+        display_base_img = self.apply_channel_visibility(PreviewCache.resize(base_img))
         self.viewer.set_before(np_to_qpixmap(display_base_img))
         self._pending_processing_job = {
             "revision": self._processing_revision,
@@ -18494,8 +18460,9 @@ class AstroApp(QMainWindow):
                 self._pending_astro_upscale_history_label = None
             elif worker.result is not None:
                 self.processed_img = worker.result
+                self._full_processing_dirty = False
                 self.analysis_dirty = True
-                display_img = self.apply_channel_visibility(self._apply_display_stretch(worker.result))
+                display_img = self.apply_channel_visibility(self._apply_display_stretch(PreviewCache.resize(worker.result)))
                 self.viewer.set_after(np_to_qpixmap(display_img, apply_display_stretch=False))
                 if self.histogram_window.isVisible():
                     self.histogram_window.set_image(display_img)
@@ -26612,6 +26579,7 @@ class AstroApp(QMainWindow):
         # In-flight full-size results belong to the previous parameter edit.
         self._processing_revision += 1
         self._pending_processing_job = None
+        self._full_processing_dirty = True
         self.apply_preview_processing()
         self.params_preview_timer.start()
         self.corrections_timer.stop()
@@ -26665,6 +26633,8 @@ class AstroApp(QMainWindow):
         self.save_image_to_path(path)
 
     def save_image_to_path(self, path: str):
+        if getattr(self, "_full_processing_dirty", False):
+            self.apply_full_processing()
         if self.processed_img is None:
             self.log("Save skipped: no processed image.", "warning")
             return

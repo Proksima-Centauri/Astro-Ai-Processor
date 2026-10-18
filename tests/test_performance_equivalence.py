@@ -4,6 +4,8 @@ import pytest
 from performance_reference import curves_reference, ghs_reference, levels_reference
 from processing.color_processor import ColorProcessor
 from processing.tonal_adjustments import apply_curves_lut, apply_levels
+from processing.pipeline import process_image
+from processing.stretch import stretch_image
 
 
 @pytest.mark.parametrize("dtype", [np.uint8, np.uint16, np.float32, np.float64])
@@ -65,3 +67,23 @@ def test_owned_color_buffers_match_allocating_pipeline(monkeypatch):
             expected = ColorProcessor.apply_camera_raw_and_hsl(image, basic, {}, {"stretch_factor": 2})
         np.testing.assert_array_equal(actual, expected)
     np.testing.assert_array_equal(image, original)
+
+
+@pytest.mark.parametrize("dtype", [np.uint8, np.uint16, np.float32])
+@pytest.mark.parametrize("autostretch", [False, True])
+def test_shared_full_pipeline_matches_old_stage_order(dtype, autostretch):
+    image = np.random.default_rng(12).random((40, 50, 3))
+    if np.issubdtype(dtype, np.integer):
+        image *= np.iinfo(dtype).max
+    image = image.astype(dtype)
+    levels = dict(black=8, gamma=1.7, white=240, channels=["r", "g", "b"], autostretch=autostretch)
+    curves = dict(points=[(40, 70), (150, 210)], channels=["r", "g", "b"], curve_mode="linear")
+    expected = ColorProcessor.apply_camera_raw_and_hsl(image, {"exposure": .2}, {}, {"stretch_factor": .5})
+    expected = levels_reference(expected, 8, 1.7, 240, levels["channels"])
+    expected = curves_reference(expected, curves["points"], curves["channels"])
+    if autostretch:
+        expected = stretch_image(expected, "autostretch")
+    if dtype == np.uint8:
+        expected = np.clip(np.rint(expected * 255.0), 0, 255).astype(np.uint8)
+    actual = process_image(image, {"exposure": .2}, {}, {"stretch_factor": .5}, levels, curves)
+    np.testing.assert_array_equal(actual, expected)

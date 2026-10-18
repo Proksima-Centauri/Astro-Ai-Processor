@@ -30,6 +30,44 @@ def test_deepsnr_export_conversion_produces_uint16_bgr():
     assert converted_uint8[0, :, 0].tolist() == [0, 32896, 65535]
 
 
+def test_ghs_drag_uses_preview_and_apply_still_commits_full_processing():
+    calls = []
+    params = {"stretch_factor": 2}
+    app = SimpleNamespace(
+        set_ghs_params=lambda value, apply_processing: calls.append((value, apply_processing)),
+        on_params_changed=lambda: calls.append("preview"),
+    )
+    dialog = SimpleNamespace(
+        parent=app, _refresh_labels=lambda: None, get_params=lambda: params,
+        preview_widget=SimpleNamespace(set_params=lambda value: None),
+    )
+    APP_MODULE.GHSDialog._on_value_changed(dialog)
+    assert calls == [(params, False), "preview"]
+
+
+def test_save_flushes_pending_parameter_revision_before_export(tmp_path):
+    previous = np.zeros((2, 3, 3), dtype=np.uint8)
+    latest = np.full_like(previous, 180)
+    app = SimpleNamespace(processed_img=previous, _full_processing_dirty=True,
+                          log=lambda *args: None)
+    def finish_processing():
+        app.processed_img = latest
+        app._full_processing_dirty = False
+    app.apply_full_processing = finish_processing
+    path = str(tmp_path / "current.png")
+    APP_MODULE.AstroApp.save_image_to_path(app, path)
+    np.testing.assert_array_equal(APP_MODULE.safe_imread(path), latest)
+
+
+def test_display_conversion_matches_original_arithmetic():
+    for dtype in (np.float32, np.float64):
+        image = np.random.default_rng(19).random((10, 13, 3)).astype(dtype)
+        image[0, 0] = [np.nan, np.inf, -np.inf]
+        finite = np.nan_to_num(image.astype(np.float32), nan=0, posinf=0, neginf=0)
+        expected = np.clip(np.rint(finite * 255.0), 0, 255).astype(np.uint8)
+        np.testing.assert_array_equal(APP_MODULE._to_display_uint8(image), expected)
+
+
 def test_image_processing_worker_runs_pipeline_off_the_caller_thread():
     image = np.array(
         [
