@@ -142,10 +142,11 @@ def integrate_stack_frames(
         row_end = min(height, row_start + rows_per_chunk)
         cube = np.stack([frame[row_start:row_end] for frame in arrays], axis=0)
         if normalized_method == "median":
-            combined = np.median(cube, axis=0)
+            # cube is an owned scratch buffer, never a view of source frames.
+            combined = np.median(cube, axis=0, overwrite_input=True)
         elif normalized_method == "mad_clip":
             combined = _sigma_clipped_mean(cube, sigma_low, sigma_high)
         else:
             combined = np.mean(cube, axis=0, dtype=np.float32)
         result[row_start:row_end] = combined
-    return np.nan_to_num(result, nan=0.0, posinf=0.0, neginf=0.0)
+    return np.nan_to_num(result, copy=False, nan=0.0, posinf=0.0, neginf=0.0)

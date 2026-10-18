@@ -18528,7 +18528,7 @@ class AstroApp(QMainWindow):
         img, result_key = cache.process(preview_img, source_key, basic_params, hsl_params, self.ghs_params, levels, curves)
         if levels.get("autostretch", False):
             img = cache.stage("autostretch", result_key, lambda: stretch_image(img, "autostretch"))
-        preview_processed = restore_processed_dtype(img, self.magic_img.dtype)
+        preview_processed = restore_processed_dtype(img, preview_img.dtype)
         display_key = (result_key, levels.get("autostretch", False), self.display_stretch_mode,
                        self.display_stretch_linked, parameter_key(self.channel_visibility))
         def prepare_display():

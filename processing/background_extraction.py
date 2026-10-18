@@ -356,7 +356,8 @@ def extract_background(
         source = source[:, :, np.newaxis]
     if source.ndim != 3 or source.shape[-1] not in (1, 3):
         raise ValueError("GraXpert background extraction expects a mono or RGB image.")
-    source = np.nan_to_num(source, nan=0.0, posinf=0.0, neginf=0.0).copy()
+    source = source.copy()
+    np.nan_to_num(source, copy=False, nan=0.0, posinf=0.0, neginf=0.0)
     method = str(interpolation_type)
     if method == "AI":
         if not ai_model_path:

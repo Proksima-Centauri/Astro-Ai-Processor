@@ -95,3 +95,18 @@ file I/O and deeper optimization of scientific statistics/stacking. No blanket
 
 Verification at this stage: 202 tests pass, including exact shared-pipeline,
 integer export, channel/dtype, cache invalidation and pending-save tests.
+
+## Step 4: stacking scratch buffers
+
+Median integration partitions its own chunk buffer in place and all integration
+methods sanitize the owned result without another full-array copy. Source frames
+remain immutable. Background extraction also removes a duplicate source copy.
+
+| Scenario | Before | After | Latency reduction |
+| --- | ---: | ---: | ---: |
+| Average integration of three 24 MP frames | 1097 ms | 869 ms | 21% |
+| Median integration of three 24 MP frames | 4736 ms | 4397 ms | 7% |
+| Warm background extraction | 2064 ms | 904 ms | 56% |
+
+Frames in this throughput benchmark share the same source; existing correctness
+tests additionally compare heterogeneous frame stacks against NumPy references.
