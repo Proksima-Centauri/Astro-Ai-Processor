@@ -58,3 +58,40 @@ benchmarks: curve ~1 ms, Levels ~56 ms, combined GHS ~78 ms before rendering.
 Preview LUT approximation can produce up to two display codes in the tested
 steep curve case. Tests bound GHS preview error separately; full outputs use no
 preview approximation. New dependencies: none.
+
+## Step 3: GHS dialog integration, rendering, export and AI reuse
+
+The actual GHS dialog previously invoked synchronous full processing on every
+control event. It now schedules preview/full refresh via `on_params_changed`;
+Apply/OK still compute the full result. Histogram preparation downsamples first.
+The shared exact `processing/pipeline.py` is used by synchronous and worker
+processing to keep stage order and dtype behavior consistent.
+
+Full worker completion renders a screen-sized result while retaining the full
+array for saving. Float display normalization reuses owned scratch arrays.
+deepSNR conversion in `processing/export.py` uses bounded float64 chunks with
+exact legacy rounding. Save flushes pending parameter edits to prevent exporting
+an earlier revision. `processing/model_cache.py` reuses up to two background AI
+sessions, invalidated by file metadata and provider configuration.
+
+| Scenario | Before | After | Latency reduction |
+| --- | ---: | ---: | ---: |
+| Full float -> QPixmap | 829 ms | 572 ms | 31% |
+| deepSNR uint16 conversion | 993 ms | 669 ms | 33% |
+| Full pipeline + curve + viewer | 2956 ms | 2089 ms | 29% |
+| Load callback + processing | 5168 ms | 4006 ms | 22% |
+| AI background extraction, repeated/warm | 2064 ms | 957 ms | 54% |
+| GHS dialog event -> repaint, cached upstream | unmeasured old full callback | 61 ms |
+
+AI cold first call was 1743 ms; the 957 ms value is the second call, not a
+cold/warm average. The cold model output algorithm is unchanged. Input model,
+provider and preprocessing remain identical; tests verify session invalidation.
+Denoise inference itself is not accelerated and no percentage is claimed for it.
+
+Remaining acceptance work: live desktop p95 under full-worker/AI contention,
+viewport/ROI fidelity at high zoom, all large multilayer scenarios, asynchronous
+file I/O and deeper optimization of scientific statistics/stacking. No blanket
+"whole application percent" is inferred from individual operation timings.
+
+Verification at this stage: 202 tests pass, including exact shared-pipeline,
+integer export, channel/dtype, cache invalidation and pending-save tests.
