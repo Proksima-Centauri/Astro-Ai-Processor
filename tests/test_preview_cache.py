@@ -48,3 +48,14 @@ def test_preview_ghs_lut_error_is_bounded_and_does_not_mutate_source():
         expected = ColorProcessor._apply_ghs(image, params)
         np.testing.assert_allclose(actual, expected, atol=.0002, rtol=0)
     np.testing.assert_array_equal(image, original)
+
+
+def test_preview_luts_handle_nonfinite_pixels_without_invalid_indices():
+    image = np.array([[[np.nan, np.inf, -np.inf], [.5, .7, .9]]], dtype=np.float32)
+    cache = PreviewCache()
+    for model in ("luminance_only", "independent_channel_values"):
+        params = dict(stretch_factor=2, colour_stretch_model=model)
+        result = cache.apply_ghs(image, params)
+        assert np.isfinite(result).all()
+    levels = dict(black=8, gamma=1.7, white=240, channels=["r", "g", "b"])
+    assert np.isfinite(cache.apply_levels(image, levels)).all()

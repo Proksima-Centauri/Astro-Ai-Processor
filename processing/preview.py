@@ -78,6 +78,7 @@ class PreviewCache:
             params.get("stretch_factor", 0.0), params.get("symmetry_point", .5),
             params.get("highlight_protection_point", .95), params.get("shadow_protection_point", .05)))
         if params.get("colour_stretch_model") == "luminance_only":
+            image = np.nan_to_num(image, nan=0, posinf=1, neginf=0)
             gray = image[:, :, 0] * .114 + image[:, :, 1] * .587 + image[:, :, 2] * .299
             mapped = lut[np.clip(np.rint(gray * 65535), 0, 65535).astype(np.int32)]
             return np.clip(image * (mapped / np.maximum(gray, 1e-5))[:, :, None], 0, 1)
