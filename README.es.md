@@ -16,7 +16,7 @@ El proyecto combina herramientas clasicas (Levels, Curves, Histogram, Blur, Crop
   - deepSNR externo para denoise,
   - mosaico de cuadros,
   - render de clip 3D FLY (audio opcional).
-- Asistente AI Altair en modo 100% offline (`llama-cpp-python` + GGUF) y entrada por voz opcional.
+- Asistente AI Altair con NVIDIA Nemotron 3 Super mediante la ruta gratuita de OpenRouter.
 - Interfaz PL/EN con preferencias y workspaces configurables.
 
 ## Requisitos
@@ -48,14 +48,14 @@ python3 "Astro Ai Processor.py"
 
 ## Configuracion
 
-La aplicacion guarda ajustes en `config` (JSON sin extension) en la raiz del proyecto.
+La aplicacion guarda los ajustes en el directorio de configuracion del usuario. La clave de OpenRouter tambien puede definirse con `OPENROUTER_API_KEY`.
 
 Campos de ejemplo:
 
 - rutas de herramientas (`starnet_path`, `deepsnr_path`),
 - argumentos deepSNR (`deepsnr_args`),
 - plate solving (`api_key`, `pixel_size_um`, `focal_length_mm`),
-- ajustes AI (`local_ai_model_file`),
+- ajuste AI (`openrouter_api_key`),
 - idioma, tema, numero de nucleos, workspace.
 
 Nota de seguridad: no publiques rutas privadas ni datos de workspace en repositorios publicos.

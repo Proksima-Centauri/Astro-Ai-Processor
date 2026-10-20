@@ -29,6 +29,7 @@ from processing.color_processor import ColorProcessor
 from processing.preview import PreviewCache, parameter_key
 from processing.export import normalized_to_uint16
 from processing.pipeline import process_image
+from processing.openrouter import OPENROUTER_DEFAULT_MODEL, create_chat_completion
 from processing.image_analysis import compute_image_analysis_metrics
 from processing.image_effects import _normalize_mask01, local_contrast_enhancement, neutralize_background
 from processing.stretch import stretch_image
@@ -50,33 +51,15 @@ except ImportError:
     Image = None
     PIL_AVAILABLE = False
 
-try:
-    from llama_cpp import Llama
-    LLAMA_CPP_AVAILABLE = True
-except ImportError:
-    Llama = None
-    LLAMA_CPP_AVAILABLE = False
-
 FIXED_ASTROMETRY_API_KEY = "wtawpjrpiulghcau"
 AI_ASSISTANT_NAME = "Altair"
 ALTAIR_3D_FLY_GUIDE_FILE = "3d_fly_help.md"
 DEFAULT_DEEPSNR_ARGS = "-i \"{input}\" -o \"{output}\" -q -m 2"
 DEFAULT_DEEPSNR_STRENGTH = 2
-LOCAL_AI_DEFAULT_MODELS = [
-    "qwen2.5-1.5b-instruct.Q4_K_M.gguf",
-    "qwen2.5-0.5b-instruct.Q4_K_M.gguf",
-]
-LOCAL_AI_HF_HINT_URL = "https://huggingface.co/Qwen"
-LOCAL_AI_DOWNLOAD_SOURCES = {
-    "qwen2.5-1.5b-instruct.Q4_K_M.gguf": "https://huggingface.co/bartowski/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/Qwen2.5-1.5B-Instruct-Q4_K_M.gguf",
-    "qwen2.5-0.5b-instruct.Q4_K_M.gguf": "https://huggingface.co/bartowski/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/Qwen2.5-0.5B-Instruct-Q4_K_M.gguf",
-}
 APP_VERSION = "1.0.0"
 APP_UPDATE_PAGE_URL = "https://proksima-centauri.github.io/Astro-Ai-Processor/"
-LOCAL_AI_DEFAULT_N_CTX = 4096
-LOCAL_AI_DEFAULT_MAX_TOKENS = 900
-LOCAL_AI_DEFAULT_TEMPERATURE = 0.2
-LOCAL_AI_DEFAULT_TOP_P = 0.92
+ALTAIR_DEFAULT_MAX_TOKENS = 900
+ALTAIR_DEFAULT_TEMPERATURE = 0.2
 
 
 def parse_version(version: str):
@@ -7068,13 +7051,10 @@ class AIAssistantPanel(QFrame):
         content_layout.addWidget(self.status_label)
 
         settings_layout = QGridLayout()
-        settings_layout.addWidget(QLabel("Lokalny model GGUF:"), 0, 0)
+        settings_layout.addWidget(QLabel("Model Altair:"), 0, 0)
         self.lbl_local_model = QLabel("auto")
         self.lbl_local_model.setStyleSheet("color: #c7d3de;")
         settings_layout.addWidget(self.lbl_local_model, 0, 1)
-        self.btn_download_model = QPushButton("Download Qwen")
-        self.btn_download_model.clicked.connect(self.on_download_local_model)
-        settings_layout.addWidget(self.btn_download_model, 0, 2)
         settings_layout.addWidget(QLabel("ASE:"), 1, 0)
         self.combo_ase_execution = QComboBox()
         self.combo_ase_execution.addItem("Nie wykonuj poleceń", "deny")
@@ -7103,27 +7083,21 @@ class AIAssistantPanel(QFrame):
         self.ai_worker = None
         self.file_search_worker = None
         self.pending_frame_confirmation = None
-        self.model_download_worker = None
-        self._refresh_local_model_label()
+        self._refresh_model_label()
         if not SPEECH_RECOGNITION_AVAILABLE:
             self.btn_voice.setToolTip("Voice to Text wymaga pakietu SpeechRecognition")
         self._show_chat_panel()
         if sys.platform.startswith("win"):
             self.append_assistant_message("Przepraszamy, Asystent AI jest niedostępny w wersji Windows.")
 
-    def _refresh_local_model_label(self):
-        model_file = str(getattr(self.app, "local_ai_model_file", "") or "").strip()
-        resolved = resolve_local_ai_model_path(model_file)
-        if resolved:
-            self.lbl_local_model.setText(os.path.basename(resolved))
-            self.token_usage_bar.setValue(100)
-            self.token_usage_bar.setToolTip(f"Tryb offline aktywny\nModel: {resolved}")
-            self.btn_download_model.setVisible(False)
-        else:
-            self.lbl_local_model.setText("brak modelu")
-            self.token_usage_bar.setValue(0)
-            self.token_usage_bar.setToolTip(build_local_ai_missing_model_message())
-            self.btn_download_model.setVisible(True)
+    def _refresh_model_label(self):
+        self.lbl_local_model.setText("Nemotron 3 Super (OpenRouter Free)")
+        api_key = str(getattr(self.app, "openrouter_api_key", "") or os.environ.get("OPENROUTER_API_KEY", "")).strip()
+        self.token_usage_bar.setValue(0)
+        self.token_usage_bar.setToolTip(
+            f"OpenRouter\nModel: {OPENROUTER_DEFAULT_MODEL}\n"
+            + ("Klucz API skonfigurowany" if api_key else "Dodaj klucz w Preferencje → AI Chat")
+        )
 
     def _release_worker_reference_after_stop(self, attr_name: str, worker):
         if worker is None:
@@ -7139,50 +7113,6 @@ class AIAssistantPanel(QFrame):
             pass
         if getattr(self, attr_name, None) is worker:
             setattr(self, attr_name, None)
-
-    def on_download_local_model(self):
-        if self.model_download_worker is not None and self.model_download_worker.isRunning():
-            return
-
-        preferred = str(getattr(self.app, "local_ai_model_file", "") or "")
-        model_name, source_url = get_local_ai_download_target(preferred)
-        if not source_url:
-            self.append_system_message("Brak skonfigurowanego URL pobierania modelu Qwen.")
-            return
-
-        self.status_label.setText(f"Pobieranie modelu: {model_name}")
-        self.btn_download_model.setEnabled(False)
-        self.token_usage_bar.setValue(0)
-        self.token_usage_bar.setToolTip(f"Pobieranie modelu: {model_name}")
-
-        self.model_download_worker = LocalModelDownloadWorker(model_name, source_url)
-        self.model_download_worker.progress_signal.connect(self.on_download_local_model_progress)
-        self.model_download_worker.finished_signal.connect(self.on_download_local_model_finished)
-        self.model_download_worker.start()
-
-    def on_download_local_model_progress(self, progress_value: int, status_text: str):
-        if int(progress_value) > 0:
-            self.token_usage_bar.setValue(int(max(0, min(100, progress_value))))
-        self.status_label.setText(str(status_text or ""))
-
-    def on_download_local_model_finished(self, model_path: str, error: str):
-        self.btn_download_model.setEnabled(True)
-        if error:
-            self.status_label.setText("Pobieranie modelu nie powiodlo sie.")
-            self.append_system_message(f"Blad pobierania modelu: {error}")
-            self._refresh_local_model_label()
-            self._release_worker_reference_after_stop("model_download_worker", self.model_download_worker)
-            return
-
-        saved_path = str(model_path or "").strip()
-        model_file = os.path.basename(saved_path) if saved_path else LOCAL_AI_DEFAULT_MODELS[0]
-        self.app.local_ai_model_file = model_file
-        APP_PREFERENCES["local_ai_model_file"] = model_file
-        self.app.apply_preferences(local_ai_model_file=model_file)
-        self.status_label.setText("Model Qwen pobrany i gotowy.")
-        self.append_system_message(f"Model offline gotowy: {saved_path}")
-        self._refresh_local_model_label()
-        self._release_worker_reference_after_stop("model_download_worker", self.model_download_worker)
 
     def _show_chat_panel(self):
         self.stacked_layout.setCurrentWidget(self.content_widget)
@@ -7406,11 +7336,10 @@ class AIAssistantPanel(QFrame):
         self._show_assistant_typing_indicator()
         self.btn_send.setEnabled(False)
         self.btn_run_ase.setEnabled(False)
-        self.ai_worker = LocalAIWorker(
+        self.ai_worker = AltairAIWorker(
             message,
             payload,
-            model_file=getattr(self.app, "local_ai_model_file", ""),
-            processor_cores=getattr(self.app, "processor_cores", None),
+            api_key=(getattr(self.app, "openrouter_api_key", "") or os.environ.get("OPENROUTER_API_KEY", "")),
         )
         self.ai_worker.finished_signal.connect(self.on_ai_finished)
         self.ai_worker.start()
@@ -7642,10 +7571,10 @@ class AIAssistantPanel(QFrame):
         self.status_label.setText("")
         self._hide_assistant_typing_indicator()
         if error:
-            self._refresh_local_model_label()
-            self.append_assistant_message(f"Blad lokalnego AI: {error}")
+            self._refresh_model_label()
+            self.append_assistant_message(f"Błąd Altair: {error}")
         else:
-            self._refresh_local_model_label()
+            self._refresh_model_label()
             self.append_assistant_message(response)
             code = self._extract_ase_from_text(response)
             if code:
@@ -7664,7 +7593,7 @@ class AIAssistantPanel(QFrame):
         self._hide_analysis_chat_indicator()
         self.status_label.setText("")
 
-        for attr_name in ("ai_worker", "stt_worker", "model_download_worker", "file_search_worker"):
+        for attr_name in ("ai_worker", "stt_worker", "file_search_worker"):
             worker = getattr(self, attr_name, None)
             if worker is None:
                 continue
@@ -9064,7 +8993,7 @@ def _load_altair_3d_fly_guide_text(max_chars: int = 6000) -> str:
         return ""
 
 
-def build_local_ai_system_prompt() -> str:
+def build_altair_system_prompt() -> str:
     base_prompt = (
         f"Nazywasz się {AI_ASSISTANT_NAME}. "
         "Jesteś ekspertem od analizy zdjęć astronomicznych. Otrzymujesz tylko metadane i wyniki analizy w formacie JSON. "
@@ -9090,166 +9019,34 @@ def build_local_ai_system_prompt() -> str:
     return base_prompt + "\n\nInstrukcja 3D FLY (źródło lokalne):\n" + guide
 
 
-def _get_local_ai_models_dir() -> str:
-    if sys.platform == "win32" and getattr(sys, "frozen", False):
-        app_data = os.environ.get("LOCALAPPDATA") or os.path.join(
-            os.path.expanduser("~"), "AppData", "Local"
-        )
-        return os.path.join(app_data, "Astro AI Processor", "models")
-    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "models")
-
-
-def resolve_local_ai_model_path(preferred_model_file: str = "") -> str:
-    models_dir = _get_local_ai_models_dir()
-    requested = str(preferred_model_file or "").strip()
-    candidates = []
-    if requested:
-        candidates.append(requested)
-    candidates.extend(LOCAL_AI_DEFAULT_MODELS)
-    for model_file in candidates:
-        if not model_file:
-            continue
-        model_path = model_file if os.path.isabs(model_file) else os.path.join(models_dir, model_file)
-        if os.path.exists(model_path):
-            return model_path
-    return ""
-
-
-def get_local_ai_download_target(preferred_model_file: str = "") -> tuple[str, str]:
-    requested = str(preferred_model_file or "").strip()
-    candidates = []
-    if requested:
-        candidates.append(requested)
-    candidates.extend(LOCAL_AI_DEFAULT_MODELS)
-    for model_name in candidates:
-        url = LOCAL_AI_DOWNLOAD_SOURCES.get(model_name)
-        if url:
-            return model_name, url
-    fallback = LOCAL_AI_DEFAULT_MODELS[0]
-    return fallback, LOCAL_AI_DOWNLOAD_SOURCES.get(fallback, "")
-
-
-def build_local_ai_missing_model_message() -> str:
-    models_dir = _get_local_ai_models_dir()
-    try:
-        os.makedirs(models_dir, exist_ok=True)
-    except Exception:
-        pass
-    model_list = ", ".join(LOCAL_AI_DEFAULT_MODELS)
-    return (
-        "Nie znaleziono lokalnego modelu GGUF dla asystenta AI.\n"
-        f"Umiesc plik modelu w folderze: {models_dir}\n"
-        f"Obslugiwane nazwy (domyslnie): {model_list}\n"
-        f"Przyklad zrodla modelu: {LOCAL_AI_HF_HINT_URL}"
-    )
-
-
-class LocalAIAssistant:
-    _instances = {}
-
-    def __init__(self, model_path: str, n_ctx: int = LOCAL_AI_DEFAULT_N_CTX, n_threads: int = None):
-        if not LLAMA_CPP_AVAILABLE or Llama is None:
-            raise RuntimeError("Brak biblioteki llama-cpp-python. Zainstaluj zaleznosc i uruchom ponownie aplikacje.")
-        self.model_path = str(model_path or "").strip()
-        if not self.model_path or not os.path.exists(self.model_path):
-            raise RuntimeError(build_local_ai_missing_model_message())
-        self.n_ctx = int(max(512, n_ctx))
-        cpu_count = max(1, (os.cpu_count() or 4))
-        self.n_threads = int(max(1, n_threads if n_threads is not None else min(8, cpu_count)))
-        self._llm = Llama(
-            model_path=self.model_path,
-            n_ctx=self.n_ctx,
-            n_threads=self.n_threads,
-            n_batch=512,
-            verbose=False,
-        )
-
-    @classmethod
-    def get(cls, model_path: str, n_ctx: int = LOCAL_AI_DEFAULT_N_CTX, n_threads: int = None):
-        key = (os.path.abspath(str(model_path or "")), int(max(512, n_ctx)), int(max(1, n_threads if n_threads is not None else min(8, max(1, os.cpu_count() or 4)))))
-        instance = cls._instances.get(key)
-        if instance is None:
-            instance = cls(model_path=key[0], n_ctx=key[1], n_threads=key[2])
-            cls._instances[key] = instance
-        return instance
-
-    def ask(self, prompt: str, context: dict = None, max_tokens: int = LOCAL_AI_DEFAULT_MAX_TOKENS, temperature: float = LOCAL_AI_DEFAULT_TEMPERATURE, json_response: bool = False) -> str:
-        payload = context if isinstance(context, dict) else {}
-        response_mode_hint = (
-            "Jesli potrzebny jest wynik sterujacy, zwroc tylko poprawny JSON. "
-            "Bez markdown i bez komentarzy."
-            if json_response
-            else ""
-        )
-        full_prompt = (
-            f"SYSTEM:\n{build_local_ai_system_prompt()}\n\n"
-            f"{response_mode_hint}\n"
-            f"USER:\n{str(prompt or '').strip()}\n\n"
-            f"KONTEKST JSON:\n{json.dumps(payload, ensure_ascii=False, separators=(',', ':'))}\n\n"
-            "ODPOWIEDZ:"
-        )
-        prompt_token_count = len(self._llm.tokenize(full_prompt.encode("utf-8"), add_bos=True))
-        reserved_tokens = 16
-        available_completion_tokens = self.n_ctx - prompt_token_count - reserved_tokens
-        if available_completion_tokens < 1:
-            raise RuntimeError(
-                f"Prompt zajmuje {prompt_token_count} tokenów i nie mieści się w oknie {self.n_ctx}. "
-                "Skróć pytanie lub zmniejsz kontekst obrazu."
-            )
-        effective_max_tokens = min(
-            int(max(1, max_tokens)),
-            available_completion_tokens,
-        )
-        output = self._llm(
-            full_prompt,
-            max_tokens=effective_max_tokens,
-            temperature=float(max(0.0, min(1.2, temperature))),
-            top_p=float(max(0.5, min(1.0, LOCAL_AI_DEFAULT_TOP_P))),
-            stop=["\nSYSTEM:", "\nUSER:"],
-            echo=False,
-        )
-        choices = output.get("choices") if isinstance(output, dict) else None
-        if isinstance(choices, list) and choices:
-            text = str(choices[0].get("text") or "").strip()
-            if text:
-                return text
-        raise RuntimeError("Lokalny model nie zwrocil odpowiedzi.")
-
-
-class LocalAIWorker(QThread):
+class AltairAIWorker(QThread):
     finished_signal = pyqtSignal(str, str, object)
 
-    def __init__(self, message: str, payload: dict, model_file: str = "", processor_cores: int = None):
+    def __init__(self, message: str, payload: dict, api_key: str = ""):
         super().__init__()
         self.message = str(message or "")
         self.payload = payload if isinstance(payload, dict) else {}
-        self.model_file = str(model_file or "")
-        self.processor_cores = int(max(1, processor_cores)) if processor_cores else None
+        self.api_key = str(api_key or "").strip()
 
     def run(self):
         try:
-            model_path = resolve_local_ai_model_path(self.model_file)
-            if not model_path:
-                raise RuntimeError(build_local_ai_missing_model_message())
-            assistant = LocalAIAssistant.get(
-                model_path=model_path,
-                n_ctx=LOCAL_AI_DEFAULT_N_CTX,
-                n_threads=self.processor_cores,
+            context_text = json.dumps(self.payload, ensure_ascii=False, separators=(",", ":"))
+            response, usage = create_chat_completion(
+                self.api_key,
+                [
+                    {"role": "system", "content": build_altair_system_prompt()},
+                    {"role": "user", "content": f"{self.message.strip()}\n\nKONTEKST JSON:\n{context_text}"},
+                ],
+                model=OPENROUTER_DEFAULT_MODEL,
+                max_tokens=ALTAIR_DEFAULT_MAX_TOKENS,
+                temperature=ALTAIR_DEFAULT_TEMPERATURE,
             )
-            result = assistant.ask(
-                self.message,
-                self.payload,
-                max_tokens=LOCAL_AI_DEFAULT_MAX_TOKENS,
-                temperature=LOCAL_AI_DEFAULT_TEMPERATURE,
-            )
-            meta = {
-                "model_path": model_path,
-                "engine": "llama.cpp",
-                "n_ctx": LOCAL_AI_DEFAULT_N_CTX,
-                "n_threads": assistant.n_threads,
-                "max_tokens": LOCAL_AI_DEFAULT_MAX_TOKENS,
-            }
-            self.finished_signal.emit(result, "", meta)
+            self.finished_signal.emit(response, "", {
+                "engine": "OpenRouter",
+                "model": OPENROUTER_DEFAULT_MODEL,
+                "usage": usage,
+                "max_tokens": ALTAIR_DEFAULT_MAX_TOKENS,
+            })
         except Exception as e:
             self.finished_signal.emit("", str(e), {})
 
@@ -9274,61 +9071,6 @@ class ImageFileSearchWorker(QThread):
             self.finished_signal.emit(self.filename, self.match_mode, matches, "")
         except Exception as exc:
             self.finished_signal.emit(self.filename, self.match_mode, [], str(exc))
-
-
-class LocalModelDownloadWorker(QThread):
-    progress_signal = pyqtSignal(int, str)
-    finished_signal = pyqtSignal(str, str)
-
-    def __init__(self, model_name: str, source_url: str):
-        super().__init__()
-        self.model_name = str(model_name or "").strip()
-        self.source_url = str(source_url or "").strip()
-
-    def run(self):
-        try:
-            if not self.model_name or not self.source_url:
-                raise RuntimeError("Brak konfiguracji pobierania modelu.")
-
-            models_dir = _get_local_ai_models_dir()
-            os.makedirs(models_dir, exist_ok=True)
-            target_path = os.path.join(models_dir, self.model_name)
-            temp_path = target_path + ".part"
-
-            self.progress_signal.emit(0, f"Pobieranie {self.model_name}...")
-            request = urllib.request.Request(self.source_url, headers={"User-Agent": "AstroAiProcessor/1.0"})
-            with urllib.request.urlopen(request, timeout=120) as response:
-                total_bytes = int(response.headers.get("Content-Length") or 0)
-                downloaded = 0
-                chunk_size = 1024 * 1024
-                with open(temp_path, "wb") as out_file:
-                    while True:
-                        if self.isInterruptionRequested():
-                            raise RuntimeError("Pobieranie anulowane.")
-                        chunk = response.read(chunk_size)
-                        if not chunk:
-                            break
-                        out_file.write(chunk)
-                        downloaded += len(chunk)
-                        if total_bytes > 0:
-                            pct = int(max(0, min(100, round((downloaded * 100.0) / total_bytes))))
-                            self.progress_signal.emit(pct, f"Pobrano {pct}%")
-                        else:
-                            mb = downloaded / (1024.0 * 1024.0)
-                            self.progress_signal.emit(0, f"Pobrano {mb:.1f} MB")
-
-            os.replace(temp_path, target_path)
-            self.progress_signal.emit(100, "Pobieranie zakonczone.")
-            self.finished_signal.emit(target_path, "")
-        except Exception as exc:
-            try:
-                models_dir = _get_local_ai_models_dir()
-                part_name = os.path.join(models_dir, f"{self.model_name}.part")
-                if os.path.exists(part_name):
-                    os.remove(part_name)
-            except Exception:
-                pass
-            self.finished_signal.emit("", str(exc))
 
 
 class SpeechToTextWorker(QThread):
@@ -11342,13 +11084,25 @@ class PreferencesDialog(QDialog):
         ai_chat_layout.setContentsMargins(16, 16, 16, 16)
         ai_chat_layout.setHorizontalSpacing(10)
         ai_chat_layout.setVerticalSpacing(10)
-        ai_chat_layout.addWidget(QLabel("Lokalny model GGUF:"), 0, 0)
-        self.edit_local_ai_model_pref = QLineEdit(str(getattr(self.app, "local_ai_model_file", LOCAL_AI_DEFAULT_MODELS[0]) or LOCAL_AI_DEFAULT_MODELS[0]))
-        self.edit_local_ai_model_pref.setPlaceholderText(LOCAL_AI_DEFAULT_MODELS[0])
-        ai_chat_layout.addWidget(self.edit_local_ai_model_pref, 0, 1)
-        self.lbl_local_ai_hint = QLabel(build_local_ai_missing_model_message())
-        self.lbl_local_ai_hint.setWordWrap(True)
-        ai_chat_layout.addWidget(self.lbl_local_ai_hint, 1, 0, 1, 2)
+        ai_chat_layout.addWidget(QLabel("Model Altair:"), 0, 0)
+        self.lbl_altair_model = QLabel("NVIDIA Nemotron 3 Super (OpenRouter Free)")
+        self.lbl_altair_model.setWordWrap(True)
+        ai_chat_layout.addWidget(self.lbl_altair_model, 0, 1)
+        ai_chat_layout.addWidget(QLabel("OpenRouter API key:"), 1, 0)
+        self.edit_openrouter_api_key = QLineEdit(str(getattr(self.app, "openrouter_api_key", "") or ""))
+        self.edit_openrouter_api_key.setEchoMode(QLineEdit.Password)
+        self.edit_openrouter_api_key.setPlaceholderText(
+            "OPENROUTER_API_KEY środowiska" if os.environ.get("OPENROUTER_API_KEY") else "sk-or-v1-…"
+        )
+        ai_chat_layout.addWidget(self.edit_openrouter_api_key, 1, 1)
+        self.lbl_openrouter_hint = QLabel(
+            f"Model: {OPENROUTER_DEFAULT_MODEL}\n"
+            "Wiadomości i kontekst Altaira są wysyłane do OpenRouter. Bezpłatna trasa może mieć limity/rate limit. "
+            "Klucz jest zapisywany w lokalnej konfiguracji użytkownika. "
+            "Utwórz go na openrouter.ai/settings/keys."
+        )
+        self.lbl_openrouter_hint.setWordWrap(True)
+        ai_chat_layout.addWidget(self.lbl_openrouter_hint, 2, 0, 1, 2)
         tabs.addTab(ai_chat_tab, "Ai Chat")
 
         buttons = QHBoxLayout()
@@ -11418,9 +11172,7 @@ class PreferencesDialog(QDialog):
         language = self.combo_language.currentText().strip() or "pl"
         provider = self.combo_onnx_provider.currentText().strip() or "Auto"
         cpu_cores = int(self.spin_cpu_cores.value())
-        local_ai_model_file = self.edit_local_ai_model_pref.text().strip() if hasattr(self, "edit_local_ai_model_pref") else LOCAL_AI_DEFAULT_MODELS[0]
-        self.app.local_ai_model_file = local_ai_model_file or LOCAL_AI_DEFAULT_MODELS[0]
-        APP_PREFERENCES["local_ai_model_file"] = self.app.local_ai_model_file
+        openrouter_api_key = self.edit_openrouter_api_key.text().strip() if hasattr(self, "edit_openrouter_api_key") else ""
 
         self.app.apply_preferences(
             theme_name=theme_name,
@@ -11428,7 +11180,7 @@ class PreferencesDialog(QDialog):
             language=language,
             processor_cores=cpu_cores,
             onnx_provider=provider,
-            local_ai_model_file=self.app.local_ai_model_file,
+            openrouter_api_key=openrouter_api_key,
         )
         self.app.log("Preferences updated.", "success")
         self.accept()
@@ -12994,7 +12746,7 @@ def load_config() -> dict:
         "api_key": FIXED_ASTROMETRY_API_KEY,
         "pixel_size_um": 5.4,
         "focal_length_mm": 800.0,
-        "local_ai_model_file": LOCAL_AI_DEFAULT_MODELS[0],
+        "openrouter_api_key": "",
         "language": "pl",
         "processor_cores": max(1, (os.cpu_count() or 4) // 2),
         "onnx_provider": "Auto",
@@ -13047,9 +12799,10 @@ def load_config() -> dict:
             config["deepsnr_strength"] = normalize_deepsnr_strength(
                 config.get("deepsnr_strength", DEFAULT_DEEPSNR_STRENGTH)
             )
-            config["local_ai_model_file"] = str(
-                config.get("local_ai_model_file") or LOCAL_AI_DEFAULT_MODELS[0]
-            ).strip() or LOCAL_AI_DEFAULT_MODELS[0]
+            # Discard settings left by previous versions that offered local GGUF.
+            config.pop("local_ai_model_file", None)
+            config.pop("ai_provider", None)
+            config["openrouter_api_key"] = str(config.get("openrouter_api_key") or "").strip()
 
             if not isinstance(config.get("topbar_button_order"), list):
                 config["topbar_button_order"] = []
@@ -13065,6 +12818,10 @@ def load_config() -> dict:
                     os.makedirs(os.path.dirname(config_path), exist_ok=True)
                     with open(config_path, 'w') as f:
                         json.dump(config, f, indent=2)
+                    try:
+                        os.chmod(config_path, 0o600)
+                    except OSError:
+                        pass
                 except Exception:
                     pass
 
@@ -13080,7 +12837,6 @@ def save_config(denoise_path: str = None, bg_removal_path: str = None,
                 api_key: str = FIXED_ASTROMETRY_API_KEY, pixel_size_um: float = 5.4,
                 focal_length_mm: float = 800.0,
                 starnet_stride: int = 16,
-                local_ai_model_file: str = None,
                 theme_name: str = None,
                 language: str = None,
                 processor_cores: int = None,
@@ -13094,7 +12850,8 @@ def save_config(denoise_path: str = None, bg_removal_path: str = None,
                 accent_name: str = None,
                 deconvolution_path: str = None,
                 deconvolution_stellar_path: str = None,
-                deconvolution_object_path: str = None):
+                deconvolution_object_path: str = None,
+                openrouter_api_key: str = None):
     if theme_name is None:
         theme_name = APP_PREFERENCES.get("theme_name", "Fusion Dark" if dark_mode else "Light")
     if language is None:
@@ -13124,8 +12881,8 @@ def save_config(denoise_path: str = None, bg_removal_path: str = None,
     if deconvolution_object_path is None:
         deconvolution_object_path = APP_PREFERENCES.get("deconvolution_object_model_path") or deconvolution_path
     deconvolution_path = deconvolution_stellar_path
-    if local_ai_model_file is None:
-        local_ai_model_file = APP_PREFERENCES.get("local_ai_model_file", LOCAL_AI_DEFAULT_MODELS[0])
+    if openrouter_api_key is None:
+        openrouter_api_key = APP_PREFERENCES.get("openrouter_api_key", "")
 
     config = {
         "denoise_model_path": denoise_path,
@@ -13144,7 +12901,7 @@ def save_config(denoise_path: str = None, bg_removal_path: str = None,
         "api_key": FIXED_ASTROMETRY_API_KEY,
         "pixel_size_um": pixel_size_um,
         "focal_length_mm": focal_length_mm,
-        "local_ai_model_file": str(local_ai_model_file or LOCAL_AI_DEFAULT_MODELS[0]),
+        "openrouter_api_key": str(openrouter_api_key or "").strip(),
         "language": language,
         "processor_cores": int(processor_cores or 1),
         "onnx_provider": onnx_provider,
@@ -13162,6 +12919,10 @@ def save_config(denoise_path: str = None, bg_removal_path: str = None,
         os.makedirs(os.path.dirname(config_path), exist_ok=True)
         with open(config_path, 'w') as f:
             json.dump(config, f, indent=2)
+        try:
+            os.chmod(config_path, 0o600)
+        except OSError:
+            pass
     except Exception as e:
         print(f"Error saving config: {e}")
 
@@ -13178,7 +12939,7 @@ APP_PREFERENCES = {
     "deepsnr_path": None,
     "deepsnr_args": DEFAULT_DEEPSNR_ARGS,
     "deepsnr_strength": DEFAULT_DEEPSNR_STRENGTH,
-    "local_ai_model_file": LOCAL_AI_DEFAULT_MODELS[0],
+    "openrouter_api_key": "",
     "deconvolution_model_path": None,
     "deconvolution_stellar_model_path": None,
     "deconvolution_object_model_path": None,
@@ -18726,7 +18487,6 @@ class AstroApp(QMainWindow):
             self.plate_solve_pixel_size_um,
             self.plate_solve_focal_length_mm,
             self.starnet_stride,
-            local_ai_model_file=self.local_ai_model_file,
             deconvolution_path=self.deconvolution_model_path,
             deconvolution_stellar_path=self.deconvolution_stellar_model_path,
             deconvolution_object_path=self.deconvolution_object_model_path,
@@ -18754,7 +18514,6 @@ class AstroApp(QMainWindow):
             self.plate_solve_pixel_size_um,
             self.plate_solve_focal_length_mm,
             self.starnet_stride,
-            local_ai_model_file=self.local_ai_model_file,
         )
         self._update_models_label()
         self.log(f"StarNet++ path updated: {self.starnet_path}", "success")
@@ -18780,7 +18539,6 @@ class AstroApp(QMainWindow):
             self.plate_solve_pixel_size_um,
             self.plate_solve_focal_length_mm,
             self.starnet_stride,
-            local_ai_model_file=self.local_ai_model_file,
             deepsnr_path=self.deepsnr_path,
             deepsnr_args=self.deepsnr_args,
             deepsnr_strength=self.deepsnr_strength,
@@ -18824,7 +18582,6 @@ class AstroApp(QMainWindow):
             self.plate_solve_pixel_size_um,
             self.plate_solve_focal_length_mm,
             self.starnet_stride,
-            local_ai_model_file=self.local_ai_model_file,
             deepsnr_path=self.deepsnr_path,
             deepsnr_args=self.deepsnr_args,
             deepsnr_strength=self.deepsnr_strength,
@@ -19211,7 +18968,7 @@ class AstroApp(QMainWindow):
         self.plate_solve_api_key = FIXED_ASTROMETRY_API_KEY
         self.plate_solve_pixel_size_um = float(config.get("pixel_size_um") or 5.4)
         self.plate_solve_focal_length_mm = float(config.get("focal_length_mm") or 800.0)
-        self.local_ai_model_file = str(config.get("local_ai_model_file") or LOCAL_AI_DEFAULT_MODELS[0]).strip() or LOCAL_AI_DEFAULT_MODELS[0]
+        self.openrouter_api_key = str(config.get("openrouter_api_key") or "").strip()
         self.update_api_base = str(
             config.get("update_api_base") or os.environ.get("ASTRO_UPDATE_API_BASE", "https://proksima-centauri.github.io/Astro-Ai-Processor")
         ).strip().rstrip("/")
@@ -19233,7 +18990,7 @@ class AstroApp(QMainWindow):
         APP_PREFERENCES["deepsnr_path"] = self.deepsnr_path
         APP_PREFERENCES["deepsnr_args"] = self.deepsnr_args
         APP_PREFERENCES["deepsnr_strength"] = self.deepsnr_strength
-        APP_PREFERENCES["local_ai_model_file"] = self.local_ai_model_file
+        APP_PREFERENCES["openrouter_api_key"] = self.openrouter_api_key
         APP_PREFERENCES["deconvolution_model_path"] = self.deconvolution_model_path
         APP_PREFERENCES["deconvolution_stellar_model_path"] = self.deconvolution_stellar_model_path
         APP_PREFERENCES["deconvolution_object_model_path"] = self.deconvolution_object_model_path
@@ -20811,8 +20568,8 @@ class AstroApp(QMainWindow):
             self.preferences_dialog.combo_language.setCurrentText(self.language)
             self.preferences_dialog.spin_cpu_cores.setValue(int(self.processor_cores))
             self.preferences_dialog.combo_onnx_provider.setCurrentText(self.onnx_provider)
-            if hasattr(self.preferences_dialog, "edit_local_ai_model_pref"):
-                self.preferences_dialog.edit_local_ai_model_pref.setText(str(getattr(self, "local_ai_model_file", LOCAL_AI_DEFAULT_MODELS[0]) or LOCAL_AI_DEFAULT_MODELS[0]))
+            if hasattr(self.preferences_dialog, "edit_openrouter_api_key"):
+                self.preferences_dialog.edit_openrouter_api_key.setText(self.openrouter_api_key)
         self.preferences_dialog.refresh_select_paths()
         self.preferences_dialog.refresh_joystick_controls()
         self.preferences_dialog.show()
@@ -21568,7 +21325,8 @@ class AstroApp(QMainWindow):
         self.apply_preferences(theme_name=self.theme_name)
         self.log(f"Theme switched to {self.theme_name}.")
 
-    def apply_preferences(self, theme_name=None, accent_name=None, language=None, processor_cores=None, onnx_provider=None, local_ai_model_file=None):
+    def apply_preferences(self, theme_name=None, accent_name=None, language=None, processor_cores=None,
+                          onnx_provider=None, openrouter_api_key=None):
         if theme_name is not None:
             self.theme_name = theme_name
         if accent_name is not None:
@@ -21579,9 +21337,9 @@ class AstroApp(QMainWindow):
             self.processor_cores = max(1, int(processor_cores))
         if onnx_provider is not None:
             self.onnx_provider = onnx_provider
-        if local_ai_model_file is not None:
-            self.local_ai_model_file = str(local_ai_model_file or LOCAL_AI_DEFAULT_MODELS[0]).strip() or LOCAL_AI_DEFAULT_MODELS[0]
-            APP_PREFERENCES["local_ai_model_file"] = self.local_ai_model_file
+        if openrouter_api_key is not None:
+            self.openrouter_api_key = str(openrouter_api_key or "").strip()
+            APP_PREFERENCES["openrouter_api_key"] = self.openrouter_api_key
 
         self.dark_mode = (self.theme_name or "").strip().lower() != "light"
         APP_PREFERENCES.update({
@@ -21597,6 +21355,9 @@ class AstroApp(QMainWindow):
             apply_theme_application(app, self.theme_name, self.accent_name)
         self._refresh_topbar_icons()
         self._update_ui_language()
+        panel = getattr(self, "ai_assistant_panel", None)
+        if panel is not None and hasattr(panel, "_refresh_model_label"):
+            panel._refresh_model_label()
 
         save_config(
             self.denoise_model_path,
@@ -21607,13 +21368,13 @@ class AstroApp(QMainWindow):
             self.plate_solve_pixel_size_um,
             self.plate_solve_focal_length_mm,
             self.starnet_stride,
-            local_ai_model_file=self.local_ai_model_file,
             theme_name=self.theme_name,
             accent_name=self.accent_name,
             language=self.language,
             processor_cores=self.processor_cores,
             onnx_provider=self.onnx_provider,
             workspaces=getattr(self, "workspaces", []),
+            openrouter_api_key=self.openrouter_api_key,
         )
 
     def save_workspace_config(self):
@@ -21627,7 +21388,6 @@ class AstroApp(QMainWindow):
             self.plate_solve_pixel_size_um,
             self.plate_solve_focal_length_mm,
             self.starnet_stride,
-            local_ai_model_file=self.local_ai_model_file,
             theme_name=self.theme_name,
             accent_name=self.accent_name,
             language=self.language,
@@ -22447,7 +22207,7 @@ class AstroApp(QMainWindow):
         if assistant is not None:
             candidates.extend(
                 getattr(assistant, name, None)
-                for name in ("ai_worker", "stt_worker", "model_download_worker", "file_search_worker")
+                for name in ("ai_worker", "stt_worker", "file_search_worker")
             )
         active = []
         seen = set()
@@ -22557,7 +22317,6 @@ class AstroApp(QMainWindow):
             self.plate_solve_pixel_size_um,
             self.plate_solve_focal_length_mm,
             self.starnet_stride,
-            local_ai_model_file=self.local_ai_model_file,
             theme_name=self.theme_name,
             language=self.language,
             processor_cores=self.processor_cores,
@@ -23386,7 +23145,6 @@ class AstroApp(QMainWindow):
             self.plate_solve_pixel_size_um,
             self.plate_solve_focal_length_mm,
             self.starnet_stride,
-            local_ai_model_file=self.local_ai_model_file,
         )
         self.log(f"Home folder set: {self.home_folder}", "success")
 
@@ -25076,7 +24834,6 @@ class AstroApp(QMainWindow):
             self.plate_solve_pixel_size_um,
             self.plate_solve_focal_length_mm,
             self.starnet_stride,
-            local_ai_model_file=self.local_ai_model_file,
         )
 
         self.log("StarNet++ started.")
@@ -25174,7 +24931,6 @@ class AstroApp(QMainWindow):
             self.plate_solve_pixel_size_um,
             self.plate_solve_focal_length_mm,
             self.starnet_stride,
-            local_ai_model_file=self.local_ai_model_file,
         )
 
         header_result = self._build_plate_solve_result_from_current_fits_header()

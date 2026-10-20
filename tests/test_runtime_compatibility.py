@@ -7,7 +7,6 @@ import typing
 from pathlib import Path
 
 import numpy as np
-import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -73,16 +72,7 @@ def test_failed_save_keeps_the_previous_document_path(tmp_path):
     assert app.current_save_path == "previous.png"
 
 
-def test_frozen_windows_model_directory_is_persistent(monkeypatch, tmp_path):
-    monkeypatch.setattr(APP_MODULE.sys, "platform", "win32")
-    monkeypatch.setattr(APP_MODULE.sys, "frozen", True, raising=False)
-    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
-
-    assert APP_MODULE._get_local_ai_models_dir() == str(tmp_path / "Astro AI Processor" / "models")
-
-
 GUI_SMOKE_SCRIPT = r'''
-import importlib.abc
 import importlib.util
 import shutil
 import sys
@@ -92,15 +82,6 @@ from pathlib import Path
 
 import numpy as np
 
-
-class DisableOptionalAI(importlib.abc.MetaPathFinder):
-    def find_spec(self, fullname, path=None, target=None):
-        if fullname == "llama_cpp" or fullname.startswith("llama_cpp."):
-            raise ImportError("llama.cpp is optional in the startup test")
-
-
-if sys.argv[1] == "without-ai":
-    sys.meta_path.insert(0, DisableOptionalAI())
 
 root = Path.cwd()
 spec = importlib.util.spec_from_file_location("astro_gui_smoke", root / "Astro Ai Processor.py")
@@ -118,6 +99,12 @@ try:
     app.processEvents()
     assert window.ai_assistant_panel.input_text.isEnabled()
     assert not window.ai_assistant_panel.input_text.isReadOnly()
+    window.show_preferences_dialog()
+    app.processEvents()
+    assert window.preferences_dialog.lbl_altair_model.text() == "NVIDIA Nemotron 3 Super (OpenRouter Free)"
+    assert window.preferences_dialog.edit_openrouter_api_key.echoMode() == module.QLineEdit.Password
+    window.preferences_dialog.close()
+    app.processEvents()
     with tempfile.TemporaryDirectory() as directory:
         for fixture in sorted((root / "tests/fixtures").glob("*")):
             if fixture.suffix.lower() not in {".png", ".jpg", ".tiff", ".fit"}:
@@ -195,13 +182,12 @@ print("Source application startup, dialogs, image I/O and shutdown OK")
 '''
 
 
-@pytest.mark.parametrize("mode", ["normal", "without-ai"])
-def test_source_application_starts_loads_images_and_opens_tools(mode):
+def test_source_application_starts_loads_images_and_opens_tools():
     env = os.environ.copy()
     env["QT_QPA_PLATFORM"] = "offscreen"
     env["XDG_SESSION_TYPE"] = "x11"
     result = subprocess.run(
-        [sys.executable, "-X", "faulthandler", "-c", GUI_SMOKE_SCRIPT, mode],
+        [sys.executable, "-X", "faulthandler", "-c", GUI_SMOKE_SCRIPT, "normal"],
         cwd=ROOT,
         env=env,
         capture_output=True,

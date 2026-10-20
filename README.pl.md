@@ -18,7 +18,7 @@ Projekt laczy klasyczne narzedzia (Levels, Curves, histogram, blur, crop, rotate
   - deepSNR (zewnetrzny denoise),
   - mozaika kadrow,
   - 3D FLY (render klipu z warstw, opcjonalnie z audio).
-- Asystent AI Altair w trybie 100% offline (`llama-cpp-python` + GGUF) oraz sterowanie glosowe (opcjonalnie).
+- Asystent AI Altair korzysta z NVIDIA Nemotron 3 Super przez bezpłatną trasę OpenRouter.
 - Interfejs PL/EN, konfigurowalne preferencje i workspace.
 
 ## Wymagania
@@ -33,7 +33,7 @@ Opcjonalne narzedzia zewnetrzne:
 - StarNet++ (CLI) do usuwania gwiazd.
 - deepSNR (CLI).
 - `ffmpeg` do dolaczania audio do klipu 3D FLY.
-- Lokalny model GGUF dla asystenta Altair w `models/` (np. `qwen2.5-1.5b-instruct.Q4_K_M.gguf`).
+- Klucz API OpenRouter dla domyślnego modelu Nemotron (ustaw w Preferencje → AI Chat; bezpłatna trasa może mieć limity).
 
 ## Instalacja
 
@@ -89,14 +89,14 @@ Plik wynikowy pojawi sie jako `dist/astro-ai-processor_<wersja>_amd64.deb`.
 
 ## Konfiguracja
 
-Aplikacja zapisuje ustawienia w pliku `config` (JSON, bez rozszerzenia) w katalogu projektu.
+Aplikacja zapisuje ustawienia w katalogu konfiguracji użytkownika. Klucz OpenRouter można też podać przez zmienną `OPENROUTER_API_KEY`.
 
 Przykladowe pola:
 
 - sciezki do narzedzi (`starnet_path`, `deepsnr_path`),
 - argumenty deepSNR (`deepsnr_args`),
 - plate solving (`api_key`, `pixel_size_um`, `focal_length_mm`),
-- ustawienia AI (`local_ai_model_file`),
+- ustawienie AI (`openrouter_api_key`),
 - jezyk, motyw, liczba rdzeni, workspace.
 
 Uwaga bezpieczenstwa: nie publikuj publicznie prywatnych sciezek i danych workspace.
