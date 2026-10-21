@@ -91,6 +91,10 @@ spec.loader.exec_module(module)
 errors = []
 sys.excepthook = lambda *error: errors.append("".join(traceback.format_exception(*error)))
 app = module.QApplication([])
+splash = module.show_startup_splash()
+assert splash is not None and splash.isVisible()
+splash.close()
+app.processEvents()
 module.load_config = lambda: {}
 module.save_config = lambda *args, **kwargs: None
 window = module.AstroApp()

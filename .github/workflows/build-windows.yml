@@ -29,19 +29,15 @@ jobs:
         shell: bash
         run: |
           python -m pip install --upgrade pip
-          # Build llama.cpp for a broad Windows CPU baseline, not the CI host's ISA.
-          export CMAKE_ARGS="-DGGML_NATIVE=OFF -DGGML_AVX=ON -DGGML_AVX2=OFF -DGGML_BMI2=OFF -DGGML_FMA=OFF -DGGML_F16C=ON -DGGML_AVX512=OFF -DGGML_AVX_VNNI=OFF"
-          export FORCE_CMAKE=1
-          export CMAKE_BUILD_PARALLEL_LEVEL=2
-          python -m pip install --no-binary=llama-cpp-python -r requirements.txt
+          python -m pip install -r requirements.txt
           python -m pip install pyinstaller
           python -m pip install -r requirements-dev.txt
 
       - name: Verify Windows runtime dependencies
-        run: python -c "import llama_cpp, pyaudio, speech_recognition; print('llama.cpp, PyAudio and SpeechRecognition are available')"
+        run: python -c "import pyaudio, speech_recognition; print('PyAudio and SpeechRecognition are available')"
 
       - name: Check undefined names and duplicate methods
-        run: python -m ruff check --target-version py311 --select F821,F822,F823,F722,F811 "Astro Ai Processor.py" processing deep_sky_catalog.py packaging tests update_notifier.py
+        run: python -m ruff check --target-version py311 --select F821,F822,F823,F722,F811 "Astro Ai Processor.py" processing deep_sky_catalog.py packaging tests
 
       - name: Test source startup and image processing on Windows
         env:

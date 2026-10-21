@@ -76,8 +76,8 @@ Numerical modules:
 - `processing/image_analysis.py`: lazy astronomy backends, noise and star metrics.
 - `processing/stacking.py`: frame normalization and chunked integration.
 - `processing/astro_upscale.py`: interpolation, anti-ringing, masks and metadata.
-- `deep_sky_catalog.py`: object metadata; `update_notifier.py` and
-  `update_api_server.py`: update infrastructure outside the image hot path.
+- `deep_sky_catalog.py`: object metadata; `update_api_server.py`: update
+  infrastructure outside the image hot path.
 
 Flow:
 

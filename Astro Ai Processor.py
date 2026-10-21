@@ -151,7 +151,8 @@ from PyQt5.QtWidgets import (
     QGraphicsScene, QSlider, QLabel, QFrame, QTabWidget, QGridLayout,
     QMenuBar, QMenu, QAction, QDialog, QStyle, QSpinBox,
     QDoubleSpinBox, QTextEdit, QLineEdit, QComboBox, QCompleter, QSplitter, QDialogButtonBox,
-    QScrollArea, QStackedLayout, QTabBar, QListWidget, QListWidgetItem, QStackedWidget, QPlainTextEdit
+    QScrollArea, QStackedLayout, QTabBar, QListWidget, QListWidgetItem, QStackedWidget, QPlainTextEdit,
+    QSplashScreen,
 )
 from PyQt5.QtGui import QImage, QPixmap, QPainter, QIcon, QColor, QFont, QPolygon, QPolygonF, QPen, QPalette, QRegion, QLinearGradient, QDrag, QCursor
 from PyQt5.QtCore import Qt, QPoint, QPointF, QRect, QRectF, QThread, pyqtSignal, QTimer, QSize, QByteArray, QEvent, qInstallMessageHandler, QMimeData
@@ -547,6 +548,32 @@ def get_app_icon_path() -> str:
         if os.path.exists(candidate):
             return candidate
     return ""
+
+
+def get_loading_splash_pixmap() -> QPixmap:
+    """Load the optional startup artwork and fit it within the current screen."""
+    image_path = os.path.join(get_runtime_base_dir(), "loading.png")
+    pixmap = QPixmap(image_path)
+    if pixmap.isNull():
+        return QPixmap()
+    screen = QApplication.primaryScreen()
+    if screen is None:
+        return pixmap
+    available = screen.availableGeometry().size()
+    max_size = QSize(max(1, int(available.width() * 0.8)), max(1, int(available.height() * 0.8)))
+    if pixmap.width() > max_size.width() or pixmap.height() > max_size.height():
+        pixmap = pixmap.scaled(max_size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+    return pixmap
+
+
+def show_startup_splash():
+    pixmap = get_loading_splash_pixmap()
+    if pixmap.isNull():
+        return None
+    splash = QSplashScreen(pixmap, Qt.WindowStaysOnTopHint)
+    splash.show()
+    QApplication.processEvents()
+    return splash
 
 
 def ensure_linux_desktop_entry() -> None:
@@ -26884,10 +26911,13 @@ def main():
         if not app_icon.isNull():
             app.setWindowIcon(app_icon)
     apply_theme_application(app, "Fusion Dark")
+    splash = show_startup_splash()
     window = AstroApp()
     if not app.windowIcon().isNull():
         window.setWindowIcon(app.windowIcon())
     window.show()
+    if splash is not None:
+        splash.finish(window)
     sys.exit(app.exec_())
 
 

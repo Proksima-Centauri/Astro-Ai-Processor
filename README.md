@@ -9,7 +9,7 @@
 Astro AI Processor processes and analyzes astrophotography images with FITS support, astronomy-specific analysis, plate solving, star tools, denoising, and traditional image-editing tools.
 
 
-Language versions: [EN](README.en.md), [PL](README.pl.md), [DE](README.de.md), [ES](README.es.md), [FR](README.fr.md), [IT](README.it.md), [NL](README.nl.md), [PT](README.pt.md), [CS](README.cs.md), [TR](README.tr.md), [JA](README.ja.md), [RU](README.ru.md), [UK](README.uk.md).
+This repository keeps its documentation in this README.
 
 ## What is Astro AI Processor?
 

@@ -12,6 +12,7 @@ a = Analysis(
     datas=[
         ('assets', 'assets'),
         ('favicon-32.png', '.'),
+        ('loading.png', '.'),
         ('3d_fly_help.md', '.'),
     ],
     hiddenimports=collect_submodules('processing'),
