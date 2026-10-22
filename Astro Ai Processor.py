@@ -13429,18 +13429,18 @@ class LevelsWindow(QDialog):
         self.spin_black = QSpinBox()
         self.spin_black.setRange(0, 254)
         self.spin_black.setValue(self.levels_widget.black)
-        self.spin_gamma = QDoubleSpinBox()
-        self.spin_gamma.setRange(0.1, 5.0)
-        self.spin_gamma.setDecimals(2)
-        self.spin_gamma.setSingleStep(0.05)
-        self.spin_gamma.setValue(self.levels_widget.gamma)
+        self.spin_midtones = QDoubleSpinBox()
+        self.spin_midtones.setRange(0.0, 1.0)
+        self.spin_midtones.setDecimals(7)
+        self.spin_midtones.setSingleStep(0.01)
+        self.spin_midtones.setValue(self.levels_widget.midtones)
         self.spin_white = QSpinBox()
         self.spin_white.setRange(1, 255)
         self.spin_white.setValue(self.levels_widget.white)
         levels_spin_layout.addWidget(QLabel("Black"))
         levels_spin_layout.addWidget(self.spin_black)
-        levels_spin_layout.addWidget(QLabel("Gray"))
-        levels_spin_layout.addWidget(self.spin_gamma)
+        levels_spin_layout.addWidget(QLabel("Midtones"))
+        levels_spin_layout.addWidget(self.spin_midtones)
         levels_spin_layout.addWidget(QLabel("White"))
         levels_spin_layout.addWidget(self.spin_white)
         levels_spin_layout.addStretch(1)
@@ -13453,7 +13453,7 @@ class LevelsWindow(QDialog):
         self.levels_widget.check_autostretch = self.check_autostretch
 
         self.spin_black.valueChanged.connect(self._set_black)
-        self.spin_gamma.valueChanged.connect(self._set_gamma)
+        self.spin_midtones.valueChanged.connect(self._set_midtones)
         self.spin_white.valueChanged.connect(self._set_white)
 
         # ---------- REFRESH ----------
@@ -13511,7 +13511,7 @@ class LevelsWindow(QDialog):
     def _capture_snapshot(self):
         return {
             "black": int(self.levels_widget.black),
-            "gamma": float(self.levels_widget.gamma),
+            "midtones": float(self.levels_widget.midtones),
             "white": int(self.levels_widget.white),
             "r": bool(self.check_r.isChecked()),
             "g": bool(self.check_g.isChecked()),
@@ -13537,7 +13537,7 @@ class LevelsWindow(QDialog):
         self.check_autostretch.blockSignals(False)
 
         self.levels_widget.black = int(snapshot.get("black", 0))
-        self.levels_widget.gamma = float(snapshot.get("gamma", 1.0))
+        self.levels_widget.midtones = float(snapshot.get("midtones", 0.5))
         self.levels_widget.white = int(snapshot.get("white", 255))
         self.levels_widget.update()
         self._sync_level_spins()
@@ -13560,13 +13560,13 @@ class LevelsWindow(QDialog):
 
     def _sync_level_spins(self):
         self.spin_black.blockSignals(True)
-        self.spin_gamma.blockSignals(True)
+        self.spin_midtones.blockSignals(True)
         self.spin_white.blockSignals(True)
         self.spin_black.setValue(self.levels_widget.black)
-        self.spin_gamma.setValue(self.levels_widget.gamma)
+        self.spin_midtones.setValue(self.levels_widget.midtones)
         self.spin_white.setValue(self.levels_widget.white)
         self.spin_black.blockSignals(False)
-        self.spin_gamma.blockSignals(False)
+        self.spin_midtones.blockSignals(False)
         self.spin_white.blockSignals(False)
 
     def _update_zoom_label(self, zoom_value, _center_value):
@@ -13598,8 +13598,8 @@ class LevelsWindow(QDialog):
         self.levels_widget.update()
         self._on_levels_changed()
 
-    def _set_gamma(self, value):
-        self.levels_widget.gamma = float(value)
+    def _set_midtones(self, value):
+        self.levels_widget.midtones = float(np.clip(value, 0.0, 1.0))
         self.levels_widget.update()
         self._on_levels_changed()
 
@@ -13616,7 +13616,7 @@ class LevelsWindow(QDialog):
             if self.parent.processed_img is not None:
                 self.levels_widget.set_image(self.parent.processed_img)
             levels = self.levels_widget.get_params()
-            level_str = f"B:{levels['black']} Îł:{levels['gamma']:.1f} W:{levels['white']}"
+            level_str = f"B:{levels['black']} M:{levels['midtones']:.3f} W:{levels['white']}"
             self.parent.add_thumbnail(f"Levels ({level_str})", self.parent.processed_img)
             self.parent.log("Levels applied.")
         self._session_snapshot = self._capture_snapshot()
@@ -13630,7 +13630,7 @@ class LevelsWindow(QDialog):
             if self.parent.processed_img is not None:
                 self.levels_widget.set_image(self.parent.processed_img)
             levels = self.levels_widget.get_params()
-            level_str = f"B:{levels['black']} Îł:{levels['gamma']:.1f} W:{levels['white']}"
+            level_str = f"B:{levels['black']} M:{levels['midtones']:.3f} W:{levels['white']}"
             self.parent.add_thumbnail(f"Levels ({level_str})", self.parent.processed_img)
             self.parent.log("Levels applied.")
 
@@ -13650,7 +13650,7 @@ class LevelsWidget(QFrame):
         self.setMinimumHeight(350)
 
         self.black = 0
-        self.gamma = 1.0
+        self.midtones = 0.5
         self.white = 255
 
         self.dragging = None
@@ -13683,12 +13683,6 @@ class LevelsWidget(QFrame):
         self.hist_b = cv2.calcHist([b], [0], None, [256], [0, 256]).flatten()
 
         self.update()
-
-    def _gamma_to_norm(self):
-        return float(np.clip(0.5 - (np.log2(max(0.1, self.gamma)) / 4.0), 0.0, 1.0))
-
-    def _norm_to_gamma(self, norm):
-        return float(np.clip(2.0 ** ((0.5 - norm) * 4.0), 0.1, 5.0))
 
     def _plot_rect(self):
         left = 12
@@ -13870,15 +13864,14 @@ class LevelsWidget(QFrame):
         bx = int(left + (right - left) * ((self.black - view_min) / view_span))
         wx = int(left + (right - left) * ((self.white - view_min) / view_span))
 
-        gamma_norm = self._gamma_to_norm()
-        gamma_bin = float(np.clip(gamma_norm * 255.0, 0.0, 255.0))
-        gx = int(left + (right - left) * ((gamma_bin - view_min) / view_span))
+        midtones_bin = self.black + (self.white - self.black) * self.midtones
+        gx = int(left + (right - left) * ((midtones_bin - view_min) / view_span))
 
         p.setPen(QPen(QColor("#3d3d3d"), 1))
         p.drawLine(left, histogram_bottom, right, top)
 
         draw_triangle(bx, "black")
-        draw_triangle(gx, "gamma")
+        draw_triangle(gx, "midtones")
         draw_triangle(wx, "white")
 
     def mousePressEvent(self, e):
@@ -13897,15 +13890,14 @@ class LevelsWidget(QFrame):
         bx = int(left + (right - left) * ((self.black - view_min) / view_span))
         wx = int(left + (right - left) * ((self.white - view_min) / view_span))
 
-        gamma_norm = self._gamma_to_norm()
-        gamma_bin = float(np.clip(gamma_norm * 255.0, 0.0, 255.0))
-        gx = int(left + (right - left) * ((gamma_bin - view_min) / view_span))
+        midtones_bin = self.black + (self.white - self.black) * self.midtones
+        gx = int(left + (right - left) * ((midtones_bin - view_min) / view_span))
 
         if abs(x - bx) < 12:
             self.dragging = "black"
 
         elif abs(x - gx) < 12:
-            self.dragging = "gamma"
+            self.dragging = "midtones"
 
         elif abs(x - wx) < 12:
             self.dragging = "white"
@@ -13945,9 +13937,10 @@ class LevelsWidget(QFrame):
         elif self.dragging == "white":
             self.white = max(val, self.black + 1)
 
-        elif self.dragging == "gamma":
-            gamma_norm = np.clip(val / 255.0, 0.0, 1.0)
-            self.gamma = self._norm_to_gamma(gamma_norm)
+        elif self.dragging == "midtones":
+            input_level = view_min + ((x - left) / max(1, right - left)) * view_span
+            span = max(1.0, float(self.white - self.black))
+            self.midtones = float(np.clip((input_level - self.black) / span, 0.0, 1.0))
 
         self.update()
 
@@ -13990,7 +13983,7 @@ class LevelsWidget(QFrame):
 
         return {
             "black": self.black,
-            "gamma": self.gamma,
+            "midtones": self.midtones,
             "white": self.white,
             "channels": channels,
             "autostretch": bool(self.check_autostretch is not None and self.check_autostretch.isChecked()),

@@ -97,8 +97,11 @@ splash.close()
 app.processEvents()
 module.load_config = lambda: {}
 module.save_config = lambda *args, **kwargs: None
-window = module.AstroApp()
 try:
+    window = module.AstroApp()
+    assert window.levels_window.spin_midtones.minimum() == 0.0
+    assert window.levels_window.spin_midtones.maximum() == 1.0
+    assert window.levels_window.levels_widget.get_params()["midtones"] == 0.5
     window.show()
     app.processEvents()
     assert window.ai_assistant_panel.input_text.isEnabled()

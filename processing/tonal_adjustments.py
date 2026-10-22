@@ -28,29 +28,64 @@ def _to_uint8_lut_source(img: np.ndarray) -> np.ndarray:
     return np.clip(arr, 0, 255).astype(np.uint8)
 
 
-def apply_levels(img: np.ndarray, black: int, gamma: float, white: int, channels=None) -> np.ndarray:
+def _mtf(values: np.ndarray, midtones: float, shadows: float, highlights: float) -> np.ndarray:
+    """Apply the standard midtones-transfer function to normalized pixels."""
+    source = np.asarray(values, dtype=np.float32)
+    result = np.zeros_like(source)
+    low = source <= shadows
+    if highlights <= shadows:
+        np.logical_not(low, out=low)
+        result[low] = 1.0
+        return result
+
+    high = source >= highlights
+    xp = np.clip((source - shadows) / (highlights - shadows), 0.0, 1.0)
+    numerator = xp * (midtones - 1.0)
+    denominator = xp * (2.0 * midtones - 1.0) - midtones
+    np.divide(numerator, denominator, out=result, where=denominator != 0.0)
+    np.clip(result, 0.0, 1.0, out=result)
+    np.copyto(result, 0.0, where=low)
+    np.copyto(result, 1.0, where=high)
+    return result
+
+
+def apply_levels(img: np.ndarray, black: int, midtones: float, white: int, channels=None) -> np.ndarray:
+    """Apply black/white points and Siril-style MTF midtones balance."""
     if img is None:
         return None
 
     if channels is not None and len(channels) == 0:
         return img.copy()
 
+    black = int(np.clip(black, 0, 255))
+    white = int(np.clip(white, 0, 255))
+    midtones = float(np.clip(midtones, 0.0, 1.0))
+    shadows = black / 255.0
+    highlights = white / 255.0
     is_integer = np.issubdtype(img.dtype, np.integer)
     value_range = float(np.iinfo(img.dtype).max) if is_integer else 1.0
+
+    # Identity is common during image loading. Preserve integer pixels exactly
+    # and sanitize selected float channels exactly as the normal MTF path does.
+    all_channels_selected = channels is None or img.ndim == 2 or (
+        img.ndim == 3
+        and len({{"b": 0, "g": 1, "r": 2}.get(name.lower()) for name in channels} - {None})
+        == img.shape[2]
+    )
+    if black == 0 and white == 255 and midtones == 0.5 and all_channels_selected:
+        if is_integer:
+            return img.copy()
+        result = img.astype(np.float32, copy=True)
+        np.nan_to_num(result, copy=False, nan=0.0, posinf=1.0, neginf=0.0)
+        np.clip(result, 0.0, 1.0, out=result)
+        return result.astype(img.dtype, copy=False)
 
     def apply_to_channel(channel_img):
         img_f = channel_img.astype(np.float32)
         if value_range != 1.0:
             img_f /= value_range
         np.nan_to_num(img_f, copy=False, nan=0.0, posinf=1.0, neginf=0.0)
-        if black != 0:
-            img_f -= black / 255.0
-        span = max(1e-6, (white - black) / 255.0)
-        if span != 1.0:
-            img_f /= span
-        np.clip(img_f, 0, 1, out=img_f)
-        if gamma != 1.0:
-            np.power(img_f, 1.0 / max(0.01, gamma), out=img_f)
+        img_f = _mtf(img_f, midtones, shadows, highlights)
 
         if is_integer:
             img_f *= value_range

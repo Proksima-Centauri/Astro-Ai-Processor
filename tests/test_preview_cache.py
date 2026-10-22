@@ -9,7 +9,7 @@ def test_curve_edit_reuses_upstream_results_and_matches_exact_pipeline():
     image = np.random.default_rng(8).random((80, 100, 3), dtype=np.float32)
     cache = PreviewCache()
     basic = {"exposure": .2}
-    levels = dict(black=8, gamma=1.7, white=240, channels=["r", "g", "b"])
+    levels = dict(black=8, midtones=.3, white=240, channels=["r", "g", "b"])
     curves = dict(points=[(90, 120)], channels=["r", "g", "b"], curve_mode="linear")
     first, _ = cache.process(image, 1, basic, {}, {}, levels, curves)
     upstream = {name: cache._stages[name][1] for name in ("color", "ghs", "levels")}
@@ -18,7 +18,7 @@ def test_curve_edit_reuses_upstream_results_and_matches_exact_pipeline():
     assert not np.array_equal(first, second)
     assert all(cache._stages[name][1] is value for name, value in upstream.items())
     reference = ColorProcessor.apply_camera_raw_and_hsl(image, basic, {}, {})
-    reference = apply_levels(reference, 8, 1.7, 240, levels["channels"])
+    reference = apply_levels(reference, 8, .3, 240, levels["channels"])
     reference = apply_curves_lut(reference, curves["points"], curves["channels"])
     # A one-code input difference can span two codes on a steep display curve.
     np.testing.assert_allclose(second.astype(float), reference.astype(float), atol=2, rtol=0)
@@ -27,7 +27,7 @@ def test_curve_edit_reuses_upstream_results_and_matches_exact_pipeline():
 def test_document_invalidation_rebuilds_sources_and_downstream():
     cache = PreviewCache()
     image = np.full((5, 6, 3), .2, dtype=np.float32)
-    levels = dict(black=0, gamma=1, white=255, channels=None)
+    levels = dict(black=0, midtones=.5, white=255, channels=None)
     before, _ = cache.process(image, cache.generation, {}, {}, {}, levels, None)
     image.fill(.7)
     cache.clear()
@@ -57,5 +57,5 @@ def test_preview_luts_handle_nonfinite_pixels_without_invalid_indices():
         params = dict(stretch_factor=2, colour_stretch_model=model)
         result = cache.apply_ghs(image, params)
         assert np.isfinite(result).all()
-    levels = dict(black=8, gamma=1.7, white=240, channels=["r", "g", "b"])
+    levels = dict(black=8, midtones=.3, white=240, channels=["r", "g", "b"])
     assert np.isfinite(cache.apply_levels(image, levels)).all()

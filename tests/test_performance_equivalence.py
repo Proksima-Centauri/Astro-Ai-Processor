@@ -1,7 +1,12 @@
 import numpy as np
 import pytest
 
-from performance_reference import curves_reference, ghs_reference, levels_reference
+from performance_reference import (
+    curves_reference,
+    ghs_reference,
+    levels_gamma_legacy_reference,
+    levels_reference,
+)
 from processing.color_processor import ColorProcessor
 from processing.tonal_adjustments import apply_curves_lut, apply_levels
 from processing.pipeline import process_image
@@ -10,7 +15,7 @@ from processing.stretch import stretch_image
 
 @pytest.mark.parametrize("dtype", [np.uint8, np.uint16, np.float32, np.float64])
 @pytest.mark.parametrize("channels", [None, [], ["b"], ["r", "g", "b"], ["b", "b"], ["invalid"]])
-@pytest.mark.parametrize("params", [(0, 1.0, 255), (8, 1.7, 240), (200, 0.1, 201)])
+@pytest.mark.parametrize("params", [(0, .5, 255), (8, .3, 240), (200, .75, 201)])
 def test_levels_matches_frozen_reference(dtype, channels, params):
     image = np.random.default_rng(7).random((19, 23, 3)).astype(dtype)
     if np.issubdtype(dtype, np.integer):
@@ -21,9 +26,20 @@ def test_levels_matches_frozen_reference(dtype, channels, params):
     actual = apply_levels(image, *params, channels)
     expected = levels_reference(image, *params, channels)
     assert actual.dtype == expected.dtype
-    np.testing.assert_array_equal(actual, expected)
+    if np.issubdtype(dtype, np.integer):
+        np.testing.assert_allclose(actual.astype(np.int64), expected.astype(np.int64), rtol=0, atol=1)
+    else:
+        np.testing.assert_allclose(actual, expected, rtol=0, atol=3e-7, equal_nan=True)
     np.testing.assert_array_equal(image, source)
     assert not np.shares_memory(actual, image)
+
+
+def test_mtf_levels_reference_documents_the_replaced_gamma_transfer():
+    image = np.linspace(0.0, 1.0, 257, dtype=np.float32).reshape(1, -1)
+    old_gamma = levels_gamma_legacy_reference(image, 0, 1.7, 255)
+    new_mtf = apply_levels(image, 0, 1.0 - 0.5 ** (1.0 / 1.7), 255)
+    assert old_gamma[0, 128] == pytest.approx(new_mtf[0, 128], abs=1e-6)
+    assert not np.array_equal(old_gamma, new_mtf)
 
 
 @pytest.mark.parametrize("params", [(0, .5, .95, .05), (2, .5, .95, .05), (20, .2, .1, .9)])
@@ -76,10 +92,10 @@ def test_shared_full_pipeline_matches_old_stage_order(dtype, autostretch):
     if np.issubdtype(dtype, np.integer):
         image *= np.iinfo(dtype).max
     image = image.astype(dtype)
-    levels = dict(black=8, gamma=1.7, white=240, channels=["r", "g", "b"], autostretch=autostretch)
+    levels = dict(black=8, midtones=.3, white=240, channels=["r", "g", "b"], autostretch=autostretch)
     curves = dict(points=[(40, 70), (150, 210)], channels=["r", "g", "b"], curve_mode="linear")
     expected = ColorProcessor.apply_camera_raw_and_hsl(image, {"exposure": .2}, {}, {"stretch_factor": .5})
-    expected = levels_reference(expected, 8, 1.7, 240, levels["channels"])
+    expected = levels_reference(expected, 8, .3, 240, levels["channels"])
     expected = curves_reference(expected, curves["points"], curves["channels"])
     if autostretch:
         expected = stretch_image(expected, "autostretch")

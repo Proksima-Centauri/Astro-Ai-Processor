@@ -55,11 +55,11 @@ class PreviewCache:
         return result, curve_key
 
     def apply_levels(self, image, params):
-        if params["black"] == 0 and params["gamma"] == 1.0 and params["white"] == 255:
+        if params["black"] == 0 and params["midtones"] == 0.5 and params["white"] == 255:
             return image
         lut = self.stage("levels_lut", parameter_key(params), lambda: apply_levels(
             np.linspace(0, 1, 65536, dtype=np.float32).reshape(1, -1),
-            params["black"], params["gamma"], params["white"]))
+            params["black"], params["midtones"], params["white"]))
         out = image.copy()
         for name in params["channels"] if params["channels"] is not None else ("b", "g", "r"):
             index = {"b": 0, "g": 1, "r": 2}.get(name.lower())

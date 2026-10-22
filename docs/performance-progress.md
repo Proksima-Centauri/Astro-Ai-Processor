@@ -110,3 +110,26 @@ remain immutable. Background extraction also removes a duplicate source copy.
 
 Frames in this throughput benchmark share the same source; existing correctness
 tests additionally compare heterogeneous frame stacks against NumPy references.
+
+## Step 5: Levels now uses MTF midtones
+
+Replaced the previous power-law Gamma stage with the MTF transfer used by Siril's
+histogram Levels: black/white set normalized shadows/highlights, while `m` is a
+direct `Midtones` value in `[0, 1]`. The transform follows the mathematical MTF
+definition independently implemented in `processing/tonal_adjustments.py`; no
+Siril source was copied or translated. `m = 0.5` is neutral between the selected
+endpoints. The GUI spinbox and histogram handle both edit `m` directly.
+
+This is an intentional Levels output change: same slider numbers from the old
+Gamma field no longer mean the same transfer, and `Midtones` values follow MTF
+semantics. Neutral settings preserve in-range pixels and dtype; black/white
+clipping and selected-channel behavior remain. Unit and pipeline tests compare
+against a separately written formula reference, including integer quantization,
+float exceptional values, channel selections and preview LUT behavior.
+All formulas and UI changes are authored locally under this project's GPLv3.
+
+For context, the current exact full-resolution implementation on the baseline
+24 MP host takes ~369 ms for neutral Levels (copy/sanitize fast path) and ~1512
+ms for active Levels (B=8, M=0.3, W=240). These are timings for the new MTF
+semantics; direct speed comparison with the retired power-gamma setting is not
+an output-equivalent comparison. The 1200 px cached preview applies the MTF LUT.

@@ -10,7 +10,7 @@ from processing.tonal_adjustments import apply_curves_lut, apply_levels
 
 def process_image(image, basic_params, hsl_params, ghs_params, levels, curves=None, curves_visible=True):
     result = ColorProcessor.apply_camera_raw_and_hsl(image, basic_params, hsl_params, ghs_params)
-    result = apply_levels(result, levels["black"], levels["gamma"], levels["white"], levels["channels"])
+    result = apply_levels(result, levels["black"], levels["midtones"], levels["white"], levels["channels"])
     if curves and curves_visible:
         result = apply_curves_lut(result, curves["points"], curves["channels"], curves["curve_mode"])
     if levels.get("autostretch", False):

@@ -83,7 +83,7 @@ def test_image_processing_worker_runs_pipeline_off_the_caller_thread():
             "basic_params": {"exposure": 1.0},
             "hsl_params": None,
             "ghs_params": None,
-            "levels": {"black": 0, "gamma": 1.0, "white": 255, "channels": None},
+            "levels": {"black": 0, "midtones": 0.5, "white": 255, "channels": None},
             "curves": None,
             "curves_visible": True,
         }
@@ -113,7 +113,7 @@ def test_image_processing_worker_commits_autostretch_into_its_result():
         "basic_params": {"exposure": 1.0},
         "hsl_params": None,
         "ghs_params": None,
-        "levels": {"black": 0, "gamma": 1.0, "white": 255, "channels": None},
+        "levels": {"black": 0, "midtones": 0.5, "white": 255, "channels": None},
         "curves": None,
         "curves_visible": True,
     }

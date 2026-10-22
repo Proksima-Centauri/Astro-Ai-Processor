@@ -26,12 +26,12 @@ def measure(function, repeats=5):
 if __name__ == "__main__":
     image = np.random.default_rng(7).random((4000, 6000, 3), dtype=np.float32)
     output = {}
-    for name, params in (("neutral", (0, 1.0, 255)), ("active", (8, 1.7, 240))):
+    for name, params in (("neutral", (0, .5, 255)), ("active", (8, .3, 240))):
         old = lambda: levels_reference(image, *params, ["r", "g", "b"])
         new = lambda: apply_levels(image, *params, ["r", "g", "b"])
         output["levels_" + name] = {"reference": measure(old, 3), "optimized": measure(new, 3)}
     small = PreviewCache.resize(image)
-    levels = dict(black=8, gamma=1.7, white=240, channels=["r", "g", "b"])
+    levels = dict(black=8, midtones=.3, white=240, channels=["r", "g", "b"])
     curves = dict(points=[(90, 120)], channels=["r", "g", "b"], curve_mode="linear")
     cache = PreviewCache()
     cache.process(small, 1, {}, {}, {}, levels, curves)
@@ -39,7 +39,7 @@ if __name__ == "__main__":
         curves["points"] = [(90, 120 if curves["points"][0][1] != 120 else 125)]
         return cache.process(small, 1, {}, {}, {}, levels, curves)
     def drag_levels():
-        levels["gamma"] = 1.5 if levels["gamma"] != 1.5 else 1.7
+        levels["midtones"] = .3 if levels["midtones"] != .3 else .4
         return cache.process(small, 1, {}, {}, {}, levels, curves)
     ghs = {}
     def drag_ghs():
