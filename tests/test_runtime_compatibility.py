@@ -134,9 +134,18 @@ try:
             view.zoom_in()
         view.pan_by(73, -41)
         app.processEvents()
+        compare_slider = window.viewer.slider
+        assert compare_slider.isVisible()
         original_scale = view.transform().m11()
         original_center = view.mapToScene(view.viewport().rect().center())
         original_viewport_size = view.viewport().size()
+        for value in (20, 80, 35, 65, 50):
+            compare_slider.setValue(value)
+            app.processEvents()
+            center = view.mapToScene(view.viewport().rect().center())
+            assert abs(center.x() - original_center.x()) < 1e-6
+            assert abs(center.y() - original_center.y()) < 1e-6
+            assert compare_slider.isVisible()
         for mode in ("autostretch", "histogram", "linear"):
             window.apply_stretch(mode=mode, commit=False)
             app.processEvents()
@@ -145,6 +154,23 @@ try:
             assert abs(current_center.y() - original_center.y()) < 1.1, mode
             assert abs(view.transform().m11() - original_scale) < 1e-9, mode
             assert view.viewport().size() == original_viewport_size, mode
+
+        window.show_levels_window()
+        app.processEvents()
+        assert compare_slider.isVisible()
+        window.levels_window._set_midtones(.4)
+        window.levels_window._preview_timer.stop()
+        window.levels_window._emit_live_preview()
+        assert compare_slider.isVisible()
+        window.apply_full_processing_async()
+        assert compare_slider.isVisible()
+        worker = window._processing_worker
+        if worker is not None:
+            assert worker.wait(10000)
+            app.processEvents()
+        assert compare_slider.isVisible()
+        window.levels_window.close()
+        app.processEvents()
 
         window.create_new_layer()
         window.select_layer(window.layer_order[-1])

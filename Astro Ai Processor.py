@@ -16190,6 +16190,15 @@ class SingleViewer(QGraphicsView):
             self._pixmap_item = None
             return
 
+        if self._pixmap_item is not None:
+            current_pixmap = self._pixmap_item.pixmap()
+            if current_pixmap.size() == pix.size():
+                # Compare scrubbing replaces only pixels; keep the scene rect
+                # and scrollbars untouched to avoid cumulative center drift.
+                self._pixmap_item.setPixmap(pix)
+                self.viewport().update()
+                return
+
         current_center = self.mapToScene(self.viewport().rect().center())
         first_update = self._pixmap_item is None
 
@@ -16458,9 +16467,10 @@ class BlendViewer(QWidget):
         self.view.installEventFilter(self)
         self.view.viewport().installEventFilter(self)
 
-    def set_before(self, pix: QPixmap):
+    def set_before(self, pix: QPixmap, *, clear_after: bool = True):
         self.pix_before = pix
-        self.pix_after = None
+        if clear_after:
+            self.pix_after = None
         self._refresh_compare_slider_visibility()
         self.update_blend()
 
@@ -18156,7 +18166,10 @@ class AstroApp(QMainWindow):
         if base_img is None:
             return
         display_base_img = self.apply_channel_visibility(base_img)
-        self.viewer.set_before(np_to_qpixmap(display_base_img))
+        self.viewer.set_before(
+            np_to_qpixmap(display_base_img),
+            clear_after=not self.viewer.compare_enabled,
+        )
 
         basic_params = self._inject_background_calibration(self.camera_raw_panel.get_params())
         hsl_params = self.hsl_panel.get_params()
@@ -18201,7 +18214,10 @@ class AstroApp(QMainWindow):
         # Full-resolution pixels are processed in the worker; Before rendering
         # only needs a screen-sized image on the GUI thread.
         display_base_img = self.apply_channel_visibility(PreviewCache.resize(base_img))
-        self.viewer.set_before(np_to_qpixmap(display_base_img))
+        self.viewer.set_before(
+            np_to_qpixmap(display_base_img),
+            clear_after=not self.viewer.compare_enabled,
+        )
         self._pending_processing_job = {
             "revision": self._processing_revision,
             "image": base_img,

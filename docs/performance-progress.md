@@ -133,3 +133,12 @@ For context, the current exact full-resolution implementation on the baseline
 ms for active Levels (B=8, M=0.3, W=240). These are timings for the new MTF
 semantics; direct speed comparison with the retired power-gamma setting is not
 an output-equivalent comparison. The 1200 px cached preview applies the MTF LUT.
+
+## Step 6: stable Before/After scrubbing
+
+Updating a same-sized viewer pixmap no longer resets the QGraphicsView scene
+rectangle/scrollbars. Parameter processing refreshes the Before image without
+clearing the existing After image while comparison mode is enabled, keeping its
+divider available as Levels previews and background results refresh. Regression
+coverage repeatedly moves the divider after pan/zoom and verifies the viewport
+center and Levels comparison visibility remain stable.
