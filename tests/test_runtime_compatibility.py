@@ -1,5 +1,6 @@
 import ast
 import importlib.util
+import json
 import os
 import subprocess
 import sys
@@ -70,6 +71,24 @@ def test_failed_save_keeps_the_previous_document_path(tmp_path):
     APP_MODULE.AstroApp.save_image_to_path(app, str(tmp_path / "missing-folder" / "output.png"))
 
     assert app.current_save_path == "previous.png"
+
+
+def test_legacy_plate_optics_are_removed_from_config(tmp_path, monkeypatch):
+    config_path = tmp_path / "legacy-config.json"
+    config_path.write_text('{"pixel_size_um": 4.3, "focal_length_mm": 446.0, "api_key": "old"}')
+    monkeypatch.setattr(APP_MODULE, "get_config_path", lambda: str(config_path))
+    monkeypatch.setattr(APP_MODULE, "get_project_config_path", lambda: str(tmp_path / "missing-project"))
+    monkeypatch.setattr(APP_MODULE, "get_legacy_config_path", lambda: str(tmp_path / "missing-legacy"))
+
+    config = APP_MODULE.load_config()
+
+    assert "pixel_size_um" not in config
+    assert "focal_length_mm" not in config
+    assert "api_key" not in config
+    migrated = json.loads(config_path.read_text())
+    assert "pixel_size_um" not in migrated
+    assert "focal_length_mm" not in migrated
+    assert "api_key" not in migrated
 
 
 GUI_SMOKE_SCRIPT = r'''
@@ -192,6 +211,9 @@ try:
 
         assert hasattr(window._get_plate_solve_dialog(), "edit_skyshot_binary")
         assert hasattr(window._get_plate_solve_dialog(), "edit_skyshot_index")
+        plate_dialog = window._get_plate_solve_dialog()
+        assert "pixel_size_um" not in plate_dialog.get_parameters()
+        assert "focal_length_mm" not in plate_dialog.get_parameters()
 
         fly = window.fly3d_dialog
         zone_map = fly.zone_widget.zone_map

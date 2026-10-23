@@ -106,7 +106,7 @@ Example fields:
 
 - tool paths (`starnet_path`, `deepsnr_path`),
 - deepSNR args (`deepsnr_args`),
-- plate solving (`skyshot_binary`, `skyshot_index`, `pixel_size_um`, `focal_length_mm`),
+- plate solving (`skyshot_binary`, `skyshot_index`),
 - AI setting (`openrouter_api_key`),
 - language, theme, core count, workspace.
 

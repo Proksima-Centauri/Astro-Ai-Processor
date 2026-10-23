@@ -1100,8 +1100,7 @@ class StarShrinkDialog(QDialog):
 
 
 class PlateSolveDialog(QDialog):
-    def __init__(self, parent=None, pixel_size_um: float = 5.4,
-                 focal_length_mm: float = 800.0):
+    def __init__(self, parent=None):
         super().__init__(parent)
         apply_dialog_window_flags(self)
         self.setWindowTitle("Plate Solving")
@@ -1113,26 +1112,6 @@ class PlateSolveDialog(QDialog):
         self.lbl_info = QLabel("Skyshot Solver — lokalny plate solving. Wybierz solver i indeks katalogu.")
         self.lbl_info.setWordWrap(True)
         layout.addWidget(self.lbl_info)
-
-        grid = QGridLayout()
-        grid.setHorizontalSpacing(10)
-        grid.setVerticalSpacing(10)
-        grid.addWidget(QLabel("Pixel size (Âµm):"), 0, 0)
-        self.spin_pixel_size = QDoubleSpinBox()
-        self.spin_pixel_size.setRange(0.1, 50.0)
-        self.spin_pixel_size.setSingleStep(0.1)
-        self.spin_pixel_size.setValue(pixel_size_um)
-        self.spin_pixel_size.setDecimals(2)
-        grid.addWidget(self.spin_pixel_size, 0, 1)
-
-        grid.addWidget(QLabel("Focal length (mm):"), 1, 0)
-        self.spin_focal_length = QDoubleSpinBox()
-        self.spin_focal_length.setRange(10.0, 10000.0)
-        self.spin_focal_length.setSingleStep(1.0)
-        self.spin_focal_length.setValue(focal_length_mm)
-        self.spin_focal_length.setDecimals(1)
-        grid.addWidget(self.spin_focal_length, 1, 1)
-        layout.addLayout(grid)
 
         self.edit_skyshot_binary = QLineEdit(str(getattr(parent, "skyshot_binary", "") or ""))
         self.edit_skyshot_binary.setPlaceholderText("skyshot / skyshot.exe (PATH lub pełna ścieżka)")
@@ -1164,8 +1143,6 @@ class PlateSolveDialog(QDialog):
 
     def get_parameters(self):
         return {
-            "pixel_size_um": float(self.spin_pixel_size.value()),
-            "focal_length_mm": float(self.spin_focal_length.value()),
             "overlay_enabled": self.chk_overlay.isChecked(),
             "skyshot_binary": self.edit_skyshot_binary.text().strip(),
             "skyshot_index": self.edit_skyshot_index.text().strip(),
@@ -1181,9 +1158,9 @@ class PlateSolveDialog(QDialog):
         if path:
             self.edit_skyshot_index.setText(path)
 
-    def set_parameters(self, pixel_size_um: float, focal_length_mm: float):
-        self.spin_pixel_size.setValue(float(pixel_size_um))
-        self.spin_focal_length.setValue(float(focal_length_mm))
+    def set_parameters(self, skyshot_binary: str = "", skyshot_index: str = ""):
+        self.edit_skyshot_binary.setText(str(skyshot_binary or ""))
+        self.edit_skyshot_index.setText(str(skyshot_index or ""))
 
 
 class CircularProgressBar(QWidget):
@@ -8537,11 +8514,9 @@ class PlateSolveWorker(QThread):
     progress_signal = pyqtSignal(str, int, int)
     finished_signal = pyqtSignal(object, str)
 
-    def __init__(self, img, pixel_size_um, focal_length_mm, solver_path="", index_path=""):
+    def __init__(self, img, solver_path="", index_path=""):
         super().__init__()
         self.img = img
-        self.pixel_size_um = pixel_size_um
-        self.focal_length_mm = focal_length_mm
         self.solver_path = solver_path
         self.index_path = index_path
 
@@ -8558,11 +8533,6 @@ class PlateSolveWorker(QThread):
             self.finished_signal.emit(result, "")
         except Exception as exc:
             self.finished_signal.emit(None, str(exc))
-
-    def _compute_scale(self):
-        if self.pixel_size_um <= 0 or self.focal_length_mm <= 0:
-            raise RuntimeError("Pixel size and focal length must be positive values.")
-        return 206.265 * self.pixel_size_um / self.focal_length_mm
 
     def _parse_wcs_header(self, path):
         try:
@@ -8715,12 +8685,15 @@ class PlateSolveWorker(QThread):
         scale_y = math.hypot(cd21, cd22) * 3600.0
 
         if scale is None:
-            scale = (scale_x + scale_y) / 2.0 if scale_x > 0 and scale_y > 0 else self._compute_scale()
+            scale = (scale_x + scale_y) / 2.0 if scale_x > 0 and scale_y > 0 else None
         else:
             try:
                 scale = float(scale)
             except Exception:
-                scale = (scale_x + scale_y) / 2.0 if scale_x > 0 and scale_y > 0 else self._compute_scale()
+                scale = (scale_x + scale_y) / 2.0 if scale_x > 0 and scale_y > 0 else None
+
+        if scale is None or not math.isfinite(scale) or scale <= 0:
+            raise RuntimeError("Solver result does not contain a valid image scale.")
 
         if rotation is None:
             rotation = math.degrees(math.atan2(cd12, cd11)) if cd11 else 0.0
@@ -12527,8 +12500,6 @@ def load_config() -> dict:
         "accent_name": "Ultra Blue",
         "skyshot_binary": "",
         "skyshot_index": "",
-        "pixel_size_um": 5.4,
-        "focal_length_mm": 800.0,
         "openrouter_api_key": "",
         "language": "pl",
         "processor_cores": max(1, (os.cpu_count() or 4) // 2),
@@ -12553,7 +12524,12 @@ def load_config() -> dict:
             config = default_config.copy()
             if isinstance(loaded_config, dict):
                 config.update(loaded_config)
+            legacy_plate_config = any(
+                key in config for key in ("api_key", "pixel_size_um", "focal_length_mm")
+            )
             config.pop("api_key", None)
+            config.pop("pixel_size_um", None)
+            config.pop("focal_length_mm", None)
             if config.get("denoise_model_path") and not os.path.exists(config["denoise_model_path"]):
                 config["denoise_model_path"] = None
             if config.get("bg_removal_model_path") and not os.path.exists(config["bg_removal_model_path"]):
@@ -12597,7 +12573,7 @@ def load_config() -> dict:
                     if str(name).strip()
                 ]
 
-            if source_path in {project_config_path, legacy_config_path}:
+            if source_path in {project_config_path, legacy_config_path} or legacy_plate_config:
                 try:
                     os.makedirs(os.path.dirname(config_path), exist_ok=True)
                     with open(config_path, 'w') as f:
@@ -12618,8 +12594,6 @@ def load_config() -> dict:
 
 def save_config(denoise_path: str = None, bg_removal_path: str = None,
                 dark_mode: bool = True, starnet_path: str = None,
-                api_key: str = "", pixel_size_um: float = 5.4,
-                focal_length_mm: float = 800.0,
                 starnet_stride: int = 16,
                 theme_name: str = None,
                 language: str = None,
@@ -12684,8 +12658,6 @@ def save_config(denoise_path: str = None, bg_removal_path: str = None,
         "accent_name": normalize_accent_name(accent_name),
         "skyshot_binary": APP_PREFERENCES.get("skyshot_binary", ""),
         "skyshot_index": APP_PREFERENCES.get("skyshot_index", ""),
-        "pixel_size_um": pixel_size_um,
-        "focal_length_mm": focal_length_mm,
         "openrouter_api_key": str(openrouter_api_key or "").strip(),
         "language": language,
         "processor_cores": int(processor_cores or 1),
@@ -18279,9 +18251,6 @@ class AstroApp(QMainWindow):
             self.bg_removal_model_path,
             self.dark_mode,
             self.starnet_path,
-            self.plate_solve_api_key,
-            self.plate_solve_pixel_size_um,
-            self.plate_solve_focal_length_mm,
             self.starnet_stride,
             deconvolution_path=self.deconvolution_model_path,
             deconvolution_stellar_path=self.deconvolution_stellar_model_path,
@@ -18306,9 +18275,6 @@ class AstroApp(QMainWindow):
             self.bg_removal_model_path,
             self.dark_mode,
             self.starnet_path,
-            self.plate_solve_api_key,
-            self.plate_solve_pixel_size_um,
-            self.plate_solve_focal_length_mm,
             self.starnet_stride,
         )
         self._update_models_label()
@@ -18331,9 +18297,6 @@ class AstroApp(QMainWindow):
             self.bg_removal_model_path,
             self.dark_mode,
             self.starnet_path,
-            self.plate_solve_api_key,
-            self.plate_solve_pixel_size_um,
-            self.plate_solve_focal_length_mm,
             self.starnet_stride,
             deepsnr_path=self.deepsnr_path,
             deepsnr_args=self.deepsnr_args,
@@ -18374,9 +18337,6 @@ class AstroApp(QMainWindow):
             self.bg_removal_model_path,
             self.dark_mode,
             self.starnet_path,
-            self.plate_solve_api_key,
-            self.plate_solve_pixel_size_um,
-            self.plate_solve_focal_length_mm,
             self.starnet_stride,
             deepsnr_path=self.deepsnr_path,
             deepsnr_args=self.deepsnr_args,
@@ -18761,13 +18721,10 @@ class AstroApp(QMainWindow):
         self.onnx_provider = config.get("onnx_provider", "Auto") or "Auto"
         self.dark_mode = self.theme_name.lower() != "light"
 
-        self.plate_solve_api_key = ""
         self.skyshot_binary = str(config.get("skyshot_binary") or "")
         self.skyshot_index = str(config.get("skyshot_index") or "")
         APP_PREFERENCES["skyshot_binary"] = self.skyshot_binary
         APP_PREFERENCES["skyshot_index"] = self.skyshot_index
-        self.plate_solve_pixel_size_um = float(config.get("pixel_size_um") or 5.4)
-        self.plate_solve_focal_length_mm = float(config.get("focal_length_mm") or 800.0)
         self.openrouter_api_key = str(config.get("openrouter_api_key") or "").strip()
         self.update_api_base = str(
             config.get("update_api_base") or os.environ.get("ASTRO_UPDATE_API_BASE", "https://proksima-centauri.github.io/Astro-Ai-Processor")
@@ -19135,15 +19092,11 @@ class AstroApp(QMainWindow):
 
     def _get_plate_solve_dialog(self):
         if self.plate_solve_dialog is None:
-            self.plate_solve_dialog = PlateSolveDialog(
-                self,
-                pixel_size_um=self.plate_solve_pixel_size_um,
-                focal_length_mm=self.plate_solve_focal_length_mm,
-            )
+            self.plate_solve_dialog = PlateSolveDialog(self)
         else:
             self.plate_solve_dialog.set_parameters(
-                self.plate_solve_pixel_size_um,
-                self.plate_solve_focal_length_mm,
+                self.skyshot_binary,
+                self.skyshot_index,
             )
         return self.plate_solve_dialog
 
@@ -21159,9 +21112,6 @@ class AstroApp(QMainWindow):
             self.bg_removal_model_path,
             self.dark_mode,
             self.starnet_path,
-            self.plate_solve_api_key,
-            self.plate_solve_pixel_size_um,
-            self.plate_solve_focal_length_mm,
             self.starnet_stride,
             theme_name=self.theme_name,
             accent_name=self.accent_name,
@@ -21179,9 +21129,6 @@ class AstroApp(QMainWindow):
             self.bg_removal_model_path,
             self.dark_mode,
             self.starnet_path,
-            self.plate_solve_api_key,
-            self.plate_solve_pixel_size_um,
-            self.plate_solve_focal_length_mm,
             self.starnet_stride,
             theme_name=self.theme_name,
             accent_name=self.accent_name,
@@ -22108,9 +22055,6 @@ class AstroApp(QMainWindow):
             self.bg_removal_model_path,
             self.dark_mode,
             self.starnet_path,
-            self.plate_solve_api_key,
-            self.plate_solve_pixel_size_um,
-            self.plate_solve_focal_length_mm,
             self.starnet_stride,
             theme_name=self.theme_name,
             language=self.language,
@@ -22936,9 +22880,6 @@ class AstroApp(QMainWindow):
             self.bg_removal_model_path,
             self.dark_mode,
             self.starnet_path,
-            self.plate_solve_api_key,
-            self.plate_solve_pixel_size_um,
-            self.plate_solve_focal_length_mm,
             self.starnet_stride,
         )
         self.log(f"Home folder set: {self.home_folder}", "success")
@@ -24625,9 +24566,6 @@ class AstroApp(QMainWindow):
             self.bg_removal_model_path,
             self.dark_mode,
             self.starnet_path,
-            self.plate_solve_api_key,
-            self.plate_solve_pixel_size_um,
-            self.plate_solve_focal_length_mm,
             self.starnet_stride,
         )
 
@@ -24714,8 +24652,6 @@ class AstroApp(QMainWindow):
             return
 
         params = dialog.get_parameters()
-        self.plate_solve_pixel_size_um = params["pixel_size_um"]
-        self.plate_solve_focal_length_mm = params["focal_length_mm"]
         self.skyshot_binary = params["skyshot_binary"]
         self.skyshot_index = params["skyshot_index"]
         APP_PREFERENCES["skyshot_binary"] = self.skyshot_binary
@@ -24725,9 +24661,6 @@ class AstroApp(QMainWindow):
             self.bg_removal_model_path,
             self.dark_mode,
             self.starnet_path,
-            self.plate_solve_api_key,
-            self.plate_solve_pixel_size_um,
-            self.plate_solve_focal_length_mm,
             self.starnet_stride,
         )
 
@@ -24747,8 +24680,6 @@ class AstroApp(QMainWindow):
 
         self.plate_solve_worker = PlateSolveWorker(
             self.original_img.copy(),
-            params["pixel_size_um"],
-            params["focal_length_mm"],
             solver_path=self.skyshot_binary,
             index_path=self.skyshot_index,
         )
@@ -24816,7 +24747,7 @@ class AstroApp(QMainWindow):
             elif scale_y > 0:
                 scale = scale_y
             else:
-                scale = self.plate_solve_pixel_size_um * 206.265 / max(1e-6, self.plate_solve_focal_length_mm)
+                return None
 
         rotation = self._header_float(header, "CROTA2", None)
         if rotation is None:
