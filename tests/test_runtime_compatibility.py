@@ -104,6 +104,7 @@ try:
     assert window.levels_window.levels_widget.get_params()["midtones"] == 0.5
     window.show()
     app.processEvents()
+    assert not window.correction_dialog.isVisible()
     assert window.ai_assistant_panel.input_text.isEnabled()
     assert not window.ai_assistant_panel.input_text.isReadOnly()
     window.show_preferences_dialog()

@@ -18833,11 +18833,6 @@ class AstroApp(QMainWindow):
             self.reset_all_sliders,
             parent=self
         )
-
-        self._begin_dialog_compare(self.correction_dialog)
-        self.correction_dialog.show()
-        self.correction_dialog.raise_()
-        self.correction_dialog.activateWindow()
         self.log("Application started.")
         QTimer.singleShot(6000, lambda: self.check_for_new_version(user_initiated=False))
 
