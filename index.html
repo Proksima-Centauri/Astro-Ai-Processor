@@ -645,6 +645,23 @@
       padding-left: 26px;
     }
 
+    .timeline::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 7px;
+      z-index: 0;
+      width: 4px;
+      border-radius: 999px;
+      background: linear-gradient(180deg, var(--accent-1), var(--accent-2));
+      box-shadow: 0 0 12px rgba(59, 167, 255, 0.55);
+      opacity: 0.8;
+      pointer-events: none;
+      transform: scaleY(0);
+      transform-origin: top;
+    }
+
     .timeline::before {
       content: "";
       position: absolute;
@@ -658,7 +675,37 @@
 
     .timeline-item {
       position: relative;
+      z-index: 1;
       padding: 0 0 0 10px;
+    }
+
+    .roadmap.is-animated .timeline-item {
+      opacity: 0;
+      transform: translateY(14px);
+    }
+
+    .roadmap.is-animated.is-visible .timeline::after {
+      animation: roadmap-line-draw 1.25s ease-out both;
+    }
+
+    .roadmap.is-animated.is-visible .timeline-item {
+      animation: roadmap-item-enter 0.5s cubic-bezier(0.2, 0.75, 0.25, 1) both;
+    }
+
+    .roadmap.is-animated.is-visible .timeline-item:nth-child(1) {
+      animation-delay: 0.12s;
+    }
+
+    .roadmap.is-animated.is-visible .timeline-item:nth-child(2) {
+      animation-delay: 0.3s;
+    }
+
+    .roadmap.is-animated.is-visible .timeline-item:nth-child(3) {
+      animation-delay: 0.48s;
+    }
+
+    .roadmap.is-animated.is-visible .timeline-item:nth-child(4) {
+      animation-delay: 0.66s;
     }
 
     .timeline-item::before {
@@ -1037,6 +1084,34 @@
       }
       50% {
         transform: translateX(-50%) translateY(5px);
+      }
+    }
+
+    @keyframes roadmap-line-draw {
+      to { transform: scaleY(1); }
+    }
+
+    @keyframes roadmap-item-enter {
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .roadmap {
+        animation: none;
+      }
+
+      .roadmap.is-animated .timeline-item {
+        opacity: 1;
+        transform: none;
+        animation: none;
+      }
+
+      .roadmap.is-animated .timeline::after {
+        transform: scaleY(1);
+        animation: none;
       }
     }
 
@@ -2198,6 +2273,23 @@
       .catch(() => {
         // Keep the browser-language fallback when IP lookup is unavailable.
       });
+
+    const roadmap = document.querySelector(".roadmap");
+    const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches || false;
+    if (roadmap && !reduceMotion) {
+      roadmap.classList.add("is-animated");
+      if ("IntersectionObserver" in window) {
+        const roadmapObserver = new IntersectionObserver((entries) => {
+          if (entries.some((entry) => entry.isIntersecting)) {
+            roadmap.classList.add("is-visible");
+            roadmapObserver.disconnect();
+          }
+        }, { threshold: 0.2 });
+        roadmapObserver.observe(roadmap);
+      } else {
+        roadmap.classList.add("is-visible");
+      }
+    }
 
     function updateCompareBox(box) {
       const slider = box.querySelector(".compare-slider");
