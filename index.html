@@ -776,6 +776,36 @@
       border-radius: 14px;
       background: rgba(8, 12, 25, 0.42);
       text-align: center;
+      transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+    }
+
+    .download-option.is-detected {
+      border: 2px solid var(--accent-2);
+      background: rgba(59, 167, 255, 0.13);
+      box-shadow: 0 0 0 2px rgba(59, 167, 255, 0.16), 0 12px 30px rgba(0, 0, 0, 0.24);
+      transform: translateY(-2px);
+    }
+
+    .download-recommended {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 24px;
+      padding: 3px 9px;
+      border: 1px solid rgba(64, 214, 180, 0.48);
+      border-radius: 999px;
+      background: rgba(64, 214, 180, 0.12);
+      color: var(--accent-1);
+      font-size: 0.78rem;
+      font-weight: 700;
+    }
+
+    .download-recommended[hidden] {
+      display: none;
+    }
+
+    .download-option.is-detected .btn {
+      box-shadow: 0 0 16px rgba(59, 167, 255, 0.22);
     }
 
     .download-platform {
@@ -1233,7 +1263,8 @@
         <p id="txtDownloadBody">Wybierz system operacyjny, aby pobrać Astro AI Processor dla Windows lub Linux.</p>
       </div>
       <div class="download-options" id="downloadOptions" role="group" aria-label="Pobieranie dla Windows i Linux">
-        <article class="download-option">
+        <article class="download-option" id="downloadOptionWindows">
+          <span class="download-recommended" id="downloadBadgeWindows" role="status" hidden></span>
           <div class="download-platform">
             <svg viewBox="0 0 40 40" role="img" aria-label="Windows">
               <path fill="#00a4ef" d="M3 7.5 17 5.5v13H3z"/>
@@ -1245,7 +1276,8 @@
           </div>
           <a class="btn" id="btnDownloadWindows" href="https://drive.google.com/file/d/1jkeIRXX0zQcV-pzkkf2NF7PR631Mtt-L/view?usp=sharing" target="_blank" rel="noopener noreferrer">Pobierz dla Windows</a>
         </article>
-        <article class="download-option">
+        <article class="download-option" id="downloadOptionLinux">
+          <span class="download-recommended" id="downloadBadgeLinux" role="status" hidden></span>
           <div class="download-platform">
             <img src="assets/website/download/linux.png" alt="" aria-hidden="true">
             <span id="txtDownloadLinux">Linux</span>
@@ -1503,6 +1535,9 @@
         txtDownloadLinux: "Linux",
         btnDownloadLinux: "Pobierz dla Linux",
         txtDownloadOptionsLabel: "Pobieranie dla Windows i Linux",
+        txtDetectedSystem: "Wykryto na tym urządzeniu",
+        txtDownloadDetectedWindows: "Wykryto Windows. Pobieranie dla tego systemu jest wyróżnione poniżej.",
+        txtDownloadDetectedLinux: "Wykryto Linux. Pobieranie dla tego systemu jest wyróżnione poniżej.",
         txtFaqTitle: "FAQ",
         txtFaqQ1: "Jakie systemy operacyjne obsługuje Astro AI Processor?",
         txtFaqA1: "Astro AI Processor obsługuje Linux i Windows. Linki do obu wersji znajdziesz poniżej.",
@@ -1602,6 +1637,9 @@
         txtDownloadLinux: "Linux",
         btnDownloadLinux: "Download for Linux",
         txtDownloadOptionsLabel: "Downloads for Windows and Linux",
+        txtDetectedSystem: "Detected for this device",
+        txtDownloadDetectedWindows: "Windows detected. Its download is highlighted below.",
+        txtDownloadDetectedLinux: "Linux detected. Its download is highlighted below.",
         txtFaqTitle: "FAQ",
         txtFaqQ1: "Which operating systems does Astro AI Processor support?",
         txtFaqA1: "Astro AI Processor supports Linux and Windows. Links to both builds are available below.",
@@ -1701,6 +1739,9 @@
         txtDownloadLinux: "Linux",
         btnDownloadLinux: "Für Linux herunterladen",
         txtDownloadOptionsLabel: "Downloads für Windows und Linux",
+        txtDetectedSystem: "Für dieses Gerät erkannt",
+        txtDownloadDetectedWindows: "Windows erkannt. Der passende Download ist unten hervorgehoben.",
+        txtDownloadDetectedLinux: "Linux erkannt. Der passende Download ist unten hervorgehoben.",
         txtFaqTitle: "FAQ",
         txtFaqQ1: "Welche Betriebssysteme unterstützt Astro AI Processor?",
         txtFaqA1: "Astro AI Processor unterstützt Linux und Windows. Links zu beiden Versionen finden Sie unten.",
@@ -1800,6 +1841,9 @@
         txtDownloadLinux: "Linux",
         btnDownloadLinux: "Descargar para Linux",
         txtDownloadOptionsLabel: "Descargas para Windows y Linux",
+        txtDetectedSystem: "Detectado para este dispositivo",
+        txtDownloadDetectedWindows: "Windows detectado. La descarga correspondiente está resaltada abajo.",
+        txtDownloadDetectedLinux: "Linux detectado. La descarga correspondiente está resaltada abajo.",
         txtFaqTitle: "Preguntas frecuentes",
         txtFaqQ1: "¿Qué sistemas operativos admite Astro AI Processor?",
         txtFaqA1: "Astro AI Processor admite Linux y Windows. Abajo están los enlaces para ambos sistemas.",
@@ -1899,6 +1943,9 @@
         txtDownloadLinux: "Linux",
         btnDownloadLinux: "Télécharger pour Linux",
         txtDownloadOptionsLabel: "Téléchargements pour Windows et Linux",
+        txtDetectedSystem: "Détecté pour cet appareil",
+        txtDownloadDetectedWindows: "Windows détecté. Le téléchargement correspondant est mis en évidence ci-dessous.",
+        txtDownloadDetectedLinux: "Linux détecté. Le téléchargement correspondant est mis en évidence ci-dessous.",
         txtFaqTitle: "Questions fréquentes",
         txtFaqQ1: "Quels systèmes d’exploitation Astro AI Processor prend-il en charge ?",
         txtFaqA1: "Astro AI Processor prend en charge Linux et Windows. Les liens vers les deux versions sont ci-dessous.",
@@ -1943,6 +1990,8 @@
         txtAboutGithubLabel: "Astro AI Processor sur GitHub.",
       },
     };
+
+    let detectedDownloadSystem = null;
 
     function setText(id, value, asHtml = false) {
       const el = document.getElementById(id);
@@ -2015,12 +2064,79 @@
 
       const scrollHint = document.getElementById("scrollHint");
       if (scrollHint) scrollHint.textContent = dict.scrollHint;
+      updateDetectedDownloadUI();
+    }
+
+    function detectSupportedDownloadSystem() {
+      const platform = [
+        navigator.userAgentData?.platform || "",
+        navigator.platform || "",
+        navigator.userAgent || "",
+      ].join(" ").toLowerCase();
+
+      if (/android|iphone|ipad|ipod|mobile|cros|chrome\s?os|chromebook/.test(platform)) return null;
+      if (/windows|win32|win64|winnt/.test(platform)) return "windows";
+      if (/linux/.test(platform)) return "linux";
+      return null;
+    }
+
+    function updateDetectedDownloadUI() {
+      const dict = i18n[document.documentElement.lang] || i18n.pl;
+      const isWindows = detectedDownloadSystem === "windows";
+      const isLinux = detectedDownloadSystem === "linux";
+      const windowsOption = document.getElementById("downloadOptionWindows");
+      const linuxOption = document.getElementById("downloadOptionLinux");
+      const windowsBadge = document.getElementById("downloadBadgeWindows");
+      const linuxBadge = document.getElementById("downloadBadgeLinux");
+
+      if (windowsOption) windowsOption.classList.toggle("is-detected", isWindows);
+      if (linuxOption) linuxOption.classList.toggle("is-detected", isLinux);
+      if (windowsBadge) {
+        windowsBadge.hidden = !isWindows;
+        windowsBadge.textContent = isWindows ? dict.txtDetectedSystem : "";
+      }
+      if (linuxBadge) {
+        linuxBadge.hidden = !isLinux;
+        linuxBadge.textContent = isLinux ? dict.txtDetectedSystem : "";
+      }
+
+      const heroButton = document.getElementById("btnDownloadHero");
+      const downloadBody = document.getElementById("txtDownloadBody");
+      if (isWindows || isLinux) {
+        const detectedLabel = isWindows ? dict.txtDownloadWindows : dict.txtDownloadLinux;
+        if (heroButton) {
+          heroButton.textContent = isWindows ? dict.btnDownloadWindows : dict.btnDownloadLinux;
+          heroButton.setAttribute("aria-label", heroButton.textContent);
+        }
+        if (downloadBody) {
+          downloadBody.textContent = isWindows
+            ? dict.txtDownloadDetectedWindows
+            : dict.txtDownloadDetectedLinux;
+        }
+        const downloadOptions = document.getElementById("downloadOptions");
+        if (downloadOptions) {
+          downloadOptions.setAttribute(
+            "aria-label",
+            `${dict.txtDownloadOptionsLabel}. ${dict.txtDetectedSystem}: ${detectedLabel}`
+          );
+        }
+      } else {
+        if (heroButton) {
+          heroButton.textContent = dict.btnDownloadHero;
+          heroButton.removeAttribute("aria-label");
+        }
+        if (downloadBody) downloadBody.textContent = dict.txtDownloadBody;
+        const downloadOptions = document.getElementById("downloadOptions");
+        if (downloadOptions) downloadOptions.setAttribute("aria-label", dict.txtDownloadOptionsLabel);
+      }
     }
 
     const browserLanguage = (navigator.languages || [navigator.language || "en"])
       .map((locale) => locale.toLowerCase().split("-")[0])
       .find((language) => i18n[language]) || "en";
     applyLanguage(browserLanguage);
+    detectedDownloadSystem = detectSupportedDownloadSystem();
+    updateDetectedDownloadUI();
 
     const countryLanguages = {
       PL: "pl",
