@@ -9,9 +9,9 @@
   "theme_color": "#080912",
   "icons": [
     {
-      "src": "/Astro-Ai-Processor/assets/favicon.ico",
-      "sizes": "16x16 32x32",
-      "type": "image/x-icon"
+      "src": "/Astro-Ai-Processor/favicon-32.png",
+      "sizes": "256x256",
+      "type": "image/png"
     }
   ]
 }
