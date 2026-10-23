@@ -30,6 +30,7 @@ from processing.preview import PreviewCache, parameter_key
 from processing.export import normalized_to_uint16
 from processing.pipeline import process_image
 from processing.openrouter import OPENROUTER_DEFAULT_MODEL, create_chat_completion
+from processing.plate_solver import solve_with_skyshot
 from processing.image_analysis import compute_image_analysis_metrics
 from processing.image_effects import _normalize_mask01, local_contrast_enhancement, neutralize_background
 from processing.stretch import stretch_image
@@ -51,7 +52,6 @@ except ImportError:
     Image = None
     PIL_AVAILABLE = False
 
-FIXED_ASTROMETRY_API_KEY = "wtawpjrpiulghcau"
 AI_ASSISTANT_NAME = "Altair"
 ALTAIR_3D_FLY_GUIDE_FILE = "3d_fly_help.md"
 DEFAULT_DEEPSNR_ARGS = "-i \"{input}\" -o \"{output}\" -q -m 2"
@@ -1110,7 +1110,7 @@ class PlateSolveDialog(QDialog):
         layout = QVBoxLayout(self)
         apply_standard_layout_margins(layout)
 
-        self.lbl_info = QLabel("Enter pixel size and focal length for plate solving.")
+        self.lbl_info = QLabel("Skyshot Solver — lokalny plate solving. Wybierz solver i indeks katalogu.")
         self.lbl_info.setWordWrap(True)
         layout.addWidget(self.lbl_info)
 
@@ -1134,6 +1134,19 @@ class PlateSolveDialog(QDialog):
         grid.addWidget(self.spin_focal_length, 1, 1)
         layout.addLayout(grid)
 
+        self.edit_skyshot_binary = QLineEdit(str(getattr(parent, "skyshot_binary", "") or ""))
+        self.edit_skyshot_binary.setPlaceholderText("skyshot / skyshot.exe (PATH lub pełna ścieżka)")
+        self.edit_skyshot_index = QLineEdit(str(getattr(parent, "skyshot_index", "") or ""))
+        self.edit_skyshot_index.setPlaceholderText("Katalog indeksu Skyshot")
+        layout.addWidget(self.edit_skyshot_binary)
+        layout.addWidget(self.edit_skyshot_index)
+        choose_binary = QPushButton("Wybierz Skyshot Solver")
+        choose_index = QPushButton("Wybierz indeks Skyshot")
+        choose_binary.clicked.connect(self._choose_skyshot_binary)
+        choose_index.clicked.connect(self._choose_skyshot_index)
+        layout.addWidget(choose_binary)
+        layout.addWidget(choose_index)
+
         self.chk_overlay = QCheckBox("Draw overlay after solve")
         self.chk_overlay.setChecked(True)
         layout.addWidget(self.chk_overlay)
@@ -1154,7 +1167,19 @@ class PlateSolveDialog(QDialog):
             "pixel_size_um": float(self.spin_pixel_size.value()),
             "focal_length_mm": float(self.spin_focal_length.value()),
             "overlay_enabled": self.chk_overlay.isChecked(),
+            "skyshot_binary": self.edit_skyshot_binary.text().strip(),
+            "skyshot_index": self.edit_skyshot_index.text().strip(),
         }
+
+    def _choose_skyshot_binary(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Skyshot Solver", "", "All Files (*)", options=get_safe_file_dialog_options())
+        if path:
+            self.edit_skyshot_binary.setText(path)
+
+    def _choose_skyshot_index(self):
+        path = QFileDialog.getExistingDirectory(self, "Skyshot index", self.edit_skyshot_index.text(), options=get_safe_file_dialog_options())
+        if path:
+            self.edit_skyshot_index.setText(path)
 
     def set_parameters(self, pixel_size_um: float, focal_length_mm: float):
         self.spin_pixel_size.setValue(float(pixel_size_um))
@@ -8512,12 +8537,13 @@ class PlateSolveWorker(QThread):
     progress_signal = pyqtSignal(str, int, int)
     finished_signal = pyqtSignal(object, str)
 
-    def __init__(self, img, pixel_size_um, focal_length_mm, api_key=None):
+    def __init__(self, img, pixel_size_um, focal_length_mm, solver_path="", index_path=""):
         super().__init__()
         self.img = img
         self.pixel_size_um = pixel_size_um
         self.focal_length_mm = focal_length_mm
-        self.api_key = api_key
+        self.solver_path = solver_path
+        self.index_path = index_path
 
     def run(self):
         try:
@@ -8527,17 +8553,7 @@ class PlateSolveWorker(QThread):
             def progress(stage, overall, current):
                 self.progress_signal.emit(stage, overall, current)
 
-            self.progress_signal.emit("Preparing image...", 0, 0)
-            scale = self._compute_scale()
-            self.progress_signal.emit("Scale estimated...", 10, 10)
-
-            local_solver = self._find_local_solver()
-            if local_solver is not None:
-                result = self._solve_with_local_solver(local_solver, scale)
-            elif self.api_key:
-                result = self._solve_with_astrometry_net(scale)
-            else:
-                raise RuntimeError("No local solver found and no Astrometry.net API key provided.")
+            result = solve_with_skyshot(self.img, self.solver_path, self.index_path, progress)
 
             self.finished_signal.emit(result, "")
         except Exception as exc:
@@ -8547,206 +8563,6 @@ class PlateSolveWorker(QThread):
         if self.pixel_size_um <= 0 or self.focal_length_mm <= 0:
             raise RuntimeError("Pixel size and focal length must be positive values.")
         return 206.265 * self.pixel_size_um / self.focal_length_mm
-
-    def _find_local_solver(self):
-        for name in ("solve-field", "solve-field.exe"):
-            path = shutil.which(name)
-            if path:
-                return path
-        return None
-
-    def _solve_with_local_solver(self, solver_path, scale_arcsec):
-        temp_dir = tempfile.mkdtemp(prefix="astro_plate_solve_")
-        try:
-            input_path = os.path.join(temp_dir, "input.jpg")
-            safe_imwrite(input_path, self.img)
-            scale_low = max(0.05, scale_arcsec * 0.7)
-            scale_high = scale_arcsec * 1.3
-            command = [
-                solver_path,
-                input_path,
-                "--overwrite",
-                "--no-plots",
-                "--scale-units", "arcsecperpix",
-                "--scale-low", f"{scale_low:.8f}",
-                "--scale-high", f"{scale_high:.8f}",
-                "--cpulimit", "60",
-                "--dir", temp_dir,
-                "--verbose",
-            ]
-            self.progress_signal.emit("Running local solver...", 20, 20)
-            proc = subprocess.run(command, cwd=temp_dir, capture_output=True, text=True, timeout=900)
-            if proc.returncode != 0:
-                raise RuntimeError(f"Local solve-field failed: {proc.stderr.strip() or proc.stdout.strip()}")
-
-            input_base = os.path.splitext(os.path.basename(input_path))[0]
-            wcs_candidates = [
-                os.path.join(temp_dir, f"{input_base}.wcs"),
-                os.path.join(temp_dir, "plate_solve.wcs"),
-            ]
-            existing_wcs = [path for path in wcs_candidates if os.path.exists(path)]
-            if not existing_wcs:
-                existing_wcs = [
-                    os.path.join(temp_dir, name)
-                    for name in os.listdir(temp_dir)
-                    if name.lower().endswith(".wcs")
-                ]
-            if not existing_wcs:
-                raise RuntimeError("Local solver did not produce a WCS file.")
-            wcs_path = max(existing_wcs, key=os.path.getmtime)
-
-            axy_candidates = [
-                os.path.join(temp_dir, f"{input_base}.axy"),
-                os.path.join(temp_dir, "plate_solve.axy"),
-            ]
-            existing_axy = [path for path in axy_candidates if os.path.exists(path)]
-            if not existing_axy:
-                existing_axy = [
-                    os.path.join(temp_dir, name)
-                    for name in os.listdir(temp_dir)
-                    if name.lower().endswith(".axy")
-                ]
-            axy_path = max(existing_axy, key=os.path.getmtime) if existing_axy else ""
-
-            header = self._parse_wcs_header(wcs_path)
-            points = self._parse_axy_points(axy_path)
-            return self._build_result(header, points)
-        finally:
-            shutil.rmtree(temp_dir, ignore_errors=True)
-
-    def _solve_with_astrometry_net(self, scale_arcsec):
-        self.progress_signal.emit("Login...", 0, 0)
-        login_url = "https://nova.astrometry.net/api/login"
-        session = self._post_json(login_url, {"apikey": self.api_key})
-
-        print("LOGIN RESPONSE:", session)
-
-        if session.get("status") != "success":
-            raise Exception(
-                f"Astrometry.net login failed: {session}"
-            )
-
-        session_key = session.get("session")
-        if not session_key:
-            raise Exception(
-                "No session key returned"
-            )
-
-        self.progress_signal.emit("Uploading image...", 0, 0)
-        upload_url = "https://nova.astrometry.net/api/upload"
-        upload_temp_dir = tempfile.mkdtemp(prefix="astro_plate_upload_")
-        temp_path = os.path.join(upload_temp_dir, "input.jpg")
-        try:
-            safe_imwrite(temp_path, self.img)
-
-            upload_fields = {
-                "allow_commercial_use": "n",
-                "allow_modifications": "n",
-                "scale_units": "arcsecperpix",
-                "scale_lower": f"{scale_arcsec * 0.7:.8f}",
-                "scale_upper": f"{scale_arcsec * 1.3:.8f}",
-            }
-            if session_key:
-                upload_fields["session"] = session_key
-            else:
-                upload_fields["apikey"] = self.api_key
-
-            response = self._post_multipart(upload_url, upload_fields, "file", temp_path)
-        finally:
-            shutil.rmtree(upload_temp_dir, ignore_errors=True)
-        print("SUBMISSION RESPONSE:", response)
-        if response.get("status") != "success":
-            raise RuntimeError(f"Astrometry.net upload failed: {response}")
-
-        submission_id = response.get("submission_id") or response.get("subid")
-        if submission_id is None:
-            raise RuntimeError(f"Astrometry.net upload failed to return a submission id. Response: {response}")
-
-        self.progress_signal.emit("✓ Job Created", 0, 0)
-        job_id = None
-        status = None
-        submission_max_attempts = 60
-        submission_poll_interval = 3
-        for attempt in range(submission_max_attempts):
-            time.sleep(submission_poll_interval)
-            status = self._get_json(f"https://nova.astrometry.net/api/submissions/{submission_id}")
-            self.progress_signal.emit(
-                f"⏳ Waiting for job id... Attempt {attempt + 1} / {submission_max_attempts}",
-                0,
-                attempt + 1,
-            )
-            if attempt < 3 or (attempt + 1) % 10 == 0:
-                print(f"SUBMISSION STATUS (attempt {attempt + 1}):", status)
-            jobs = status.get("jobs") if isinstance(status, dict) else None
-            if isinstance(jobs, list):
-                for job in jobs:
-                    if job is not None:
-                        job_id = job
-                        break
-            if job_id is not None:
-                break
-        if job_id is None:
-            raise RuntimeError(
-                f"Astrometry.net did not return a job id in time. Submission status: {status}"
-            )
-
-        job_info = None
-        info = {}
-        job_status = None
-        solve_max_attempts = 96
-        solve_poll_interval = 5
-        for attempt in range(solve_max_attempts):
-            time.sleep(solve_poll_interval)
-            info = self._get_json(f"https://nova.astrometry.net/api/jobs/{job_id}/info/")
-            job_status = (info.get("status") or "").lower() if isinstance(info, dict) else ""
-            self.progress_signal.emit(
-                f"⏳ Solving image... Attempt {attempt + 1} / {solve_max_attempts}",
-                0,
-                attempt + 1,
-            )
-            if attempt < 3 or (attempt + 1) % 10 == 0:
-                print(f"JOB INFO (attempt {attempt + 1}):", info)
-            if job_status in ("success", "solved"):
-                job_info = info
-                break
-            if job_status in ("failure", "failed", "error"):
-                raise RuntimeError(f"Astrometry.net job failed. Info: {info}")
-            try:
-                job_probe = self._get_json(f"https://nova.astrometry.net/api/jobs/{job_id}")
-            except Exception:
-                job_probe = {}
-            probe_status = (job_probe.get("status") or "").lower() if isinstance(job_probe, dict) else ""
-            calibration_data = job_probe.get("calibration") if isinstance(job_probe, dict) else None
-            if probe_status in ("success", "solved") or isinstance(calibration_data, dict):
-                job_info = info if isinstance(info, dict) else {}
-                break
-            if probe_status in ("failure", "failed", "error"):
-                raise RuntimeError(f"Astrometry.net job failed. Job response: {job_probe}")
-        if job_info is None:
-            raise RuntimeError(
-                f"Astrometry.net job timed out after {solve_max_attempts * solve_poll_interval}s. Last info: {info}"
-            )
-
-        job = self._get_json(f"https://nova.astrometry.net/api/jobs/{job_id}")
-        print("JOB RESPONSE:", job)
-        calibration_response = None
-        try:
-            calibration_response = self._get_json(f"https://nova.astrometry.net/api/jobs/{job_id}/calibration")
-            print("CALIBRATION RESPONSE:", calibration_response)
-        except Exception as e:
-            print(f"CALIBRATION RESPONSE ERROR: {e}")
-
-        wcs_url = f"https://nova.astrometry.net/api/jobs/{job_id}/wcs_file"
-        wcs_text = self._get_url_text(wcs_url)
-        header = self._parse_wcs_header_text(wcs_text)
-        points = []
-        return self._build_result(
-            header,
-            points,
-            job_info=job_info,
-            job=job,
-            calibration=calibration_response,
-        )
 
     def _parse_wcs_header(self, path):
         try:
@@ -8938,69 +8754,8 @@ class PlateSolveWorker(QThread):
             "wcs_header": header,
             "objects_in_field": objects,
             "calibration_data": calibration_data,
-            "source": "astrometry",
+            "source": "skyshot",
         }
-
-    def _post_json(self, url, data):
-        payload = urllib.parse.urlencode({
-            "request-json": json.dumps(data)
-        }).encode("utf-8")
-
-        req = urllib.request.Request(
-            url,
-            data=payload,
-            headers={
-                "Referer": "https://nova.astrometry.net/api/login",
-                "Content-Type": "application/x-www-form-urlencoded"
-            }
-        )
-
-        with urllib.request.urlopen(req, timeout=120) as resp:
-            text = resp.read().decode("utf-8")
-
-        print("ASTROMETRY RESPONSE:", text)
-
-        return json.loads(text)
-
-    def _post_multipart(self, url, fields, file_field, file_path):
-        boundary = f"----AstroAiProBoundary{int(time.time() * 1000)}"
-        body = bytearray()
-
-        request_json = json.dumps(fields)
-        body.extend((f"--{boundary}\r\n").encode("utf-8"))
-        body.extend((f"Content-Disposition: form-data; name=\"request-json\"\r\n\r\n").encode("utf-8"))
-        body.extend((request_json + "\r\n").encode("utf-8"))
-
-        filename = os.path.basename(file_path)
-        body.extend((f"--{boundary}\r\n").encode("utf-8"))
-        body.extend((f"Content-Disposition: form-data; name=\"{file_field}\"; filename=\"{filename}\"\r\n").encode("utf-8"))
-        body.extend(("Content-Type: application/octet-stream\r\n\r\n").encode("utf-8"))
-        with open(file_path, "rb") as f:
-            body.extend(f.read())
-        body.extend(("\r\n").encode("utf-8"))
-        body.extend((f"--{boundary}--\r\n").encode("utf-8"))
-        req = urllib.request.Request(url, data=bytes(body), headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
-        with urllib.request.urlopen(req, timeout=600) as resp:
-            response = json.load(resp)
-
-        print("ASTROMETRY UPLOAD RESPONSE:", response)
-        return response
-
-    def _get_json(self, url):
-        req = urllib.request.Request(url)
-        with urllib.request.urlopen(req, timeout=120) as resp:
-            text = resp.read().decode("utf-8", errors="ignore")
-        try:
-            return json.loads(text)
-        except Exception as e:
-            print(f"Astrometry JSON parse error for {url}: {e}")
-            print(f"Response text: {text}")
-            raise
-
-    def _get_url_text(self, url):
-        req = urllib.request.Request(url)
-        with urllib.request.urlopen(req, timeout=120) as resp:
-            return resp.read().decode("utf-8", errors="ignore")
 
 
 def _load_altair_3d_fly_guide_text(max_chars: int = 6000) -> str:
@@ -12770,7 +12525,8 @@ def load_config() -> dict:
         "dark_mode": True,
         "theme_name": "Fusion Dark",
         "accent_name": "Ultra Blue",
-        "api_key": FIXED_ASTROMETRY_API_KEY,
+        "skyshot_binary": "",
+        "skyshot_index": "",
         "pixel_size_um": 5.4,
         "focal_length_mm": 800.0,
         "openrouter_api_key": "",
@@ -12797,6 +12553,7 @@ def load_config() -> dict:
             config = default_config.copy()
             if isinstance(loaded_config, dict):
                 config.update(loaded_config)
+            config.pop("api_key", None)
             if config.get("denoise_model_path") and not os.path.exists(config["denoise_model_path"]):
                 config["denoise_model_path"] = None
             if config.get("bg_removal_model_path") and not os.path.exists(config["bg_removal_model_path"]):
@@ -12861,7 +12618,7 @@ def load_config() -> dict:
 
 def save_config(denoise_path: str = None, bg_removal_path: str = None,
                 dark_mode: bool = True, starnet_path: str = None,
-                api_key: str = FIXED_ASTROMETRY_API_KEY, pixel_size_um: float = 5.4,
+                api_key: str = "", pixel_size_um: float = 5.4,
                 focal_length_mm: float = 800.0,
                 starnet_stride: int = 16,
                 theme_name: str = None,
@@ -12925,7 +12682,8 @@ def save_config(denoise_path: str = None, bg_removal_path: str = None,
         "dark_mode": dark_mode,
         "theme_name": theme_name,
         "accent_name": normalize_accent_name(accent_name),
-        "api_key": FIXED_ASTROMETRY_API_KEY,
+        "skyshot_binary": APP_PREFERENCES.get("skyshot_binary", ""),
+        "skyshot_index": APP_PREFERENCES.get("skyshot_index", ""),
         "pixel_size_um": pixel_size_um,
         "focal_length_mm": focal_length_mm,
         "openrouter_api_key": str(openrouter_api_key or "").strip(),
@@ -12955,6 +12713,8 @@ def save_config(denoise_path: str = None, bg_removal_path: str = None,
 
 
 APP_PREFERENCES = {
+    "skyshot_binary": "",
+    "skyshot_index": "",
     "theme_name": "Fusion Dark",
     "accent_name": "Ultra Blue",
     "language": "pl",
@@ -19001,7 +18761,11 @@ class AstroApp(QMainWindow):
         self.onnx_provider = config.get("onnx_provider", "Auto") or "Auto"
         self.dark_mode = self.theme_name.lower() != "light"
 
-        self.plate_solve_api_key = FIXED_ASTROMETRY_API_KEY
+        self.plate_solve_api_key = ""
+        self.skyshot_binary = str(config.get("skyshot_binary") or "")
+        self.skyshot_index = str(config.get("skyshot_index") or "")
+        APP_PREFERENCES["skyshot_binary"] = self.skyshot_binary
+        APP_PREFERENCES["skyshot_index"] = self.skyshot_index
         self.plate_solve_pixel_size_um = float(config.get("pixel_size_um") or 5.4)
         self.plate_solve_focal_length_mm = float(config.get("focal_length_mm") or 800.0)
         self.openrouter_api_key = str(config.get("openrouter_api_key") or "").strip()
@@ -24957,7 +24721,10 @@ class AstroApp(QMainWindow):
         params = dialog.get_parameters()
         self.plate_solve_pixel_size_um = params["pixel_size_um"]
         self.plate_solve_focal_length_mm = params["focal_length_mm"]
-        self.plate_solve_api_key = FIXED_ASTROMETRY_API_KEY
+        self.skyshot_binary = params["skyshot_binary"]
+        self.skyshot_index = params["skyshot_index"]
+        APP_PREFERENCES["skyshot_binary"] = self.skyshot_binary
+        APP_PREFERENCES["skyshot_index"] = self.skyshot_index
         save_config(
             self.denoise_model_path,
             self.bg_removal_model_path,
@@ -24987,7 +24754,8 @@ class AstroApp(QMainWindow):
             self.original_img.copy(),
             params["pixel_size_um"],
             params["focal_length_mm"],
-            api_key=FIXED_ASTROMETRY_API_KEY,
+            solver_path=self.skyshot_binary,
+            index_path=self.skyshot_index,
         )
         self.plate_solve_worker.progress_signal.connect(self.on_plate_solve_progress)
         self.plate_solve_worker.finished_signal.connect(lambda result, error: self.on_plate_solve_finished(result, error, params["overlay_enabled"]))
@@ -25120,7 +24888,7 @@ class AstroApp(QMainWindow):
             merged["PLTROT"] = float(result.get("rotation"))
 
         merged["PLTSOLVD"] = True
-        merged["PLTSRC"] = str(result.get("source") or "astrometry")
+        merged["PLTSRC"] = str(result.get("source") or "skyshot")
         merged["PLTDATE"] = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
 
         info = result.get("plate_solve_object_info") if isinstance(result.get("plate_solve_object_info"), dict) else {}
@@ -25169,14 +24937,14 @@ class AstroApp(QMainWindow):
         self.plate_solve_object_info = object_info
 
         details = [
-            f"Source: {'FITS header' if result.get('source') == 'fits_header' else 'Astrometry.net'}",
+            f"Source: {'FITS header' if result.get('source') == 'fits_header' else 'Skyshot Solver'}",
             f"RA: {ra:.5f}Â°" if ra is not None else "RA: unknown",
             f"Dec: {dec:.5f}Â°" if dec is not None else "Dec: unknown",
             f"Rotation: {rotation:.2f}Â°" if rotation is not None else "Rotation: unknown",
             f"Scale: {scale:.3f} arcsec/pixel" if scale is not None else "Scale: unknown",
         ]
 
-        source_label = "FITS header" if result.get("source") == "fits_header" else "Astrometry.net"
+        source_label = "FITS header" if result.get("source") == "fits_header" else "Skyshot Solver"
         self.lbl_plate_solve_status.setText(f"Plate solve status: solved ({source_label})")
         self.lbl_plate_solve_details.setText("\n".join(details))
         self._refresh_plate_solve_object_panel()
@@ -25568,7 +25336,7 @@ class AstroApp(QMainWindow):
             else:
                 object_info["main_object"] = best_candidate["label"]
                 object_info["designation"] = best_candidate["label"]
-                object_info["catalog"] = "Astrometry"
+                object_info["catalog"] = "Skyshot"
 
         if best_candidate is not None:
             object_info["objects_in_field"] = [entry["label"] for entry in candidate_info if entry["label"] != best_candidate["label"]]

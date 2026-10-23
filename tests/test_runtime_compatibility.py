@@ -189,6 +189,9 @@ try:
             app.processEvents()
             dialog.hide()
 
+        assert hasattr(window._get_plate_solve_dialog(), "edit_skyshot_binary")
+        assert hasattr(window._get_plate_solve_dialog(), "edit_skyshot_index")
+
         fly = window.fly3d_dialog
         zone_map = fly.zone_widget.zone_map
         zone_map.fill(-1)

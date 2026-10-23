@@ -24,7 +24,7 @@ Astro AI Processor combines classic editing tools (Levels, Curves, Histogram, Bl
 - Tone and color tools: Levels, Curves (LUT), Histogram, GHS, RGB/HSL correction.
 - Astro tools:
   - image analysis (FWHM, SNR, background noise),
-  - plate solving (`solve-field` locally or Astrometry.net fallback),
+   - local plate solving using Skyshot Solver,
   - StarNet++ star removal,
   - deepSNR external denoise,
   - frame mosaic stitching,
@@ -40,7 +40,7 @@ Astro AI Processor combines classic editing tools (Levels, Curves, Histogram, Bl
 
 Optional external tools:
 
-- `solve-field` (Astrometry.net) for local plate solving.
+- Skyshot Solver CLI and a compatible catalogue index for local plate solving.
 - StarNet++ CLI.
 - deepSNR CLI.
 - `ffmpeg` for attaching audio in 3D FLY output.
@@ -106,11 +106,25 @@ Example fields:
 
 - tool paths (`starnet_path`, `deepsnr_path`),
 - deepSNR args (`deepsnr_args`),
-- plate solving (`api_key`, `pixel_size_um`, `focal_length_mm`),
+- plate solving (`skyshot_binary`, `skyshot_index`, `pixel_size_um`, `focal_length_mm`),
 - AI setting (`openrouter_api_key`),
 - language, theme, core count, workspace.
 
 Security note: keep private paths and local workspace data out of public repositories.
+
+### Skyshot plate solving
+
+Install/build the Skyshot Solver CLI from its source distribution (`cargo build
+--release --locked` in the Skyshot repository), then select `skyshot`/`skyshot.exe`
+and a compatible index directory in the Plate Solving dialog. Alternatively use
+`SKYSHOT_BINARY` and `SKYSHOT_INDEX`. No image upload, API key or Astrometry.net
+fallback is used. Existing FITS WCS can still be reused.
+
+Skyshot Solver 0.1.0 is Copyright 2026 Adam Jesionkiewicz, Apache-2.0; see NOTICE.
+The implementation license is GPLv3-compatible. The adapter uses only its CLI;
+Skyshot code/binaries and catalogue data are not bundled here. Obtain index data
+separately from https://skyshot.app/downloads/ under its own terms. The small
+synthetic index from the source demo cannot solve real images.
 
 ## Quick workflow
 
