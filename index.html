@@ -274,6 +274,8 @@
     }
 
     .comparison-selector-buttons {
+      position: relative;
+      isolation: isolate;
       display: inline-flex;
       align-items: center;
       gap: 3px;
@@ -282,6 +284,26 @@
       border-radius: 999px;
       background: rgba(255, 255, 255, 0.06);
       box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.22);
+    }
+
+    .comparison-selector-buttons::before {
+      content: "";
+      position: absolute;
+      top: 4px;
+      bottom: 4px;
+      left: 4px;
+      z-index: 0;
+      width: calc((100% - 11px) / 2);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.17);
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.28), inset 0 1px rgba(255, 255, 255, 0.08);
+      pointer-events: none;
+      transform: translateX(0);
+      transition: transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+
+    .comparison-selector-buttons[data-selected="ngc281"]::before {
+      transform: translateX(calc(100% + 3px));
     }
 
     .comparison-target-button {
@@ -295,9 +317,11 @@
       background: transparent;
       font: inherit;
       font-weight: 700;
+      position: relative;
+      z-index: 1;
       cursor: pointer;
       white-space: nowrap;
-      transition: color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+      transition: color 0.18s ease, background 0.18s ease;
     }
 
     .comparison-target-button:hover:not([aria-pressed="true"]) {
@@ -307,8 +331,7 @@
 
     .comparison-target-button[aria-pressed="true"] {
       color: #ffffff;
-      background: rgba(255, 255, 255, 0.17);
-      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.28), inset 0 1px rgba(255, 255, 255, 0.08);
+      background: transparent;
     }
 
     .comparison-target-button:focus-visible {
@@ -1100,6 +1123,10 @@
     }
 
     @media (prefers-reduced-motion: reduce) {
+      .comparison-selector-buttons::before {
+        transition: none;
+      }
+
       .roadmap {
         animation: none;
       }
@@ -1256,7 +1283,7 @@
 
     <div class="comparison-selector card" data-comparison-selector role="group" aria-label="Wybierz obiekt do porównania">
       <span class="comparison-selector-label" id="txtComparisonSelectorLabel">Wybierz porównywany obiekt</span>
-      <div class="comparison-selector-buttons">
+      <div class="comparison-selector-buttons" data-selected="ngc281">
         <button class="comparison-target-button" type="button" data-comparison-target="c11" aria-pressed="false">C11</button>
         <button class="comparison-target-button" type="button" data-comparison-target="ngc281" aria-pressed="true">NGC 281</button>
       </div>
@@ -2301,6 +2328,9 @@
     function setComparisonTarget(target) {
       if (target !== "c11" && target !== "ngc281") return;
 
+      const comparisonSelectorButtons = document.querySelector(".comparison-selector-buttons");
+      if (comparisonSelectorButtons) comparisonSelectorButtons.dataset.selected = target;
+
       document.querySelectorAll("img[data-c11-src][data-ngc281-src]").forEach((image) => {
         const source = image.dataset[`${target}Src`];
         const alt = image.dataset[`${target}Alt`];
@@ -2308,7 +2338,7 @@
         if (alt) image.alt = alt;
       });
 
-      document.querySelectorAll("[data-comparison-target]").forEach((button) => {
+      document.querySelectorAll("button[data-comparison-target]").forEach((button) => {
         button.setAttribute("aria-pressed", String(button.dataset.comparisonTarget === target));
       });
       document.documentElement.dataset.comparisonTarget = target;
@@ -2317,7 +2347,7 @@
       document.querySelectorAll("[data-zoom-reset]").forEach((button) => button.click());
     }
 
-    document.querySelectorAll("[data-comparison-target]").forEach((button) => {
+    document.querySelectorAll("button[data-comparison-target]").forEach((button) => {
       button.addEventListener("click", () => setComparisonTarget(button.dataset.comparisonTarget));
     });
     setComparisonTarget("ngc281");
