@@ -198,7 +198,7 @@ try:
         for factory in (
             "_get_blur_dialog", "_get_background_extraction_dialog", "_get_deconvolution_dialog",
             "_get_local_contrast_dialog", "_get_crop_dialog", "_get_color_calibration_dialog",
-            "_get_star_correction_dialog", "_get_plate_solve_dialog", "_get_starnet_dialog",
+            "_get_star_correction_dialog", "_get_starnet_dialog",
             "_get_deepsnr_dialog", "_get_mosaic_dialog", "_get_stack_dialog",
             "_get_solar_stack_dialog", "_get_timelapse_dialog", "_get_fly3d_dialog",
             "_get_star_shrink_dialog",
@@ -209,11 +209,8 @@ try:
             app.processEvents()
             dialog.hide()
 
-        assert hasattr(window._get_plate_solve_dialog(), "edit_skyshot_binary")
-        assert hasattr(window._get_plate_solve_dialog(), "edit_skyshot_index")
-        plate_dialog = window._get_plate_solve_dialog()
-        assert "pixel_size_um" not in plate_dialog.get_parameters()
-        assert "focal_length_mm" not in plate_dialog.get_parameters()
+        assert not hasattr(module, "PlateSolveDialog")
+        assert not hasattr(window, "plate_solve_dialog")
 
         fly = window.fly3d_dialog
         zone_map = fly.zone_widget.zone_map

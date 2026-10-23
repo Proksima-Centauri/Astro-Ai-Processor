@@ -115,10 +115,13 @@ Security note: keep private paths and local workspace data out of public reposit
 ### Skyshot plate solving
 
 Install/build the Skyshot Solver CLI from its source distribution (`cargo build
---release --locked` in the Skyshot repository), then select `skyshot`/`skyshot.exe`
-and a compatible index directory in the Plate Solving dialog. Alternatively use
-`SKYSHOT_BINARY` and `SKYSHOT_INDEX`. No image upload, API key or Astrometry.net
-fallback is used. Existing FITS WCS can still be reused.
+--release --locked` in the Skyshot repository) and download a compatible Full
+catalogue index. The app automatically looks for `skyshot` on `PATH`, beside the
+applicable Skyshot source checkout, and for indexes in standard Skyshot data,
+Documents, Downloads and `data/` locations. Optional `SKYSHOT_BINARY` and
+`SKYSHOT_INDEX` environment variables can override discovery; no solver or index
+settings are shown in the Plate Solving dialog. No image upload, API key or
+Astrometry.net fallback is used. Existing FITS WCS can still be reused.
 
 Skyshot Solver 0.1.0 is Copyright 2026 Adam Jesionkiewicz, Apache-2.0; see NOTICE.
 The implementation license is GPLv3-compatible. The adapter uses only its CLI;

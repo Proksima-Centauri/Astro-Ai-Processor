@@ -13,17 +13,63 @@ import numpy as np
 
 
 def resolve_skyshot(binary=""):
-    requested = str(binary or os.environ.get("SKYSHOT_BINARY", "")).strip()
-    if requested:
-        path = shutil.which(requested) or os.path.expanduser(requested)
-        if os.path.isfile(path):
-            return os.path.abspath(path)
-        raise RuntimeError("Nie znaleziono wskazanego pliku Skyshot Solver.")
+    candidates = []
+    for requested in (os.environ.get("SKYSHOT_BINARY", ""), binary):
+        requested = str(requested or "").strip()
+        if requested:
+            candidates.append(shutil.which(requested) or os.path.expanduser(requested))
     for name in ("skyshot", "skyshot.exe"):
-        path = shutil.which(name)
-        if path:
+        located = shutil.which(name)
+        if located:
+            candidates.append(located)
+
+    app_root = Path(__file__).resolve().parents[1]
+    skyshot_repo = app_root.parent / "skyshot-solver-main"
+    candidates.extend((
+        Path.home() / ".cargo" / "bin" / "skyshot",
+        skyshot_repo / "target" / "release" / "skyshot",
+        skyshot_repo / "target" / "debug" / "skyshot",
+    ))
+    for candidate in candidates:
+        path = os.path.abspath(os.fspath(candidate))
+        if os.path.isfile(path) and (os.name == "nt" or os.access(path, os.X_OK)):
             return path
-    raise RuntimeError("Wybierz plik Skyshot Solver w oknie Plate Solving lub dodaj skyshot do PATH.")
+    raise RuntimeError("Nie wykryto Skyshot Solver w PATH ani w repozytorium Skyshot obok aplikacji.")
+
+
+def resolve_skyshot_index(index=""):
+    candidates = []
+    for requested in (os.environ.get("SKYSHOT_INDEX", ""), index):
+        requested = str(requested or "").strip()
+        if requested:
+            candidates.append(Path(os.path.expanduser(requested)))
+
+    home = Path.home()
+    app_root = Path(__file__).resolve().parents[1]
+    data_roots = (
+        home / ".local" / "share" / "skyshot",
+        home / "Documents" / "skyshot",
+        home / "Documents" / "skyshot-solver-main" / "data",
+        home / "Downloads" / "skyshot",
+        home / "Downloads",
+        Path.cwd() / "data",
+        app_root / "data",
+        app_root.parent / "skyshot-solver-main" / "data",
+    )
+    for root in data_roots:
+        candidates.extend((root, root / "index"))
+        if root.is_dir():
+            try:
+                candidates.extend(path.parent for path in root.glob("*/index/manifest.json"))
+                candidates.extend(path.parent for path in root.glob("*/manifest.json"))
+            except OSError:
+                pass
+
+    for candidate in candidates:
+        path = candidate.resolve()
+        if path.is_dir() and (path / "manifest.json").is_file():
+            return str(path)
+    raise RuntimeError("Nie wykryto katalogu indeksu Skyshot. Pobierz indeks Full ze strony Skyshot i umieść go w katalogu danych Skyshot.")
 
 
 def skyshot_result(payload, header, image_shape):
@@ -68,9 +114,7 @@ def solve_with_skyshot(image, binary="", index="", progress=None, runner=None):
     from astropy.io import fits
 
     executable = resolve_skyshot(binary)
-    index_path = Path(os.path.expanduser(str(index or os.environ.get("SKYSHOT_INDEX", "")))).resolve()
-    if not str(index or os.environ.get("SKYSHOT_INDEX", "")).strip() or not index_path.is_dir():
-        raise RuntimeError("Wybierz poprawny katalog indeksu Skyshot w oknie Plate Solving.")
+    index_path = Path(resolve_skyshot_index(index))
     source = np.asarray(image)
     if source.size == 0 or source.ndim not in (2, 3):
         raise RuntimeError("Niepoprawny obraz do plate solving.")

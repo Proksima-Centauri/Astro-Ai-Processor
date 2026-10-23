@@ -30,7 +30,7 @@ from processing.preview import PreviewCache, parameter_key
 from processing.export import normalized_to_uint16
 from processing.pipeline import process_image
 from processing.openrouter import OPENROUTER_DEFAULT_MODEL, create_chat_completion
-from processing.plate_solver import solve_with_skyshot
+from processing.plate_solver import resolve_skyshot, resolve_skyshot_index, solve_with_skyshot
 from processing.image_analysis import compute_image_analysis_metrics
 from processing.image_effects import _normalize_mask01, local_contrast_enhancement, neutralize_background
 from processing.stretch import stretch_image
@@ -1097,70 +1097,6 @@ class StarShrinkDialog(QDialog):
         if emit_preview and self.preview_callback is not None:
             amount, selection = self.get_values()
             self.preview_callback(amount, selection)
-
-
-class PlateSolveDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        apply_dialog_window_flags(self)
-        self.setWindowTitle("Plate Solving")
-        self.setMinimumWidth(380)
-
-        layout = QVBoxLayout(self)
-        apply_standard_layout_margins(layout)
-
-        self.lbl_info = QLabel("Skyshot Solver — lokalny plate solving. Wybierz solver i indeks katalogu.")
-        self.lbl_info.setWordWrap(True)
-        layout.addWidget(self.lbl_info)
-
-        self.edit_skyshot_binary = QLineEdit(str(getattr(parent, "skyshot_binary", "") or ""))
-        self.edit_skyshot_binary.setPlaceholderText("skyshot / skyshot.exe (PATH lub pełna ścieżka)")
-        self.edit_skyshot_index = QLineEdit(str(getattr(parent, "skyshot_index", "") or ""))
-        self.edit_skyshot_index.setPlaceholderText("Katalog indeksu Skyshot")
-        layout.addWidget(self.edit_skyshot_binary)
-        layout.addWidget(self.edit_skyshot_index)
-        choose_binary = QPushButton("Wybierz Skyshot Solver")
-        choose_index = QPushButton("Wybierz indeks Skyshot")
-        choose_binary.clicked.connect(self._choose_skyshot_binary)
-        choose_index.clicked.connect(self._choose_skyshot_index)
-        layout.addWidget(choose_binary)
-        layout.addWidget(choose_index)
-
-        self.chk_overlay = QCheckBox("Draw overlay after solve")
-        self.chk_overlay.setChecked(True)
-        layout.addWidget(self.chk_overlay)
-
-        buttons = QHBoxLayout()
-        self.btn_solve = QPushButton("Solve")
-        self.btn_solve.setProperty("accent", True)
-        self.btn_cancel = QPushButton("Cancel")
-        buttons.addWidget(self.btn_solve)
-        buttons.addWidget(self.btn_cancel)
-        layout.addLayout(buttons)
-
-        self.btn_solve.clicked.connect(self.accept)
-        self.btn_cancel.clicked.connect(self.reject)
-
-    def get_parameters(self):
-        return {
-            "overlay_enabled": self.chk_overlay.isChecked(),
-            "skyshot_binary": self.edit_skyshot_binary.text().strip(),
-            "skyshot_index": self.edit_skyshot_index.text().strip(),
-        }
-
-    def _choose_skyshot_binary(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Skyshot Solver", "", "All Files (*)", options=get_safe_file_dialog_options())
-        if path:
-            self.edit_skyshot_binary.setText(path)
-
-    def _choose_skyshot_index(self):
-        path = QFileDialog.getExistingDirectory(self, "Skyshot index", self.edit_skyshot_index.text(), options=get_safe_file_dialog_options())
-        if path:
-            self.edit_skyshot_index.setText(path)
-
-    def set_parameters(self, skyshot_binary: str = "", skyshot_index: str = ""):
-        self.edit_skyshot_binary.setText(str(skyshot_binary or ""))
-        self.edit_skyshot_index.setText(str(skyshot_index or ""))
 
 
 class CircularProgressBar(QWidget):
@@ -18596,7 +18532,6 @@ class AstroApp(QMainWindow):
         self.crop_dialog = None
         self.color_calibration_dialog = None
         self.star_correction_dialog = None
-        self.plate_solve_dialog = None
         self.starnet_dialog = None
         self.deepsnr_dialog = None
         self.mosaic_dialog = None
@@ -19089,16 +19024,6 @@ class AstroApp(QMainWindow):
             notify=False,
         )
         return self.star_correction_dialog
-
-    def _get_plate_solve_dialog(self):
-        if self.plate_solve_dialog is None:
-            self.plate_solve_dialog = PlateSolveDialog(self)
-        else:
-            self.plate_solve_dialog.set_parameters(
-                self.skyshot_binary,
-                self.skyshot_index,
-            )
-        return self.plate_solve_dialog
 
     def _get_starnet_dialog(self):
         if self.starnet_dialog is None:
@@ -21030,7 +20955,6 @@ class AstroApp(QMainWindow):
             "plate_solving_dialog",
             "blur_dialog",
             "deconvolution_dialog",
-            "plate_solve_dialog",
             "starnet_dialog",
             "mosaic_dialog",
             "stack_dialog",
@@ -24646,14 +24570,20 @@ class AstroApp(QMainWindow):
             self.log("Plate Solving skipped: no image loaded.", "warning")
             return
 
-        dialog = self._get_plate_solve_dialog()
-        if dialog.exec_() != QDialog.Accepted:
-            self.log("Plate Solving canceled.", "warning")
+        header_result = self._build_plate_solve_result_from_current_fits_header()
+        if header_result is not None:
+            self.log("Plate Solving: using WCS found in FITS header.", "info")
+            self.show_plate_solving_dialog()
+            self.on_plate_solve_finished(header_result, "", True)
             return
 
-        params = dialog.get_parameters()
-        self.skyshot_binary = params["skyshot_binary"]
-        self.skyshot_index = params["skyshot_index"]
+        try:
+            self.skyshot_binary = resolve_skyshot(self.skyshot_binary)
+            self.skyshot_index = resolve_skyshot_index(self.skyshot_index)
+        except RuntimeError as exc:
+            self.log(f"Plate Solving unavailable: {exc}", "error")
+            QMessageBox.warning(self, "Skyshot Solver", str(exc))
+            return
         APP_PREFERENCES["skyshot_binary"] = self.skyshot_binary
         APP_PREFERENCES["skyshot_index"] = self.skyshot_index
         save_config(
@@ -24663,13 +24593,6 @@ class AstroApp(QMainWindow):
             self.starnet_path,
             self.starnet_stride,
         )
-
-        header_result = self._build_plate_solve_result_from_current_fits_header()
-        if header_result is not None:
-            self.log("Plate Solving: using WCS found in FITS header.", "info")
-            self.show_plate_solving_dialog()
-            self.on_plate_solve_finished(header_result, "", params["overlay_enabled"])
-            return
 
         self.log("Plate Solving started.")
         self.show_plate_solving_dialog()
@@ -24684,7 +24607,9 @@ class AstroApp(QMainWindow):
             index_path=self.skyshot_index,
         )
         self.plate_solve_worker.progress_signal.connect(self.on_plate_solve_progress)
-        self.plate_solve_worker.finished_signal.connect(lambda result, error: self.on_plate_solve_finished(result, error, params["overlay_enabled"]))
+        self.plate_solve_worker.finished_signal.connect(
+            lambda result, error: self.on_plate_solve_finished(result, error, True)
+        )
         self.plate_solve_worker.start()
 
     def on_plate_solve_progress(self, stage: str, overall: int, current: int):
