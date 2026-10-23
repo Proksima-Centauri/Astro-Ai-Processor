@@ -6,6 +6,7 @@ import math
 
 import cv2
 import numpy as np
+from processing.model_cache import background_session
 
 
 def gaussian_kernel(sigma: float = 1.0, truncate: float = 4.0) -> tuple[int, int]:
@@ -310,7 +311,7 @@ def _run_ai(image: np.ndarray, model_path: str, smoothing: float, progress=None)
         "CPUExecutionProvider",
     ]
     providers = [provider for provider in candidates if (provider[0] if isinstance(provider, tuple) else provider) in available]
-    session = ort.InferenceSession(model_path, providers=providers)
+    session = background_session(model_path, providers)
     if progress:
         progress("Loading AI model", 20, 20)
     background = session.run(None, {"gen_input_image": np.expand_dims(small, axis=0)})[0][0]
@@ -355,7 +356,8 @@ def extract_background(
         source = source[:, :, np.newaxis]
     if source.ndim != 3 or source.shape[-1] not in (1, 3):
         raise ValueError("GraXpert background extraction expects a mono or RGB image.")
-    source = np.nan_to_num(source, nan=0.0, posinf=0.0, neginf=0.0).copy()
+    source = source.copy()
+    np.nan_to_num(source, copy=False, nan=0.0, posinf=0.0, neginf=0.0)
     method = str(interpolation_type)
     if method == "AI":
         if not ai_model_path:

@@ -10,3 +10,4 @@ __pycache__/
 /astro_magic_config.json
 /update_api.db
 /update_api_server.py
+/update_notifier.py

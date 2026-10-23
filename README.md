@@ -9,7 +9,7 @@
 Astro AI Processor processes and analyzes astrophotography images with FITS support, astronomy-specific analysis, plate solving, star tools, denoising, and traditional image-editing tools.
 
 
-Language versions: [EN](README.en.md), [PL](README.pl.md), [DE](README.de.md), [ES](README.es.md), [FR](README.fr.md), [IT](README.it.md), [NL](README.nl.md), [PT](README.pt.md), [CS](README.cs.md), [TR](README.tr.md), [JA](README.ja.md), [RU](README.ru.md), [UK](README.uk.md).
+This repository keeps its documentation in this README.
 
 ## What is Astro AI Processor?
 
@@ -29,7 +29,7 @@ Astro AI Processor combines classic editing tools (Levels, Curves, Histogram, Bl
   - deepSNR external denoise,
   - frame mosaic stitching,
   - 3D FLY clip rendering (optional audio).
-- Altair AI assistant in 100% offline mode (`llama-cpp-python` + GGUF) and optional speech input.
+- Altair AI assistant using NVIDIA Nemotron 3 Super through OpenRouter's free route.
 - PL/EN UI with configurable preferences and workspaces.
 
 ## Requirements
@@ -44,7 +44,7 @@ Optional external tools:
 - StarNet++ CLI.
 - deepSNR CLI.
 - `ffmpeg` for attaching audio in 3D FLY output.
-- Local GGUF model for Altair assistant in `models/` (e.g. `qwen2.5-1.5b-instruct.Q4_K_M.gguf`).
+- OpenRouter API key for the default Nemotron provider (configure in Preferences → AI Chat; free route may have rate limits).
 
 ## Installation
 
@@ -100,14 +100,14 @@ Result file is generated as `dist/astro-ai-processor_<version>_amd64.deb`.
 
 ## Configuration
 
-Settings are stored in `config` (JSON without extension) in the project root.
+Settings are stored in the user's application config directory. The OpenRouter key can also be read from `OPENROUTER_API_KEY`.
 
 Example fields:
 
 - tool paths (`starnet_path`, `deepsnr_path`),
 - deepSNR args (`deepsnr_args`),
 - plate solving (`api_key`, `pixel_size_um`, `focal_length_mm`),
-- AI settings (`local_ai_model_file`),
+- AI setting (`openrouter_api_key`),
 - language, theme, core count, workspace.
 
 Security note: keep private paths and local workspace data out of public repositories.
