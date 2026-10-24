@@ -129,15 +129,6 @@ Skyshot code/binaries and catalogue data are not bundled here. Obtain index data
 separately from https://skyshot.app/downloads/ under its own terms. The small
 synthetic index from the source demo cannot solve real images.
 
-## Quick workflow
-
-1. Open an image (`Open`) or drag-and-drop a file.
-2. Apply base corrections (Levels/Curves/Histogram/Correction).
-3. Run `Analyze` to compute metrics (FWHM, SNR).
-4. Optional: `StarNet++`, `deepSNR`, `Mosaic`, `Plate Solve`.
-5. For animation, run `3D FLY`.
-6. Save output (`Save` / `Save As`).
-
 ## 3D FLY quick guide
 
 1. Stage 1 `remove stars` (optional): run StarNet++.
