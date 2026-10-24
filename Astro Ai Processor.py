@@ -152,7 +152,7 @@ from PyQt5.QtWidgets import (
     QMenuBar, QMenu, QAction, QDialog, QStyle, QSpinBox,
     QDoubleSpinBox, QTextEdit, QLineEdit, QComboBox, QCompleter, QSplitter, QDialogButtonBox,
     QScrollArea, QStackedLayout, QTabBar, QListWidget, QListWidgetItem, QStackedWidget, QPlainTextEdit,
-    QSplashScreen,
+    QSplashScreen, QStyledItemDelegate,
 )
 from PyQt5.QtGui import QImage, QPixmap, QPainter, QIcon, QColor, QFont, QPolygon, QPolygonF, QPen, QPalette, QRegion, QLinearGradient, QDrag, QCursor
 from PyQt5.QtCore import Qt, QPoint, QPointF, QRect, QRectF, QThread, pyqtSignal, QTimer, QSize, QByteArray, QEvent, qInstallMessageHandler, QMimeData
@@ -224,6 +224,7 @@ I18N = {
     "action_starnet": {"pl": "Uruchom StarNet++", "en": "Run StarNet++"},
     "action_deepsnr": {"pl": "Uruchom deepSNR", "en": "Run deepSNR"},
     "action_astro_upscale": {"pl": "Astro Upscale", "en": "Astro Upscale"},
+    "command_palette_open": {"pl": "Wyszukaj narzędzie lub polecenie…", "en": "Search tools and commands…"},
     "action_correction": {"pl": "Korekcja", "en": "Correction"},
     "action_star_correction": {"pl": "Korekcja gwiazd", "en": "Star Correction"},
     "action_color_calibration": {"pl": "Kalibracja kolorów", "en": "Color Calibration"},
@@ -16671,13 +16672,29 @@ def get_dark_stylesheet() -> str:
         border-bottom: 1px solid #3d3d3d;
     }
 
-    QMenuBar::item {
-        background: transparent;
-        padding: 4px 10px;
+    QMenuBar#app_menu_bar {
+        background-color: #1e1e1e;
+        border: none;
+        border-bottom: 1px solid #2b2b2b;
+        padding: 2px 8px;
     }
 
-    QMenuBar::item:selected {
-        background-color: #3a3a3a;
+    QMenuBar::item {
+        background: transparent;
+        border: 1px solid transparent;
+        border-radius: 4px;
+        padding: 5px 10px;
+    }
+
+    QMenuBar#app_menu_bar::item:selected {
+        background-color: #2a2d2e;
+        border-color: #3a3a3a;
+        color: #ffffff;
+    }
+
+    QMenuBar#app_menu_bar::item:pressed {
+        background-color: #30343a;
+        border-color: #007acc;
     }
 
     QMenu {
@@ -16687,7 +16704,9 @@ def get_dark_stylesheet() -> str:
     }
 
     QMenu::item {
-        padding: 6px 24px;
+        margin: 1px 4px;
+        padding: 6px 28px 6px 12px;
+        border-radius: 4px;
     }
 
     QMenu::item:selected {
@@ -16745,104 +16764,6 @@ def get_dark_stylesheet() -> str:
         background-color: #252526;
         selection-background-color: #007acc;
         selection-color: #ffffff;
-    }
-
-    QComboBox[commandMenu="true"],
-    QComboBox[commandPalette="true"] {
-        background-color: #1f1f1f;
-        color: #eeeeee;
-        border: 1px solid #454545;
-        border-radius: 5px;
-        padding: 6px 9px;
-        min-height: 26px;
-    }
-
-    QComboBox[commandMenu="true"]:hover {
-        background-color: #2b2b2b;
-        border-color: #606060;
-    }
-
-    QComboBox[commandMenu="true"] QAbstractItemView,
-    QComboBox[commandPalette="true"] QAbstractItemView {
-        background-color: #252526;
-        color: #eeeeee;
-        border: 1px solid #454545;
-        selection-background-color: #094771;
-        selection-color: #ffffff;
-        outline: none;
-        padding: 4px;
-    }
-
-    QComboBox[commandPalette="true"] {
-        background-color: #252526;
-        padding: 8px 12px;
-        min-height: 32px;
-    }
-
-    QComboBox[commandPalette="true"] QLineEdit {
-        background: transparent;
-        color: #eeeeee;
-        border: none;
-        padding: 2px 4px;
-        selection-background-color: #094771;
-    }
-
-    QComboBox[commandPalette="true"]:focus {
-        border: 1px solid #007acc;
-    }
-
-    QFrame#top_menu_bar {
-        background-color: #1e1e1e;
-        border: none;
-        border-bottom: 1px solid #2b2b2b;
-        border-radius: 0px;
-    }
-
-    QComboBox[commandMenu="true"] {
-        background: transparent;
-        color: #cccccc;
-        border: 1px solid transparent;
-        border-radius: 4px;
-        padding: 3px 6px;
-        min-height: 22px;
-    }
-
-    QComboBox[commandMenu="true"]:hover,
-    QComboBox[commandMenu="true"]:on,
-    QComboBox[commandMenu="true"]:focus {
-        background-color: #2a2d2e;
-        color: #ffffff;
-        border-color: #2a2d2e;
-    }
-
-    QComboBox[commandMenu="true"] QLineEdit {
-        background: transparent;
-        color: #cccccc;
-        border: none;
-        padding: 0px;
-    }
-
-    QComboBox[commandMenu="true"]::drop-down {
-        width: 0px;
-        border: none;
-    }
-
-    QComboBox[commandMenu="true"]::down-arrow {
-        image: none;
-        width: 0px;
-        height: 0px;
-    }
-
-    QComboBox[commandMenu="true"] QAbstractItemView::item {
-        color: #cccccc;
-        min-height: 24px;
-        padding: 5px 28px 5px 12px;
-        border: none;
-    }
-
-    QComboBox[commandMenu="true"] QAbstractItemView::item:selected {
-        background-color: #094771;
-        color: #ffffff;
     }
 
     QPushButton {
@@ -17088,13 +17009,29 @@ def get_light_stylesheet() -> str:
         border-bottom: 1px solid #cfcfcf;
     }
 
-    QMenuBar::item {
-        background: transparent;
-        padding: 4px 10px;
+    QMenuBar#app_menu_bar {
+        background-color: #f3f3f3;
+        border: none;
+        border-bottom: 1px solid #d6d6d6;
+        padding: 2px 8px;
     }
 
-    QMenuBar::item:selected {
-        background-color: #e6e6e6;
+    QMenuBar::item {
+        background: transparent;
+        border: 1px solid transparent;
+        border-radius: 4px;
+        padding: 5px 10px;
+    }
+
+    QMenuBar#app_menu_bar::item:selected {
+        background-color: #e5e5e5;
+        border-color: #d8d8d8;
+        color: #1f1f1f;
+    }
+
+    QMenuBar#app_menu_bar::item:pressed {
+        background-color: #dcecff;
+        border-color: #007acc;
     }
 
     QMenu {
@@ -17104,7 +17041,9 @@ def get_light_stylesheet() -> str:
     }
 
     QMenu::item {
-        padding: 6px 24px 6px 24px;
+        margin: 1px 4px;
+        padding: 6px 28px 6px 12px;
+        border-radius: 4px;
     }
 
     QMenu::item:selected {
@@ -17159,102 +17098,6 @@ def get_light_stylesheet() -> str:
         border: 1px solid #000000;
     }
 
-    QComboBox[commandMenu="true"],
-    QComboBox[commandPalette="true"] {
-        background-color: #ffffff;
-        color: #1f1f1f;
-        border: 1px solid #c6c6c6;
-        border-radius: 5px;
-        padding: 6px 9px;
-        min-height: 26px;
-    }
-
-    QComboBox[commandMenu="true"]:hover {
-        background-color: #f3f3f3;
-        border-color: #969696;
-    }
-
-    QComboBox[commandMenu="true"] QAbstractItemView,
-    QComboBox[commandPalette="true"] QAbstractItemView {
-        background-color: #ffffff;
-        color: #1f1f1f;
-        border: 1px solid #c6c6c6;
-        selection-background-color: #cce8ff;
-        selection-color: #111111;
-        outline: none;
-        padding: 4px;
-    }
-
-    QComboBox[commandPalette="true"] {
-        padding: 8px 12px;
-        min-height: 32px;
-    }
-
-    QComboBox[commandPalette="true"] QLineEdit {
-        background: transparent;
-        color: #1f1f1f;
-        border: none;
-        padding: 2px 4px;
-        selection-background-color: #cce8ff;
-    }
-
-    QComboBox[commandPalette="true"]:focus {
-        border: 1px solid #007acc;
-    }
-
-    QFrame#top_menu_bar {
-        background-color: #f3f3f3;
-        border: none;
-        border-bottom: 1px solid #d6d6d6;
-        border-radius: 0px;
-    }
-
-    QComboBox[commandMenu="true"] {
-        background: transparent;
-        color: #444444;
-        border: 1px solid transparent;
-        border-radius: 4px;
-        padding: 3px 6px;
-        min-height: 22px;
-    }
-
-    QComboBox[commandMenu="true"]:hover,
-    QComboBox[commandMenu="true"]:on,
-    QComboBox[commandMenu="true"]:focus {
-        background-color: #e5e5e5;
-        color: #1f1f1f;
-        border-color: #e5e5e5;
-    }
-
-    QComboBox[commandMenu="true"] QLineEdit {
-        background: transparent;
-        color: #444444;
-        border: none;
-        padding: 0px;
-    }
-
-    QComboBox[commandMenu="true"]::drop-down {
-        width: 0px;
-        border: none;
-    }
-
-    QComboBox[commandMenu="true"]::down-arrow {
-        image: none;
-        width: 0px;
-        height: 0px;
-    }
-
-    QComboBox[commandMenu="true"] QAbstractItemView::item {
-        color: #1f1f1f;
-        min-height: 24px;
-        padding: 5px 28px 5px 12px;
-        border: none;
-    }
-
-    QComboBox[commandMenu="true"] QAbstractItemView::item:selected {
-        background-color: #cce8ff;
-        color: #111111;
-    }
     """
 
 def star_shrink_pixinsight(img: np.ndarray, amount: float = 0.6, selection: float = 0.5) -> np.ndarray:
@@ -17776,6 +17619,449 @@ class ReorderableTopActionsBar(QFrame):
             if bool(spacer.expandingDirections() & Qt.Horizontal):
                 return idx
         return layout.count()
+
+
+class CommandPaletteSearchEdit(QLineEdit):
+    moveRequested = pyqtSignal(int)
+    activateRequested = pyqtSignal()
+    dismissRequested = pyqtSignal()
+    settingsRequested = pyqtSignal()
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key_Down:
+            self.moveRequested.emit(1)
+            event.accept()
+            return
+        if event.key() == Qt.Key_Up:
+            self.moveRequested.emit(-1)
+            event.accept()
+            return
+        if event.key() in (Qt.Key_Return, Qt.Key_Enter):
+            self.activateRequested.emit()
+            event.accept()
+            return
+        if event.key() == Qt.Key_Escape:
+            self.dismissRequested.emit()
+            event.accept()
+            return
+        if event.key() == Qt.Key_Tab:
+            self.settingsRequested.emit()
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
+
+class CommandPaletteItemDelegate(QStyledItemDelegate):
+    DESCRIPTION_ROLE = Qt.UserRole + 1
+    CATEGORY_ROLE = Qt.UserRole + 2
+    ENABLED_ROLE = Qt.UserRole + 3
+
+    def sizeHint(self, option, index):
+        return QSize(max(100, option.rect.width()), 50)
+
+    def paint(self, painter: QPainter, option, index):
+        painter.save()
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        rect = option.rect.adjusted(3, 1, -3, -1)
+        selected = bool(option.state & QStyle.State_Selected)
+        hovered = bool(option.state & QStyle.State_MouseOver)
+        if selected:
+            painter.setBrush(QColor("#202c46"))
+            painter.setPen(QColor("#273957"))
+        elif hovered:
+            painter.setBrush(QColor("#1b2230"))
+            painter.setPen(Qt.NoPen)
+        else:
+            painter.setBrush(Qt.NoBrush)
+            painter.setPen(Qt.NoPen)
+        painter.drawRoundedRect(rect, 8, 8)
+
+        icon = index.data(Qt.DecorationRole)
+        icon_rect = QRect(rect.left() + 12, rect.top() + 15, 20, 20)
+        if isinstance(icon, QIcon) and not icon.isNull():
+            icon.paint(painter, icon_rect, Qt.AlignCenter)
+
+        category = str(index.data(self.CATEGORY_ROLE) or "")
+        font = QFont(option.font)
+        font.setPointSize(10)
+        font.setBold(True)
+        painter.setFont(font)
+        metrics = painter.fontMetrics()
+        badge_width = max(50, metrics.horizontalAdvance(category) + 16) if category else 0
+        badge_rect = QRect(rect.right() - badge_width - 12, rect.top() + 14, badge_width, 22)
+        text_left = icon_rect.right() + 12
+        text_right = badge_rect.left() - 10 if category else rect.right() - 12
+        title_rect = QRect(text_left, rect.top() + 5, max(8, text_right - text_left), 20)
+        title = metrics.elidedText(str(index.data(Qt.DisplayRole) or ""), Qt.ElideRight, title_rect.width())
+        enabled = bool(index.data(self.ENABLED_ROLE))
+        painter.setPen(QColor("#e6edf8" if enabled and (selected or hovered) else "#d6dfed" if enabled else "#697589"))
+        painter.drawText(title_rect, Qt.AlignLeft | Qt.AlignVCenter, title)
+
+        description_font = QFont(option.font)
+        description_font.setPointSize(8)
+        painter.setFont(description_font)
+        description_metrics = painter.fontMetrics()
+        description_rect = QRect(text_left, rect.top() + 25, max(8, text_right - text_left), 18)
+        description = description_metrics.elidedText(
+            str(index.data(self.DESCRIPTION_ROLE) or ""),
+            Qt.ElideRight,
+            description_rect.width(),
+        )
+        painter.setPen(QColor("#8492a8" if enabled else "#586477"))
+        painter.drawText(description_rect, Qt.AlignLeft | Qt.AlignVCenter, description)
+
+        if category:
+            painter.setBrush(QColor("#171e2b"))
+            painter.setPen(QColor("#2b3b55"))
+            painter.drawRoundedRect(badge_rect, 10, 10)
+            painter.setFont(description_font)
+            painter.setPen(QColor("#8da4c2"))
+            painter.drawText(badge_rect, Qt.AlignCenter, category)
+        painter.restore()
+
+
+class CommandPaletteListWidget(QListWidget):
+    def __init__(self, palette_dialog, parent=None):
+        super().__init__(parent)
+        self.palette_dialog = palette_dialog
+        self.setItemDelegate(CommandPaletteItemDelegate(self))
+        self.setMouseTracking(True)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setVerticalScrollMode(QListWidget.ScrollPerPixel)
+        self.setSelectionMode(QListWidget.SingleSelection)
+
+    def keyPressEvent(self, event):
+        if event.key() in (Qt.Key_Return, Qt.Key_Enter):
+            self.palette_dialog.activate_current_tool()
+            event.accept()
+            return
+        if event.key() == Qt.Key_Escape:
+            self.palette_dialog.reject()
+            event.accept()
+            return
+        if event.key() == Qt.Key_Tab:
+            self.palette_dialog.open_settings()
+            event.accept()
+            return
+        if event.key() == Qt.Key_Down and self.currentRow() >= self.count() - 1:
+            self.palette_dialog.ask_button.setFocus()
+            event.accept()
+            return
+        if event.key() == Qt.Key_Up and self.currentRow() <= 0:
+            self.palette_dialog.search_edit.setFocus()
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
+
+class CommandPaletteDialog(QDialog):
+    def __init__(self, entries, on_ask_altair, on_open_settings, language="pl", parent=None):
+        super().__init__(parent)
+        self.entries = list(entries or [])
+        self.on_ask_altair = on_ask_altair
+        self.on_open_settings = on_open_settings
+        self.language = "en" if str(language).lower().startswith("en") else "pl"
+        self.setObjectName("commandPaletteDialog")
+        self.setWindowFlags(Qt.Popup | Qt.FramelessWindowHint)
+        self.setModal(True)
+        self.setFixedSize(620, 466)
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        self.card = QFrame(self)
+        self.card.setObjectName("commandPaletteCard")
+        layout = QVBoxLayout(self.card)
+        layout.setContentsMargins(2, 2, 2, 2)
+        layout.setSpacing(0)
+        outer.addWidget(self.card)
+
+        search_row = QFrame(self.card)
+        search_row.setObjectName("commandPaletteSearchRow")
+        search_layout = QHBoxLayout(search_row)
+        search_layout.setContentsMargins(16, 7, 12, 7)
+        search_layout.setSpacing(10)
+        search_icon = QLabel(search_row)
+        search_icon.setObjectName("commandPaletteSearchIcon")
+        search_icon.setFixedWidth(20)
+        search_icon.setPixmap(
+            svg_icon_from_text(
+                '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">'
+                '<circle cx="10.5" cy="10.5" r="6.5" stroke="#3fc2ec" stroke-width="1.8"/>'
+                '<path d="m15.5 15.5 5 5" stroke="#3fc2ec" stroke-width="1.8" stroke-linecap="round"/>'
+                '</svg>',
+                18,
+            ).pixmap(18, 18)
+        )
+        search_layout.addWidget(search_icon)
+        self.search_edit = CommandPaletteSearchEdit(search_row)
+        self.search_edit.setObjectName("commandPaletteSearchEdit")
+        self.search_edit.setPlaceholderText(
+            "Szukaj narzędzia lub polecenia" if self.language == "pl" else "Search tools and commands"
+        )
+        search_layout.addWidget(self.search_edit, 1)
+        self.escape_button = QPushButton("Esc", search_row)
+        self.escape_button.setObjectName("commandPaletteEscape")
+        self.escape_button.setCursor(Qt.PointingHandCursor)
+        self.escape_button.clicked.connect(self.reject)
+        search_layout.addWidget(self.escape_button)
+        layout.addWidget(search_row)
+
+        divider = QFrame(self.card)
+        divider.setObjectName("commandPaletteDivider")
+        divider.setFixedHeight(1)
+        layout.addWidget(divider)
+
+        self.tools_label = QLabel(self.card)
+        self.tools_label.setObjectName("commandPaletteSection")
+        self.tools_label.setContentsMargins(16, 0, 12, 0)
+        self.tools_label.setFixedHeight(30)
+        layout.addWidget(self.tools_label)
+
+        self.tools_list = CommandPaletteListWidget(self, self.card)
+        self.tools_list.setObjectName("commandPaletteTools")
+        self.tools_list.itemActivated.connect(lambda _item: self.activate_current_tool())
+        self.tools_list.itemClicked.connect(lambda _item: self.activate_current_tool())
+        layout.addWidget(self.tools_list, 1)
+
+        self.ask_section_label = QLabel(self.card)
+        self.ask_section_label.setObjectName("commandPaletteSection")
+        self.ask_section_label.setContentsMargins(16, 0, 12, 0)
+        self.ask_section_label.setFixedHeight(28)
+        layout.addWidget(self.ask_section_label)
+
+        self.ask_button = QPushButton(self.card)
+        self.ask_button.setObjectName("commandPaletteAsk")
+        self.ask_button.setCursor(Qt.PointingHandCursor)
+        self.ask_button.setFocusPolicy(Qt.StrongFocus)
+        ask_layout = QHBoxLayout(self.ask_button)
+        ask_layout.setContentsMargins(14, 4, 14, 4)
+        ask_layout.setSpacing(12)
+        self.ask_icon = QLabel("▣", self.ask_button)
+        self.ask_icon.setObjectName("commandPaletteAskIcon")
+        self.ask_icon.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+        ask_layout.addWidget(self.ask_icon)
+        ask_text_layout = QVBoxLayout()
+        ask_text_layout.setContentsMargins(0, 0, 0, 0)
+        ask_text_layout.setSpacing(1)
+        self.ask_title = QLabel(self.ask_button)
+        self.ask_title.setObjectName("commandPaletteAskTitle")
+        self.ask_title.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+        self.ask_description = QLabel(self.ask_button)
+        self.ask_description.setObjectName("commandPaletteAskDescription")
+        self.ask_description.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+        ask_text_layout.addWidget(self.ask_title)
+        ask_text_layout.addWidget(self.ask_description)
+        ask_layout.addLayout(ask_text_layout, 1)
+        self.ask_button.clicked.connect(self.ask_altair)
+        layout.addWidget(self.ask_button)
+
+        footer = QFrame(self.card)
+        footer.setObjectName("commandPaletteFooter")
+        footer_layout = QHBoxLayout(footer)
+        footer_layout.setContentsMargins(14, 7, 14, 7)
+        footer_layout.setSpacing(16)
+        self.footer_navigation = QLabel(footer)
+        self.footer_enter = QLabel(footer)
+        self.footer_settings = QLabel(footer)
+        footer_layout.addWidget(self.footer_navigation)
+        footer_layout.addWidget(self.footer_enter)
+        footer_layout.addStretch(1)
+        footer_layout.addWidget(self.footer_settings)
+        layout.addWidget(footer)
+
+        self.search_edit.textChanged.connect(self.refresh_results)
+        self.search_edit.moveRequested.connect(self.move_selection)
+        self.search_edit.activateRequested.connect(self.activate_current_tool)
+        self.search_edit.dismissRequested.connect(self.reject)
+        self.search_edit.settingsRequested.connect(self.open_settings)
+        self.ask_button.installEventFilter(self)
+        self.setStyleSheet(
+            "QDialog#commandPaletteDialog { background: transparent; }"
+            "QFrame#commandPaletteCard { background: #151a24; color: #e5eaf2; "
+            "border: 1px solid #33415a; border-radius: 13px; }"
+            "QFrame#commandPaletteSearchRow { background: #141923; border-radius: 12px 12px 0 0; }"
+            "QLabel#commandPaletteSearchIcon { color: #3fc2ec; font-size: 25px; font-weight: 400; }"
+            "QLineEdit#commandPaletteSearchEdit { background: transparent; border: 0; color: #e8edf6; "
+            "font-size: 14px; selection-background-color: #30466c; }"
+            "QPushButton#commandPaletteEscape { background: #171e2a; color: #99a8c0; "
+            "border: 1px solid #30405a; border-radius: 5px; padding: 3px 8px; }"
+            "QPushButton#commandPaletteEscape:hover { color: #e8edf6; border-color: #58708f; }"
+            "QFrame#commandPaletteDivider { background: #2c3546; border: 0; }"
+            "QLabel#commandPaletteSection { color: #8797b0; background: #151a24; "
+            "font-size: 9px; font-weight: 700; letter-spacing: 1px; }"
+            "QListWidget#commandPaletteTools { background: #151a24; border: 0; outline: 0; "
+            "padding: 0 5px; }"
+            "QListWidget#commandPaletteTools::item { border: 0; }"
+            "QScrollBar:vertical { background: #151a24; width: 7px; margin: 0; }"
+            "QScrollBar::handle:vertical { background: #35445b; border-radius: 3px; min-height: 20px; }"
+            "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }"
+            "QPushButton#commandPaletteAsk { text-align: left; color: #dce5f2; background: #151a24; "
+            "border: 0; border-radius: 8px; margin: 0 7px 5px; }"
+            "QPushButton#commandPaletteAsk:hover, QPushButton#commandPaletteAsk:focus { background: #202c46; }"
+            "QLabel#commandPaletteAskIcon { color: #3fc2ec; font-size: 18px; }"
+            "QLabel#commandPaletteAskTitle { color: #dce5f2; font-size: 12px; font-weight: 600; }"
+            "QLabel#commandPaletteAskDescription { color: #8292a9; font-size: 10px; }"
+            "QFrame#commandPaletteFooter { background: #171d29; border-top: 1px solid #2a3446; "
+            "border-radius: 0 0 12px 12px; }"
+            "QFrame#commandPaletteFooter QLabel { color: #8292a9; font-size: 10px; }"
+        )
+        self.set_language(self.language)
+
+    def set_language(self, language: str):
+        self.language = "en" if str(language).lower().startswith("en") else "pl"
+        english = self.language == "en"
+        self.search_edit.setPlaceholderText(
+            "Search tools and commands" if english else "Szukaj narzędzia lub polecenia"
+        )
+        self.tools_label.setText("TOOLS" if english else "NARZĘDZIA")
+        self.ask_section_label.setText("ASK ALTAIR" if english else "ZAPYTAJ ALTAIR")
+        self.ask_description.setText(
+            "Altair suggests next steps based on image analysis"
+            if english
+            else "Altair zaproponuje kolejne kroki na podstawie analizy obrazu"
+        )
+        self.footer_navigation.setText("↑↓ select" if english else "↑↓ wybór")
+        self.footer_enter.setText("Enter run" if english else "Enter uruchom")
+        self.footer_settings.setText("Tab open settings" if english else "Tab otwórz ustawienia")
+        self.refresh_results()
+
+    def set_entries(self, entries):
+        self.entries = list(entries or [])
+        self.refresh_results()
+
+    def _localized(self, record, field):
+        return str(record.get(f"{field}_{self.language}") or record.get(field) or "")
+
+    def refresh_results(self, *_args):
+        query = _normalize_search_text(self.search_edit.text()).strip()
+        self.tools_list.clear()
+        first_enabled_row = -1
+        for record in self.entries:
+            title = self._localized(record, "title")
+            description = self._localized(record, "description")
+            category = self._localized(record, "category")
+            aliases = " ".join(str(alias) for alias in (record.get("aliases") or []))
+            searchable = _normalize_search_text(f"{title} {description} {category} {aliases}")
+            if query and query not in searchable and not bool(record.get("pinned", False)):
+                continue
+            item = QListWidgetItem(title)
+            item.setData(Qt.UserRole, record)
+            item.setData(CommandPaletteItemDelegate.DESCRIPTION_ROLE, description)
+            item.setData(CommandPaletteItemDelegate.CATEGORY_ROLE, category)
+            icon_path = str(record.get("icon_path") or "")
+            if icon_path and os.path.isfile(icon_path):
+                item.setIcon(QIcon(icon_path))
+            action = record.get("action")
+            enabled = bool(record.get("enabled", True)) and (action is None or action.isEnabled())
+            item.setData(CommandPaletteItemDelegate.ENABLED_ROLE, enabled)
+            if not enabled:
+                item.setFlags(item.flags() & ~Qt.ItemIsEnabled)
+            self.tools_list.addItem(item)
+            if enabled and first_enabled_row < 0:
+                first_enabled_row = self.tools_list.count() - 1
+
+        self.tools_list.setCurrentRow(first_enabled_row)
+        typed_query = str(self.search_edit.text() or "").strip()
+        if typed_query and self.language == "pl":
+            self.ask_title.setText(f"„{typed_query}” — podpowiedz kolejne kroki")
+        elif typed_query:
+            self.ask_title.setText(f"“{typed_query}” — suggest next steps")
+        else:
+            self.ask_title.setText("Opisz zadanie dla Altair" if self.language == "pl" else "Ask Altair what to do next")
+
+    def eventFilter(self, watched, event):
+        if watched is self.ask_button and event.type() == QEvent.KeyPress:
+            if event.key() == Qt.Key_Up and self.tools_list.count() > 0:
+                self.tools_list.setCurrentRow(self.tools_list.count() - 1)
+                self.tools_list.setFocus()
+                return True
+            if event.key() == Qt.Key_Escape:
+                self.reject()
+                return True
+            if event.key() == Qt.Key_Tab:
+                self.open_settings()
+                return True
+        return super().eventFilter(watched, event)
+
+    def move_selection(self, delta: int):
+        count = self.tools_list.count()
+        if count <= 0:
+            self.ask_button.setFocus()
+            return
+        current = self.tools_list.currentRow()
+        if current < 0:
+            next_row = 0 if delta > 0 else count - 1
+        else:
+            next_row = current + int(delta)
+        if next_row >= count:
+            self.ask_button.setFocus()
+            return
+        next_row = max(0, next_row)
+        self.tools_list.setCurrentRow(next_row)
+        self.tools_list.setFocus()
+
+    def activate_current_tool(self):
+        item = self.tools_list.currentItem()
+        record = item.data(Qt.UserRole) if item is not None else None
+        if not isinstance(record, dict):
+            if self.search_edit.text().strip():
+                self.ask_altair()
+            return
+        action = record.get("action")
+        callback = record.get("callback")
+        if action is not None and not action.isEnabled():
+            return
+        self.accept()
+        if callable(callback):
+            QTimer.singleShot(0, callback)
+        elif action is not None:
+            QTimer.singleShot(0, action.trigger)
+
+    def ask_altair(self):
+        query = str(self.search_edit.text() or "").strip()
+        prompt = (
+            f"{query} — podpowiedz kolejne kroki"
+            if query
+            else ("Podpowiedz kolejne kroki obróbki tego obrazu." if self.language == "pl" else "Suggest the next processing steps for this image.")
+        )
+        self.accept()
+        if callable(self.on_ask_altair):
+            QTimer.singleShot(0, lambda text=prompt: self.on_ask_altair(text))
+
+    def open_settings(self):
+        self.accept()
+        if callable(self.on_open_settings):
+            QTimer.singleShot(0, self.on_open_settings)
+
+    def open_palette(self, initial_query: str = ""):
+        self.search_edit.setText(str(initial_query or ""))
+        self.refresh_results()
+        owner = self.parentWidget()
+        if owner is not None:
+            center = owner.mapToGlobal(owner.rect().center())
+            screen = owner.screen()
+            bounds = screen.availableGeometry() if screen is not None else QRect(0, 0, 1920, 1080)
+            x = min(max(bounds.left(), center.x() - self.width() // 2), bounds.right() - self.width() + 1)
+            y = min(max(bounds.top(), center.y() - self.height() // 2), bounds.bottom() - self.height() + 1)
+            self.move(x, y)
+        QTimer.singleShot(0, self.search_edit.setFocus)
+        return self.exec_()
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key_Escape:
+            self.reject()
+            event.accept()
+            return
+        if event.key() == Qt.Key_Tab:
+            self.open_settings()
+            event.accept()
+            return
+        if event.key() in (Qt.Key_Return, Qt.Key_Enter):
+            self.activate_current_tool()
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
 
 class AstroApp(QMainWindow):
     image_analysis_completed = pyqtSignal(object, str)
@@ -20287,6 +20573,39 @@ class AstroApp(QMainWindow):
             self.ai_assistant_panel.input_text.setFocus()
             self.log("AI panel focused.")
 
+    def _update_command_palette_button_text(self):
+        button = getattr(self, "command_palette_button", None)
+        if button is None:
+            return
+        label = self.tr("command_palette_open", "Wyszukaj narzędzie lub polecenie…")
+        shortcut = "Ctrl+Shift+P"
+        button.setText(f"{label}                                  {shortcut}")
+        button.setAccessibleName(label)
+
+    def show_command_palette(self):
+        dialog = getattr(self, "command_palette_dialog", None)
+        if dialog is None:
+            return
+        dialog.set_language(getattr(self, "language", "pl"))
+        dialog.set_entries(getattr(self, "command_palette_entries", []))
+        dialog.open_palette()
+
+    def _ask_altair_from_command_palette(self, prompt: str):
+        panel = getattr(self, "ai_assistant_panel", None)
+        if panel is None:
+            return
+        self.show_ai_assistant_dialog()
+        panel.input_text.setPlainText(str(prompt or "").strip())
+        panel.on_send_message()
+
+    def _run_starnet_mask_from_palette(self):
+        previous_setting = bool(getattr(self, "starnet_generate_starmask", False))
+        previous_worker = getattr(self, "starnet_worker", None)
+        self.starnet_generate_starmask = True
+        self.run_starnet()
+        if getattr(self, "starnet_worker", None) is previous_worker:
+            self.starnet_generate_starmask = previous_setting
+
     def show_levels_window(self):
         if self.magic_img is not None:
             self.levels_window.levels_widget.set_image(self.magic_img)
@@ -20876,6 +21195,10 @@ class AstroApp(QMainWindow):
             self.menu_workspace.setTitle(self.tr("action_workspace", "Workspace"))
         if hasattr(self, "btn_check_updates"):
             self.btn_check_updates.setText(self.tr("check_updates", "Check for updates"))
+        self._update_command_palette_button_text()
+        palette_dialog = getattr(self, "command_palette_dialog", None)
+        if palette_dialog is not None:
+            palette_dialog.set_language(self.language)
 
         button_map = [
             ("btn_open", "top_open", "Open"),
@@ -22379,228 +22702,198 @@ class AstroApp(QMainWindow):
         command_palette_layout.setContentsMargins(8, 4, 8, 4)
         command_palette_layout.addStretch(1)
 
-        self.command_palette = QComboBox()
-        self.command_palette.setObjectName("commandPalette")
-        self.command_palette.setProperty("commandPalette", True)
-        self.command_palette.setEditable(True)
-        self.command_palette.setInsertPolicy(QComboBox.NoInsert)
-        self.command_palette.setMinimumWidth(520)
-        self.command_palette.setMaximumWidth(720)
-        self.command_palette.setMinimumHeight(42)
-        self.command_palette.setMaxVisibleItems(14)
-        self.command_palette.setToolTip("Paleta poleceń · Ctrl+Shift+P")
-        self.command_palette.lineEdit().setPlaceholderText("Wyszukaj polecenie… np. redukcja gwiazd (Ctrl+Shift+P)")
-        command_completer = self.command_palette.completer()
-        command_completer.setCompletionMode(QCompleter.PopupCompletion)
-        command_completer.setFilterMode(Qt.MatchContains)
-        command_completer.setCaseSensitivity(Qt.CaseInsensitive)
+        palette_icons_dir = os.path.join(get_runtime_base_dir(), "assets", "icons", "top bar")
 
-        command_palette_entries = [
-            ("Otwórz obraz — Open", self.action_open),
-            ("Zapisz obraz — Save", self.action_save),
-            ("Zapisz jako — Save As", self.action_save_as),
-            ("Cofnij — Undo", self.action_undo),
-            ("Ponów — Redo", self.action_redo),
-            ("Kadruj obraz — Crop", self.action_crop),
-            ("Obróć obraz — Rotate", self.action_rotate),
-            ("Redukcja gwiazd — Star Shrink", self.action_star_shrink),
-            ("Usuń gwiazdy — StarNet++", self.action_starnet),
-            ("Odszumianie — deepSNR", self.action_deepsnr),
-            ("Powiększ obraz — Astro Upscale", self.action_astro_upscale),
-            ("Korekcja tła — Background Extraction", self.action_background_extraction),
-            ("Usuwanie gradientu — Background Extraction", self.action_background_extraction),
-            ("Wyostrzanie — Deconvolution", self.action_deconvolution),
-            ("Rozciągnij histogram — AutoStretch", self.action_stretch),
-            ("Poziomy — Levels", self.action_levels),
-            ("Krzywe — Curves", self.action_curves),
-            ("Kalibracja koloru — Color Calibration", self.action_color_calibration),
-            ("Asystent AI — AI Assistant", self.action_ai_assistant),
-            ("Rozmycie — Gaussian Blur", self.action_blur),
-            ("Kontrast lokalny — Local Contrast", self.action_local_contrast),
-            ("Stack klatek — Frame Stack", self.action_stack),
-            ("Mozaika klatek — Frame Mosaic", self.action_mosaic),
-            ("Rozwiąż astrometrię — Plate Solving", self.action_plate_solve),
-            ("Animacja 3D — 3D FLY", self.action_3d_fly),
-            ("Ustawienia — Preferences", self.action_preferences),
+        def _palette_entry(
+            title_pl,
+            title_en,
+            description_pl,
+            description_en,
+            category_pl,
+            category_en,
+            icon_name,
+            action=None,
+            callback=None,
+            aliases=(),
+            pinned=False,
+        ):
+            return {
+                "title_pl": title_pl,
+                "title_en": title_en,
+                "description_pl": description_pl,
+                "description_en": description_en,
+                "category_pl": category_pl,
+                "category_en": category_en,
+                "icon_path": os.path.join(palette_icons_dir, icon_name) if icon_name else "",
+                "action": action,
+                "callback": callback,
+                "aliases": tuple(aliases),
+                "pinned": bool(pinned),
+            }
+
+        self.command_palette_entries = [
+            _palette_entry(
+                "Usuń gwiazdy (StarNet++)", "Remove stars (StarNet++)",
+                "Rozdziela obraz na warstwę starless i maskę gwiazd", "Separates the image into starless and star-mask layers",
+                "Gwiazdy", "Stars", "starnet.svg", self.action_starnet,
+                aliases=("usuń gwiazdy", "remove stars", "starless"),
+            ),
+            _palette_entry(
+                "Zmniejsz gwiazdy", "Reduce stars",
+                "Erozja z maską, siłą i selekcją", "Erosion with mask, strength and selection",
+                "Gwiazdy", "Stars", "shrink.svg", self.action_star_shrink,
+                aliases=("usuń gwiazdy", "remove stars", "star shrink"),
+            ),
+            _palette_entry(
+                "Korekcja gwiazd", "Star correction",
+                "Aberracja, halo i kształt", "Correct aberration, halos and star shape",
+                "Gwiazdy", "Stars", "shrink.svg", self.action_star_correction,
+                aliases=("usuń gwiazdy", "remove stars", "halo"),
+            ),
+            _palette_entry(
+                "Maska gwiazd", "Star mask",
+                "Generuj z różnicy obrazu i starless", "Generate a mask from the image and starless result",
+                "Gwiazdy", "Stars", "starnet.svg", self.action_starnet,
+                callback=self._run_starnet_mask_from_palette,
+                aliases=("usuń gwiazdy", "remove stars", "starmask", "star mask"),
+            ),
+            _palette_entry(
+                "Usuń tło (ekstrakcja gradientu)", "Remove background (gradient extraction)",
+                "AI, RBF, Splines lub Kriging", "AI, RBF, Splines or Kriging",
+                "Detale", "Details", "background_extraction.svg", self.action_background_extraction,
+                aliases=("gradient", "tło", "background"), pinned=True,
+            ),
+            _palette_entry("Otwórz obraz", "Open image", "Wczytaj zdjęcie do edycji", "Load an image for editing", "Plik", "File", "open.svg", self.action_open),
+            _palette_entry("Zapisz obraz", "Save image", "Zapisz bieżące zmiany", "Save current changes", "Plik", "File", "save.svg", self.action_save),
+            _palette_entry("Zapisz jako…", "Save as…", "Zapisz kopię w innym formacie", "Save a copy in another format", "Plik", "File", "save_as.svg", self.action_save_as),
+            _palette_entry("Cofnij", "Undo", "Cofnij ostatnią operację", "Undo the last operation", "Edycja", "Edit", "undo.svg", self.action_undo),
+            _palette_entry("Ponów", "Redo", "Ponów cofniętą operację", "Redo the undone operation", "Edycja", "Edit", "redo.svg", self.action_redo),
+            _palette_entry("Kadruj obraz", "Crop image", "Wybierz obszar obrazu", "Select an image area", "Obraz", "Image", "crop.svg", self.action_crop),
+            _palette_entry("Obróć obraz", "Rotate image", "Obróć lub odbij obraz", "Rotate or flip the image", "Obraz", "Image", "rotate.svg", self.action_rotate),
+            _palette_entry("Odszumianie — deepSNR", "Denoise — deepSNR", "Uruchom odszumianie obrazu", "Run image denoising", "Detale", "Details", "deepsnr.svg", self.action_deepsnr),
+            _palette_entry("Powiększ obraz — Astro Upscale", "Upscale image — Astro Upscale", "Naturalne powiększanie 2× lub 4×", "Natural 2× or 4× image enlargement", "Obraz", "Image", "astro_upscale.svg", self.action_astro_upscale),
+            _palette_entry("Wyostrzanie — Deconvolution", "Deconvolution", "Odtwórz drobne szczegóły obrazu", "Recover fine image details", "Detale", "Details", "deconvolution.svg", self.action_deconvolution),
+            _palette_entry("Rozciągnij histogram — AutoStretch", "Stretch histogram — AutoStretch", "Rozjaśnij podgląd obrazu", "Stretch the image preview", "Ton", "Tone", "levels.svg", self.action_stretch),
+            _palette_entry("Poziomy", "Levels", "Dopasuj czernie, światła i półtony", "Adjust shadows, highlights and midtones", "Ton", "Tone", "levels.svg", self.action_levels),
+            _palette_entry("Krzywe", "Curves", "Precyzyjna korekcja tonalna", "Precise tonal adjustment", "Ton", "Tone", "curves.svg", self.action_curves),
+            _palette_entry("Kalibracja koloru", "Color calibration", "Skoryguj balans i kolor obrazu", "Adjust image color balance", "Kolor", "Color", "correction.svg", self.action_color_calibration),
+            _palette_entry("Asystent AI — Altair", "AI assistant — Altair", "Zapytaj o analizę lub kolejne kroki", "Ask for analysis or processing steps", "AI", "AI", "ai.svg", self.action_ai_assistant),
+            _palette_entry("Rozmycie Gaussa", "Gaussian blur", "Wygładź obraz", "Smooth the image", "Detale", "Details", "blur.svg", self.action_blur),
+            _palette_entry("Kontrast lokalny", "Local contrast", "Popraw lokalną czytelność detali", "Improve local detail contrast", "Detale", "Details", "blur.svg", self.action_local_contrast),
+            _palette_entry("Stack klatek", "Frame stack", "Połącz wiele klatek", "Combine multiple frames", "Astronomia", "Astronomy", "mosaic.svg", self.action_stack),
+            _palette_entry("Mozaika klatek", "Frame mosaic", "Połącz obrazy w mozaikę", "Stitch images into a mosaic", "Astronomia", "Astronomy", "mosaic.svg", self.action_mosaic),
+            _palette_entry("Rozwiąż astrometrię", "Plate solving", "Ustal współrzędne nieba obrazu", "Determine the image sky coordinates", "Astronomia", "Astronomy", "plate.svg", self.action_plate_solve),
+            _palette_entry("Animacja 3D — FLY", "3D FLY animation", "Utwórz przelot 3D po obrazie", "Create a 3D fly-through of the image", "Narzędzia", "Tools", "fly3d.svg", self.action_3d_fly),
+            _palette_entry("Ustawienia", "Settings", "Otwórz preferencje aplikacji", "Open application preferences", "Aplikacja", "App", "prefs.svg", self.action_preferences),
         ]
-        for label, action in command_palette_entries:
-            self.command_palette.addItem(label)
-            item_index = self.command_palette.count() - 1
-            model_item = self.command_palette.model().item(item_index)
-            if model_item is not None:
-                model_item.setEnabled(action.isEnabled())
-            action.changed.connect(
-                lambda a=action, c=self.command_palette, i=item_index: (
-                    c.model().item(i).setEnabled(a.isEnabled())
-                    if c.model().item(i) is not None
-                    else None
-                )
-            )
-        self.command_palette.setCurrentIndex(-1)
-        self.command_palette.clearEditText()
+        self.command_palette_dialog = CommandPaletteDialog(
+            self.command_palette_entries,
+            self._ask_altair_from_command_palette,
+            self.action_preferences.trigger,
+            language=self.language,
+            parent=self,
+        )
 
-        def _run_command_palette_action(index):
-            if index < 0 or index >= len(command_palette_entries):
-                return
-            action = command_palette_entries[index][1]
-            if not action.isEnabled():
-                return
-            self.command_palette.setCurrentIndex(-1)
-            self.command_palette.clearEditText()
-            action.trigger()
-
-        self._command_palette_queued_index = None
-        self._command_palette_dispatch_scheduled = False
-
-        def _dispatch_command_palette_action():
-            self._command_palette_dispatch_scheduled = False
-            index = self._command_palette_queued_index
-            self._command_palette_queued_index = None
-            if index is not None:
-                _run_command_palette_action(index)
-
-        def _queue_command_palette_action(index):
-            if index < 0 or index >= len(command_palette_entries):
-                return
-            self._command_palette_queued_index = index
-            if not self._command_palette_dispatch_scheduled:
-                self._command_palette_dispatch_scheduled = True
-                QTimer.singleShot(0, _dispatch_command_palette_action)
-
-        def _run_command_palette_query():
-            query = str(self.command_palette.currentText() or "").strip().casefold()
-            if not query:
-                self.command_palette.showPopup()
-                return
-            matches = [
-                index for index, (label, _action) in enumerate(command_palette_entries)
-                if query in label.casefold()
-            ]
-            if len(matches) == 1:
-                _queue_command_palette_action(matches[0])
-            else:
-                self.command_palette.showPopup()
-
-        self.command_palette.activated.connect(_queue_command_palette_action)
-        self.command_palette.lineEdit().returnPressed.connect(_run_command_palette_query)
-        self.action_command_palette = QAction("Command Palette", self)
-        self.action_command_palette.setShortcut("Ctrl+Shift+P")
-
-        def _focus_command_palette():
-            self.command_palette.setFocus(Qt.ShortcutFocusReason)
-            self.command_palette.showPopup()
-
-        self.action_command_palette.triggered.connect(_focus_command_palette)
-        self.addAction(self.action_command_palette)
-        command_palette_layout.addWidget(self.command_palette)
+        self.command_palette_button = QPushButton(self)
+        self.command_palette_button.setObjectName("commandPaletteTrigger")
+        self.command_palette_button.setMinimumWidth(520)
+        self.command_palette_button.setMaximumWidth(720)
+        self.command_palette_button.setFixedHeight(42)
+        self.command_palette_button.setCursor(Qt.PointingHandCursor)
+        self.command_palette_button.setIcon(svg_icon_from_text(
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">'
+            '<circle cx="10.5" cy="10.5" r="6.5" stroke="#55c6ed" stroke-width="1.8"/>'
+            '<path d="m15.5 15.5 5 5" stroke="#55c6ed" stroke-width="1.8" stroke-linecap="round"/>'
+            '</svg>', 18
+        ))
+        self.command_palette_button.setIconSize(QSize(18, 18))
+        self.command_palette_button.setToolTip("Paleta poleceń · Ctrl+Shift+P")
+        self.command_palette_button.setStyleSheet(
+            "QPushButton#commandPaletteTrigger { text-align: left; padding: 0 12px; "
+            "background: #151a24; color: #aab8cb; border: 1px solid #303d53; border-radius: 9px; }"
+            "QPushButton#commandPaletteTrigger:hover { border-color: #55c6ed; color: #e8edf6; }"
+        )
+        self.command_palette_button.clicked.connect(lambda _checked=False: self.show_command_palette())
+        self._update_command_palette_button_text()
+        command_palette_layout.addWidget(self.command_palette_button)
         command_palette_layout.addStretch(1)
 
-        menu_bar = QFrame()
-        menu_bar.setObjectName("top_menu_bar")
-        menu_layout = QHBoxLayout(menu_bar)
-        menu_layout.setContentsMargins(8, 2, 8, 2)
-        menu_layout.setSpacing(4)
-        self.top_menu_combos = {}
+        self.action_command_palette = QAction("Command Palette", self)
+        self.action_command_palette.setShortcut("Ctrl+Shift+P")
+        self.action_command_palette.triggered.connect(lambda _checked=False: self.show_command_palette())
+        self.addAction(self.action_command_palette)
 
-        def _add_menu_combo(title, entries):
-            combo = QComboBox()
-            combo.setObjectName(f"menu_combo_{title.lower()}")
-            combo.setProperty("commandMenu", True)
-            combo.setFixedWidth({"file": 62, "edit": 60, "view": 64, "image": 68, "ai": 48, "tools": 70}.get(title.lower(), 64))
-            combo.setMinimumHeight(28)
-            combo.setCursor(Qt.PointingHandCursor)
-            combo.setToolTip(f"{title} menu")
-            combo.addItem(title)
-            combo.view().setRowHidden(0, True)
-            for label, action in entries:
-                combo.addItem(label)
-                model_item = combo.model().item(combo.count() - 1)
-                if model_item is not None:
-                    model_item.setEnabled(action.isEnabled())
-                item_index = combo.count() - 1
-                action.changed.connect(
-                    lambda a=action, c=combo, i=item_index: (
-                        c.model().item(i).setEnabled(a.isEnabled())
-                        if c.model().item(i) is not None
-                        else None
-                    )
-                )
+        menu_bar = QMenuBar()
+        menu_bar.setObjectName("app_menu_bar")
+        menu_bar.setNativeMenuBar(False)
+        self.top_menus = {}
 
-            def _on_menu_action_selected(index, menu_combo=combo, menu_entries=entries):
-                if index <= 0:
-                    return
-                menu_combo.setCurrentIndex(0)
-                action = menu_entries[index - 1][1]
-                if action.isEnabled():
-                    action.trigger()
+        def _add_top_menu(title, actions):
+            menu = menu_bar.addMenu(title)
+            for action in actions:
+                menu.addAction(action)
+            self.top_menus[title.lower()] = menu
 
-            combo.activated.connect(_on_menu_action_selected)
-            self.top_menu_combos[title.lower()] = combo
-            menu_layout.addWidget(combo)
-
-        _add_menu_combo("File", [
-            ("Open", self.action_open),
-            ("Save", self.action_save),
-            ("Save As...", self.action_save_as),
-            ("Home Folder", self.action_set_home_folder),
-            ("Exit", self.action_exit),
+        _add_top_menu("File", [
+            self.action_open,
+            self.action_save,
+            self.action_save_as,
+            self.action_set_home_folder,
+            self.action_exit,
         ])
-        _add_menu_combo("Edit", [
-            ("Undo", self.action_undo),
-            ("Redo", self.action_redo),
-            ("Paste Into Selected Layer", self.action_paste_layer),
-            ("New Layer", self.action_new_layer),
-            ("Delete Layer", self.action_delete_layer),
-            ("Adjustment Levels", self.action_adjustment_levels),
-            ("Adjustment Curves", self.action_adjustment_curves),
+        _add_top_menu("Edit", [
+            self.action_undo,
+            self.action_redo,
+            self.action_paste_layer,
+            self.action_new_layer,
+            self.action_delete_layer,
+            self.action_adjustment_levels,
+            self.action_adjustment_curves,
         ])
-        _add_menu_combo("View", [
-            ("Zoom In", self.action_view_zoom_in),
-            ("Zoom Out", self.action_view_zoom_out),
-            ("Fit to Window", self.action_view_zoom_fit),
-            ("Histogram", self.action_histogram),
-            ("Console", self.action_console),
+        _add_top_menu("View", [
+            self.action_view_zoom_in,
+            self.action_view_zoom_out,
+            self.action_view_zoom_fit,
+            self.action_histogram,
+            self.action_console,
         ])
-        _add_menu_combo("Image", [
-            ("Crop", self.action_crop),
-            ("Rotate", self.action_rotate),
-            ("Levels", self.action_levels),
-            ("Curves", self.action_curves),
-            ("AutoStretch", self.action_stretch),
-            ("GHS Stretch", self.action_ghs),
-            ("Color Calibration", self.action_color_calibration),
-            ("Correction", self.action_correction),
-            ("Star Correction", self.action_star_correction),
+        _add_top_menu("Image", [
+            self.action_crop,
+            self.action_rotate,
+            self.action_levels,
+            self.action_curves,
+            self.action_stretch,
+            self.action_ghs,
+            self.action_color_calibration,
+            self.action_correction,
+            self.action_star_correction,
         ])
-        _add_menu_combo("AI", [
-            ("AI Assistant", self.action_ai_assistant),
-            ("Magic Filter", self.action_magic_filter),
-            ("Astro Upscale", self.action_astro_upscale),
-            ("Star Shrink", self.action_star_shrink),
-            ("StarNet++", self.action_starnet),
-            ("deepSNR", self.action_deepsnr),
-            ("Background Extraction", self.action_background_extraction),
-            ("Deconvolution", self.action_deconvolution),
-            ("Local Contrast", self.action_local_contrast),
-            ("Gaussian Blur", self.action_blur),
+        _add_top_menu("AI", [
+            self.action_ai_assistant,
+            self.action_magic_filter,
+            self.action_astro_upscale,
+            self.action_star_shrink,
+            self.action_starnet,
+            self.action_deepsnr,
+            self.action_background_extraction,
+            self.action_deconvolution,
+            self.action_local_contrast,
+            self.action_blur,
         ])
-        _add_menu_combo("Tools", [
-            ("Plate Solving", self.action_plate_solve),
-            ("Frame Mosaic", self.action_mosaic),
-            ("Frame Stack", self.action_stack),
-            ("Planetary Stack", self.action_solar_stack),
-            ("Time-lapse Movie", self.action_timelapse),
-            ("3D FLY", self.action_3d_fly),
-            ("SVG Brush", self.action_svg_brush),
-            ("Photoshop Menu", self.action_photoshop_menu),
-            ("Script Editor", self.action_script_editor),
-            ("Preferences", self.action_preferences),
+        _add_top_menu("Tools", [
+            self.action_plate_solve,
+            self.action_mosaic,
+            self.action_stack,
+            self.action_solar_stack,
+            self.action_timelapse,
+            self.action_3d_fly,
+            self.action_svg_brush,
+            self.action_photoshop_menu,
+            self.action_script_editor,
+            self.action_preferences,
         ])
-        menu_layout.addStretch(1)
-
+        self.setMenuBar(menu_bar)
         main_layout.addWidget(command_palette_row)
-        main_layout.addWidget(menu_bar)
-        main_layout.addWidget(top_actions_bar)
 
 
 
@@ -22693,7 +22986,28 @@ class AstroApp(QMainWindow):
         self.workspace_splitter.setCollapsible(0, False)
         self.workspace_splitter.setCollapsible(1, True)
         self.workspace_splitter.setSizes([650, 190])
-        main_layout.addWidget(self.workspace_splitter, 1)
+
+        self.topbar_splitter = QSplitter(Qt.Vertical)
+        self.topbar_splitter.setObjectName("topbarSplitter")
+        self.topbar_splitter.setHandleWidth(9)
+        self.topbar_splitter.setChildrenCollapsible(False)
+        self.topbar_splitter.addWidget(top_actions_bar)
+        self.topbar_splitter.addWidget(self.workspace_splitter)
+        self.topbar_splitter.setStretchFactor(0, 0)
+        self.topbar_splitter.setStretchFactor(1, 1)
+        self.topbar_splitter.setCollapsible(0, True)
+        self.topbar_splitter.setCollapsible(1, False)
+        self.topbar_splitter.setSizes([44, 790])
+        self.topbar_splitter.setAccessibleName("Top bar splitter")
+        self.topbar_splitter.setToolTip(
+            "Przeciągnij uchwyt w górę, aby ukryć top bar; w dół, aby go przywrócić."
+        )
+        self.topbar_splitter.setStyleSheet(
+            "QSplitter#topbarSplitter::handle:vertical {"
+            "background-color: #3b4657; height: 9px; margin: 1px 0; }"
+            "QSplitter#topbarSplitter::handle:vertical:hover { background-color: #40d6b4; }"
+        )
+        main_layout.addWidget(self.topbar_splitter, 1)
 
         bottom_panel = QFrame()
         bottom_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
