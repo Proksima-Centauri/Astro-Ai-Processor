@@ -1,14 +1,23 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 import sys
+import tempfile
+from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_submodules
 
 
+PROJECT_ROOT = Path(SPECPATH).resolve()
+_skyshot_build_temp = tempfile.TemporaryDirectory(prefix="astro-skyshot-build-")
+sys.path.insert(0, str(PROJECT_ROOT / "packaging"))
+from build_skyshot import build_skyshot
+
+skyshot_binary, skyshot_binary_notices = build_skyshot(PROJECT_ROOT, Path(_skyshot_build_temp.name))
+
 a = Analysis(
     ['Astro Ai Processor.py'],
     pathex=[],
-    binaries=[],
+    binaries=[(str(skyshot_binary), ".")],
     datas=[
         ('assets', 'assets'),
         ('favicon-32.png', '.'),
@@ -17,6 +26,21 @@ a = Analysis(
         ('LICENSE', '.'),
         ('docs/LICENSE-Skyshot-Apache-2.0.txt', 'licenses'),
         ('docs/NOTICE-Skyshot.txt', 'licenses'),
+        ('third_party/skyshot/LICENSE', 'licenses/skyshot'),
+        ('third_party/skyshot/NOTICE', 'licenses/skyshot'),
+        ('third_party/skyshot/THIRD_PARTY_NOTICES.md', 'licenses/skyshot'),
+        ('third_party/skyshot/docs/DATA.md', 'licenses/skyshot/data'),
+        ('third_party/skyshot/docs/DATA-INSTALL.md', 'licenses/skyshot/data'),
+        ('third_party/skyshot/docs/DATA-PROVENANCE.md', 'licenses/skyshot/data'),
+        ('third_party/skyshot/docs/DATA-RELEASE.md', 'licenses/skyshot/data'),
+        (str(skyshot_binary_notices), 'licenses/skyshot/third_party'),
+        ('third_party/skyshot/tools/fetch_data.py', 'skyshot_runtime/tools'),
+        ('third_party/skyshot/tools/data_bundle.py', 'skyshot_runtime/tools'),
+        ('third_party/skyshot/tools/install_data.py', 'skyshot_runtime/tools'),
+        ('third_party/skyshot/tools/model_bundle.py', 'skyshot_runtime/tools'),
+        ('third_party/skyshot/tools/archive_utils.py', 'skyshot_runtime/tools'),
+        ('third_party/skyshot/provenance/data-releases/2026.10.17.2/release.json',
+         'skyshot_runtime/provenance/data-releases/2026.10.17.2'),
         ('3d_fly_help.md', '.'),
     ],
     hiddenimports=collect_submodules('processing'),

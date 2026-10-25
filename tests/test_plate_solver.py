@@ -69,6 +69,8 @@ def test_skyshot_rejects_non_solutions(status):
 def test_skyshot_requires_index_and_binary(tmp_path, monkeypatch):
     monkeypatch.delenv("SKYSHOT_BINARY", raising=False)
     monkeypatch.delenv("SKYSHOT_INDEX", raising=False)
+    monkeypatch.setattr("processing.plate_solver.resolve_skyshot", lambda *_: (_ for _ in ()).throw(
+        RuntimeError("Skyshot Solver is unavailable")))
     with pytest.raises(RuntimeError, match="Skyshot Solver"):
         solve_with_skyshot(np.zeros((6, 8)), str(tmp_path / "missing"), str(tmp_path))
 
@@ -86,6 +88,9 @@ def test_skyshot_binary_and_index_are_discovered_without_dialog_settings(tmp_pat
     monkeypatch.setenv("PATH", "")
     monkeypatch.delenv("SKYSHOT_BINARY", raising=False)
     monkeypatch.delenv("SKYSHOT_INDEX", raising=False)
+    fake_app = tmp_path / "project" / "processing" / "plate_solver.py"
+    fake_app.parent.mkdir(parents=True)
+    monkeypatch.setattr("processing.plate_solver.__file__", str(fake_app))
 
     assert resolve_skyshot() == str(binary)
     assert resolve_skyshot_index() == str(index)

@@ -30,7 +30,7 @@ from processing.preview import PreviewCache, parameter_key
 from processing.export import normalized_to_uint16
 from processing.pipeline import process_image
 from processing.openrouter import OPENROUTER_DEFAULT_MODEL, create_chat_completion
-from processing.plate_solver import resolve_skyshot, resolve_skyshot_index, solve_with_skyshot
+from processing.plate_solver import resolve_skyshot, solve_with_skyshot
 from processing.image_analysis import compute_image_analysis_metrics
 from processing.image_effects import _normalize_mask01, local_contrast_enhancement, neutralize_background
 from processing.stretch import stretch_image
@@ -154,7 +154,7 @@ from PyQt5.QtWidgets import (
     QScrollArea, QStackedLayout, QTabBar, QListWidget, QListWidgetItem, QStackedWidget, QPlainTextEdit,
     QSplashScreen, QStyledItemDelegate,
 )
-from PyQt5.QtGui import QImage, QPixmap, QPainter, QIcon, QColor, QFont, QPolygon, QPolygonF, QPen, QPalette, QRegion, QLinearGradient, QDrag, QCursor
+from PyQt5.QtGui import QImage, QPixmap, QPainter, QIcon, QColor, QFont, QPolygon, QPolygonF, QPen, QPalette, QRegion, QLinearGradient, QDrag, QCursor, QTransform
 from PyQt5.QtCore import Qt, QPoint, QPointF, QRect, QRectF, QThread, pyqtSignal, QTimer, QSize, QByteArray, QEvent, qInstallMessageHandler, QMimeData
 from PyQt5.QtWidgets import QSizePolicy, QCheckBox, QInputDialog, QMessageBox, QGraphicsItem, QProgressBar
 from PyQt5.QtGui import QPainterPath, QBrush
@@ -15843,6 +15843,8 @@ class SingleViewer(QGraphicsView):
         self.setResizeAnchor(QGraphicsView.AnchorViewCenter)
         self.scale_factor = 1.0
         self._pixmap_item = None
+        self._overlay_item = None
+        self.overlay_pix = None
         self._pan_margin = 800
         self._centered_once = False
         self.pick_mode = False
@@ -15857,6 +15859,8 @@ class SingleViewer(QGraphicsView):
         if pix is None:
             self._scene.clear()
             self._pixmap_item = None
+            self._overlay_item = None
+            self.overlay_pix = None
             return
 
         if self._pixmap_item is not None:
@@ -15865,6 +15869,7 @@ class SingleViewer(QGraphicsView):
                 # Compare scrubbing replaces only pixels; keep the scene rect
                 # and scrollbars untouched to avoid cumulative center drift.
                 self._pixmap_item.setPixmap(pix)
+                self._sync_overlay_item()
                 self.viewport().update()
                 return
 
@@ -15878,6 +15883,7 @@ class SingleViewer(QGraphicsView):
 
         margin = self._pan_margin
         self._pixmap_item.setPos(margin, margin)
+        self._sync_overlay_item()
         self._scene.setSceneRect(0, 0, pix.width() + margin * 2, pix.height() + margin * 2)
 
         if not self._centered_once:
@@ -15886,6 +15892,38 @@ class SingleViewer(QGraphicsView):
             return
 
         self.centerOn(current_center)
+
+    def set_overlay_pixmap(self, overlay: QPixmap):
+        self.overlay_pix = overlay
+        self._sync_overlay_item()
+        self.viewport().update()
+
+    def clear_overlay(self):
+        self.overlay_pix = None
+        if self._overlay_item is not None:
+            self._scene.removeItem(self._overlay_item)
+            self._overlay_item = None
+        self.viewport().update()
+
+    def _sync_overlay_item(self):
+        if self._pixmap_item is None or self.overlay_pix is None or self.overlay_pix.isNull():
+            if self._overlay_item is not None:
+                self._scene.removeItem(self._overlay_item)
+                self._overlay_item = None
+            return
+
+        if self._overlay_item is None:
+            self._overlay_item = self._scene.addPixmap(self.overlay_pix)
+            self._overlay_item.setZValue(1)
+            self._overlay_item.setAcceptedMouseButtons(Qt.NoButton)
+        else:
+            self._overlay_item.setPixmap(self.overlay_pix)
+
+        base = self._pixmap_item.pixmap()
+        transform = QTransform()
+        transform.scale(base.width() / self.overlay_pix.width(), base.height() / self.overlay_pix.height())
+        self._overlay_item.setTransform(transform)
+        self._overlay_item.setPos(self._pixmap_item.pos())
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton and self.svg_brush_mode and not self.roi_pick_mode and not self.pick_mode:
@@ -16150,10 +16188,12 @@ class BlendViewer(QWidget):
 
     def set_overlay_pixmap(self, overlay: QPixmap):
         self.overlay_pix = overlay
+        self.view.set_overlay_pixmap(overlay)
         self.update_blend()
 
     def clear_overlay(self):
         self.overlay_pix = None
+        self.view.clear_overlay()
         self.update_blend()
 
     def set_compare_enabled(self, enabled: bool):
@@ -16202,16 +16242,7 @@ class BlendViewer(QWidget):
         if self.pix_before is None and self.pix_after is None:
             return
 
-        def draw_overlay(base_pix):
-            if self.overlay_pix is None:
-                return base_pix
-            if self.overlay_pix.size() != base_pix.size():
-                return base_pix
-            result = QPixmap(base_pix)
-            painter = QPainter(result)
-            painter.drawPixmap(0, 0, self.overlay_pix)
-            painter.end()
-            return result
+        self.view.set_overlay_pixmap(self.overlay_pix)
 
         if self.compare_enabled and self.pix_before is not None and self.pix_after is not None:
             w = self.pix_before.width()
@@ -16259,15 +16290,15 @@ class BlendViewer(QWidget):
             painter.drawLine(QPointF(knob_center.x() + 8.0, y_mid), QPointF(knob_center.x() + 4.0, y_mid + 4.0))
             painter.end()
 
-            self.view.set_pixmap(draw_overlay(blended))
+            self.view.set_pixmap(blended)
             return
 
         if self.pix_after is not None:
-            self.view.set_pixmap(draw_overlay(self.pix_after))
+            self.view.set_pixmap(self.pix_after)
             return
 
         if self.pix_before is not None:
-            self.view.set_pixmap(draw_overlay(self.pix_before))
+            self.view.set_pixmap(self.pix_before)
             return
 
     def dragEnterEvent(self, event):
@@ -19517,7 +19548,7 @@ class AstroApp(QMainWindow):
         if hasattr(self, "photoshop_menu_dialog") and self.photoshop_menu_dialog is not None:
             self.photoshop_menu_dialog.update_from_app(self)
 
-    def add_layer(self, key, img=None, title=None):
+    def add_layer(self, key, img=None, title=None, *, copy_image=True):
         if key not in self.layer_order:
             self.layer_order.append(key)
         self.layer_visibility.setdefault(key, True)
@@ -19526,7 +19557,7 @@ class AstroApp(QMainWindow):
         else:
             self.layer_titles.setdefault(key, key.replace("_", " ").title())
         if img is not None:
-            self.layer_images[key] = img.copy()
+            self.layer_images[key] = img.copy() if copy_image else img
         self.update_photoshop_panel()
 
     def get_active_layers(self):
@@ -20924,6 +20955,7 @@ class AstroApp(QMainWindow):
         if hasattr(self, "plate_solving_dialog") and self.plate_solving_dialog is not None:
             self.plate_solving_dialog.set_overlay_controls_state(False, False, False)
             self.plate_solving_dialog.set_overlay_controls_visible(False)
+        self._sync_plate_overlay_controls()
 
     def rotate_image_dialog(self):
         if self.magic_img is None:
@@ -23046,6 +23078,18 @@ class AstroApp(QMainWindow):
         self.btn_zoom_fit_bottom.setToolTip("Dopasuj obraz do rozmiaru okna")
         self.btn_zoom_fit_bottom.clicked.connect(self.viewer.view.fit_to_window)
         bottom_layout.addWidget(self.btn_zoom_fit_bottom)
+        self.btn_grid_overlay_bottom = QPushButton("Siatka")
+        self.btn_grid_overlay_bottom.setCheckable(True)
+        self.btn_grid_overlay_bottom.setEnabled(False)
+        self.btn_grid_overlay_bottom.setToolTip("Pokaż lub ukryj siatkę współrzędnych")
+        self.btn_grid_overlay_bottom.toggled.connect(self._on_plate_dialog_grid_toggled)
+        bottom_layout.addWidget(self.btn_grid_overlay_bottom)
+        self.btn_object_overlay_bottom = QPushButton("Obiekty")
+        self.btn_object_overlay_bottom.setCheckable(True)
+        self.btn_object_overlay_bottom.setEnabled(False)
+        self.btn_object_overlay_bottom.setToolTip("Pokaż lub ukryj etykiety obiektów")
+        self.btn_object_overlay_bottom.toggled.connect(self._on_plate_dialog_annotate_toggled)
+        bottom_layout.addWidget(self.btn_object_overlay_bottom)
         bottom_layout.addStretch(1)
         self.btn_check_updates = QPushButton(self.tr("check_updates", "Check for updates"))
         self.btn_check_updates.clicked.connect(lambda: self.check_for_new_version(user_initiated=True))
@@ -23054,6 +23098,7 @@ class AstroApp(QMainWindow):
         main_layout.addWidget(bottom_panel)
         self.setCentralWidget(main_widget)
 
+        self._sync_plate_overlay_controls()
         self.update_menu_actions()
 
     def on_viewer_image_clicked(self, x, y):
@@ -24893,13 +24938,11 @@ class AstroApp(QMainWindow):
 
         try:
             self.skyshot_binary = resolve_skyshot(self.skyshot_binary)
-            self.skyshot_index = resolve_skyshot_index(self.skyshot_index)
         except RuntimeError as exc:
             self.log(f"Plate Solving unavailable: {exc}", "error")
             QMessageBox.warning(self, "Skyshot Solver", str(exc))
             return
         APP_PREFERENCES["skyshot_binary"] = self.skyshot_binary
-        APP_PREFERENCES["skyshot_index"] = self.skyshot_index
         save_config(
             self.denoise_model_path,
             self.bg_removal_model_path,
@@ -24936,10 +24979,35 @@ class AstroApp(QMainWindow):
         self.plate_solve_progress.setRange(0, 0)
         QApplication.processEvents()
 
+    def _sync_plate_overlay_controls(self):
+        has_result = getattr(self, "latest_plate_solve_result", None) is not None
+        grid_visible = bool(self.layer_visibility.get("grid_overlay", False))
+        objects_visible = bool(self.layer_visibility.get("object_labels", False))
+
+        for button, checked in (
+            (getattr(self, "btn_grid_overlay_bottom", None), grid_visible),
+            (getattr(self, "btn_object_overlay_bottom", None), objects_visible),
+        ):
+            if button is None:
+                continue
+            button.setEnabled(has_result)
+            previous = button.blockSignals(True)
+            button.setChecked(checked if has_result else False)
+            button.blockSignals(previous)
+
+        dialog = getattr(self, "plate_solving_dialog", None)
+        if dialog is not None:
+            dialog.set_overlay_controls_state(
+                grid_visible if has_result else False,
+                objects_visible if has_result else False,
+                bool(self.layer_visibility.get("constellation_overlay", False)) if has_result else False,
+            )
+
     def _on_plate_dialog_grid_toggled(self, checked: bool):
         if self.latest_plate_solve_result is None:
             return
         self.layer_visibility["grid_overlay"] = bool(checked)
+        self._sync_plate_overlay_controls()
         self.update_viewer_overlay()
         self.update_photoshop_panel()
 
@@ -24949,6 +25017,7 @@ class AstroApp(QMainWindow):
         enabled = bool(checked)
         self.layer_visibility["plate_solve_overlay"] = enabled
         self.layer_visibility["object_labels"] = enabled
+        self._sync_plate_overlay_controls()
         self.update_viewer_overlay()
         self.update_photoshop_panel()
 
@@ -24956,6 +25025,7 @@ class AstroApp(QMainWindow):
         if self.latest_plate_solve_result is None:
             return
         self.layer_visibility["constellation_overlay"] = bool(checked)
+        self._sync_plate_overlay_controls()
         self.update_viewer_overlay()
         self.update_photoshop_panel()
 
@@ -25054,7 +25124,7 @@ class AstroApp(QMainWindow):
 
         merged["PLTSOLVD"] = True
         merged["PLTSRC"] = str(result.get("source") or "skyshot")
-        merged["PLTDATE"] = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+        merged["PLTDATE"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
         info = result.get("plate_solve_object_info") if isinstance(result.get("plate_solve_object_info"), dict) else {}
         main_object = str(info.get("main_object") or "").strip()
@@ -25090,6 +25160,18 @@ class AstroApp(QMainWindow):
             self.viewer.clear_overlay()
             return
 
+        resolved_index = str(result.get("skyshot_index") or "").strip()
+        if result.get("source") == "skyshot" and resolved_index and resolved_index != self.skyshot_index:
+            self.skyshot_index = resolved_index
+            APP_PREFERENCES["skyshot_index"] = resolved_index
+            save_config(
+                self.denoise_model_path,
+                self.bg_removal_model_path,
+                self.dark_mode,
+                self.starnet_path,
+                self.starnet_stride,
+            )
+
         ra = result.get("ra")
         dec = result.get("dec")
         rotation = result.get("rotation")
@@ -25113,7 +25195,7 @@ class AstroApp(QMainWindow):
         self.lbl_plate_solve_status.setText(f"Plate solve status: solved ({source_label})")
         self.lbl_plate_solve_details.setText("\n".join(details))
         self._refresh_plate_solve_object_panel()
-        self.add_thumbnail("Plate Solve", self.processed_img)
+        self.add_thumbnail("Plate Solve", self.processed_img, copy_images=False)
         self.log("Plate Solving succeeded. " + " | ".join(details), "success")
         self._update_current_fits_header_with_plate_result(result)
 
@@ -25123,15 +25205,32 @@ class AstroApp(QMainWindow):
         self.layer_visibility["grid_overlay"] = overlay_visible
         self.layer_visibility["object_labels"] = overlay_visible
         self.layer_visibility["constellation_overlay"] = False
-        self.plate_solving_dialog.set_overlay_controls_state(overlay_visible, overlay_visible, False)
+        self._sync_plate_overlay_controls()
         self.plate_solving_dialog.set_overlay_controls_visible(True)
         self.update_viewer_overlay()
         self.update_photoshop_panel()
 
-    def _build_plate_overlay(self, width: int, height: int, points):
-        overlay = QPixmap(width, height)
+    @staticmethod
+    def _overlay_render_size(width: int, height: int, max_side: int = 4096):
+        width = max(1, int(width))
+        height = max(1, int(height))
+        factor = min(1.0, float(max_side) / max(width, height))
+        return max(1, int(round(width * factor))), max(1, int(round(height * factor)))
+
+    def _new_overlay_canvas(self, width: int, height: int, render_size=None):
+        width = max(1, int(width))
+        height = max(1, int(height))
+        render_width, render_height = render_size or self._overlay_render_size(width, height)
+        render_width = max(1, int(render_width))
+        render_height = max(1, int(render_height))
+        overlay = QPixmap(render_width, render_height)
         overlay.fill(Qt.transparent)
         painter = QPainter(overlay)
+        painter.scale(render_width / width, render_height / height)
+        return overlay, painter
+
+    def _build_plate_overlay(self, width: int, height: int, points):
+        overlay, painter = self._new_overlay_canvas(width, height)
         pen = QPen(QColor(255, 255, 0, 180))
         pen.setWidth(1)
         painter.setPen(pen)
@@ -25653,10 +25752,8 @@ class AstroApp(QMainWindow):
                     p1 = unique[j]
         return p0, p1
 
-    def _build_grid_overlay(self, width: int, height: int, header):
-        overlay = QPixmap(width, height)
-        overlay.fill(Qt.transparent)
-        painter = QPainter(overlay)
+    def _build_grid_overlay(self, width: int, height: int, header, render_size=None):
+        overlay, painter = self._new_overlay_canvas(width, height, render_size)
         painter.setRenderHint(QPainter.Antialiasing, True)
 
         crval1 = header.get("CRVAL1")
@@ -25754,10 +25851,8 @@ class AstroApp(QMainWindow):
         painter.end()
         return overlay
 
-    def _build_plate_solve_overlay(self, width: int, height: int, result):
-        overlay = QPixmap(width, height)
-        overlay.fill(Qt.transparent)
-        painter = QPainter(overlay)
+    def _build_plate_solve_overlay(self, width: int, height: int, result, render_size=None):
+        overlay, painter = self._new_overlay_canvas(width, height, render_size)
         pen = QPen(QColor(255, 255, 100, 190))
         pen.setWidth(2)
         painter.setPen(pen)
@@ -25799,10 +25894,9 @@ class AstroApp(QMainWindow):
         dpiy = (-cd21 * dx + cd11 * dy) / det
         return crpix1 + dpix, crpix2 + dpiy
 
-    def _build_object_labels_overlay(self, width: int, height: int, result, current_zoom: float = 1.0):
-        overlay = QPixmap(width, height)
-        overlay.fill(Qt.transparent)
-        painter = QPainter(overlay)
+    def _build_object_labels_overlay(self, width: int, height: int, result, current_zoom: float = 1.0,
+                                     render_size=None):
+        overlay, painter = self._new_overlay_canvas(width, height, render_size)
         painter.setRenderHint(QPainter.Antialiasing, True)
         base_pen = QPen(QColor(255, 200, 120, 220))
         base_pen.setWidth(2)
@@ -25920,10 +26014,8 @@ class AstroApp(QMainWindow):
         painter.end()
         return overlay
 
-    def _build_constellation_overlay(self, width: int, height: int):
-        overlay = QPixmap(width, height)
-        overlay.fill(Qt.transparent)
-        painter = QPainter(overlay)
+    def _build_constellation_overlay(self, width: int, height: int, render_size=None):
+        overlay, painter = self._new_overlay_canvas(width, height, render_size)
         pen = QPen(QColor(180, 180, 255, 170))
         pen.setWidth(2)
         painter.setPen(pen)
@@ -25942,10 +26034,11 @@ class AstroApp(QMainWindow):
         self.latest_plate_solve_result = result
         width = self.original_img.shape[1]
         height = self.original_img.shape[0]
-        self.add_layer("plate_solve_overlay", self._build_plate_solve_overlay(width, height, result), title="Plate Solve Overlay")
-        self.add_layer("grid_overlay", self._build_grid_overlay(width, height, result.get("wcs_header", {})), title="Grid Overlay")
-        self.add_layer("object_labels", self._build_object_labels_overlay(width, height, result, current_zoom=self.viewer.view.scale_factor), title="Object Labels")
-        self.add_layer("constellation_overlay", self._build_constellation_overlay(width, height), title="Constellation Overlay")
+        render_size = self._overlay_render_size(width, height)
+        self.add_layer("plate_solve_overlay", self._build_plate_solve_overlay(width, height, result, render_size), title="Plate Solve Overlay", copy_image=False)
+        self.add_layer("grid_overlay", self._build_grid_overlay(width, height, result.get("wcs_header", {}), render_size), title="Grid Overlay", copy_image=False)
+        self.add_layer("object_labels", self._build_object_labels_overlay(width, height, result, current_zoom=self.viewer.view.scale_factor, render_size=render_size), title="Object Labels", copy_image=False)
+        self.add_layer("constellation_overlay", self._build_constellation_overlay(width, height, render_size), title="Constellation Overlay", copy_image=False)
 
         self.update_viewer_overlay()
 
@@ -25954,9 +26047,8 @@ class AstroApp(QMainWindow):
             return
         width = self.original_img.shape[1]
         height = self.original_img.shape[0]
-        overlay = QPixmap(width, height)
-        overlay.fill(Qt.transparent)
-        painter = QPainter(overlay)
+        render_size = self._overlay_render_size(width, height)
+        overlay, painter = self._new_overlay_canvas(width, height, render_size)
         has_content = False
         for key in ["grid_overlay", "plate_solve_overlay", "object_labels", "constellation_overlay"]:
             if not self.layer_visibility.get(key, False):
@@ -25967,6 +26059,7 @@ class AstroApp(QMainWindow):
                     height,
                     self.latest_plate_solve_result,
                     current_zoom=getattr(self.viewer.view, "scale_factor", 1.0),
+                    render_size=render_size,
                 )
                 self.layer_images[key] = pix
             else:
@@ -25975,10 +26068,10 @@ class AstroApp(QMainWindow):
                 painter.drawPixmap(0, 0, pix)
                 has_content = True
         if self._crop_overlay_active:
-            painter.drawPixmap(0, 0, self._build_crop_overlay(width, height))
+            painter.drawPixmap(0, 0, self._build_crop_overlay(width, height, render_size))
             has_content = True
         if self._bn_overlay_active:
-            painter.drawPixmap(0, 0, self._build_bn_overlay(width, height))
+            painter.drawPixmap(0, 0, self._build_bn_overlay(width, height, render_size))
             has_content = True
         painter.end()
         if has_content:
@@ -25996,10 +26089,8 @@ class AstroApp(QMainWindow):
         if self._crop_overlay_active:
             self.update_viewer_overlay()
 
-    def _build_crop_overlay(self, width: int, height: int) -> QPixmap:
-        overlay = QPixmap(width, height)
-        overlay.fill(Qt.transparent)
-        painter = QPainter(overlay)
+    def _build_crop_overlay(self, width: int, height: int, render_size=None) -> QPixmap:
+        overlay, painter = self._new_overlay_canvas(width, height, render_size)
         x, y, w, h = self._crop_overlay_rect
         x = max(0, min(width - 1, int(x)))
         y = max(0, min(height - 1, int(y)))
@@ -26070,10 +26161,8 @@ class AstroApp(QMainWindow):
 
         painter.restore()
 
-    def _build_bn_overlay(self, width: int, height: int) -> QPixmap:
-        overlay = QPixmap(width, height)
-        overlay.fill(Qt.transparent)
-        painter = QPainter(overlay)
+    def _build_bn_overlay(self, width: int, height: int, render_size=None) -> QPixmap:
+        overlay, painter = self._new_overlay_canvas(width, height, render_size)
         x, y, w, h = self._bn_overlay_rect
         x = max(0, min(width - 1, int(x)))
         y = max(0, min(height - 1, int(y)))

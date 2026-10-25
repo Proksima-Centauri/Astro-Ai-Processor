@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 
 import numpy as np
@@ -18,12 +19,18 @@ def resolve_skyshot(binary=""):
         requested = str(requested or "").strip()
         if requested:
             candidates.append(shutil.which(requested) or os.path.expanduser(requested))
+
+    bundle_root = Path(getattr(sys, "_MEIPASS", "")) if getattr(sys, "_MEIPASS", "") else None
+    if bundle_root is not None:
+        candidates.append(bundle_root / ("skyshot.exe" if os.name == "nt" else "skyshot"))
+    app_root = Path(__file__).resolve().parents[1]
+    vendored_name = "skyshot.exe" if os.name == "nt" else "skyshot"
+    candidates.append(app_root / "third_party" / "skyshot" / "target" / "release" / vendored_name)
     for name in ("skyshot", "skyshot.exe"):
         located = shutil.which(name)
         if located:
             candidates.append(located)
 
-    app_root = Path(__file__).resolve().parents[1]
     skyshot_repo = app_root.parent / "skyshot-solver-main"
     candidates.extend((
         Path.home() / ".cargo" / "bin" / "skyshot",
@@ -46,7 +53,14 @@ def resolve_skyshot_index(index=""):
 
     home = Path.home()
     app_root = Path(__file__).resolve().parents[1]
+    if os.name == "nt":
+        app_data = Path(os.environ.get("LOCALAPPDATA") or home / "AppData" / "Local")
+    elif sys.platform == "darwin":
+        app_data = home / "Library" / "Application Support"
+    else:
+        app_data = Path(os.environ.get("XDG_DATA_HOME") or home / ".local" / "share")
     data_roots = (
+        app_data / "astro-ai-processor" / "skyshot" / "indexes",
         home / ".local" / "share" / "skyshot",
         home / "Documents" / "skyshot",
         home / "Documents" / "skyshot-solver-main" / "data",
@@ -114,7 +128,12 @@ def solve_with_skyshot(image, binary="", index="", progress=None, runner=None):
     from astropy.io import fits
 
     executable = resolve_skyshot(binary)
-    index_path = Path(resolve_skyshot_index(index))
+    try:
+        index_path = Path(resolve_skyshot_index(index))
+    except RuntimeError:
+        from processing.skyshot_data import ensure_default_skyshot_index
+
+        index_path = Path(ensure_default_skyshot_index(progress))
     source = np.asarray(image)
     if source.size == 0 or source.ndim not in (2, 3):
         raise RuntimeError("Niepoprawny obraz do plate solving.")
@@ -154,6 +173,7 @@ def solve_with_skyshot(image, binary="", index="", progress=None, runner=None):
         except Exception as exc:
             raise RuntimeError(f"Nie można odczytać nagłówka WCS Skyshot: {exc}") from None
         result = skyshot_result(payload, header, source.shape)
+        result["skyshot_index"] = str(index_path)
         if progress:
             progress("Skyshot: solved.", 100, 100)
         return result

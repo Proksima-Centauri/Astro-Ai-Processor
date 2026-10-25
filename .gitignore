@@ -5,6 +5,7 @@ __pycache__/
 /build/
 /dist/
 /models/
+/third_party/skyshot/target/
 
 /config
 /astro_magic_config.json

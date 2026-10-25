@@ -1,0 +1,12 @@
+.DS_Store
+/target/
+/demo/
+/data/
+/work/
+/outputs/
+.env
+.env.*
+!.env.example
+__pycache__/
+*.pyc
+/.local-site/
