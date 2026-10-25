@@ -1,6 +1,7 @@
 import importlib.util
 import io
 import json
+import os
 import sys
 from pathlib import Path
 from urllib.error import HTTPError
@@ -107,7 +108,7 @@ def test_openrouter_preferences_round_trip_in_user_config(tmp_path, monkeypatch)
     assert "local_ai_model_file" not in config
     assert "ai_provider" not in config
     assert config["openrouter_api_key"] == "sk-test-private"
-    if hasattr(config_path, "stat"):
+    if os.name == "posix":
         assert config_path.stat().st_mode & 0o077 == 0
 
 
