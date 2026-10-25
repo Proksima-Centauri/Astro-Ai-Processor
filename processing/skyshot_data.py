@@ -1,6 +1,7 @@
 """First-use installation of the pinned Skyshot Full index into user data."""
 from __future__ import annotations
 
+import errno
 import importlib
 import json
 import os
@@ -13,6 +14,8 @@ import time
 _INDEX_INSTALL_LOCK = threading.Lock()
 _SKYSHOT_RELEASE_ID = "skyshot-data-2026.10.17.2"
 _SKYSHOT_ENGINE_VERSION = "0.1.0"
+_EMPTY_LOCK_GRACE_SECONDS = 30
+_DOWNLOAD_LOCK_WAIT_SECONDS = 60 * 60
 
 
 def skyshot_data_home() -> Path:
@@ -63,6 +66,105 @@ def _find_installed_full(destination_root: Path):
     return None
 
 
+def _pid_is_running(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    if os.name == "nt":
+        import ctypes
+        from ctypes import wintypes
+
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+        kernel32.OpenProcess.restype = wintypes.HANDLE
+        kernel32.GetExitCodeProcess.argtypes = (wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD))
+        kernel32.GetExitCodeProcess.restype = wintypes.BOOL
+        kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
+        kernel32.CloseHandle.restype = wintypes.BOOL
+        handle = kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+        if not handle:
+            return ctypes.get_last_error() != 87  # ERROR_INVALID_PARAMETER means no such PID.
+        try:
+            exit_code = wintypes.DWORD()
+            if not kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code)):
+                return True
+            return exit_code.value == 259  # STILL_ACTIVE
+        finally:
+            kernel32.CloseHandle(handle)
+
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError as exc:
+        return exc.errno != errno.ESRCH
+    return True
+
+
+def _read_lock_owner(lock_path: Path):
+    try:
+        value = lock_path.read_text(encoding="ascii").strip()
+        return int(value) if value else None
+    except (OSError, ValueError):
+        return None
+
+
+def _remove_stale_download_lock(lock_path: Path) -> bool:
+    """Remove only abandoned lock files; leave locks owned by live processes alone."""
+    try:
+        if lock_path.is_symlink():
+            raise RuntimeError("Skyshot download lock must not be a symlink.")
+        original_stat = lock_path.stat()
+        original_contents = lock_path.read_text(encoding="ascii").strip()
+    except FileNotFoundError:
+        return True
+    except UnicodeError:
+        return False
+    except OSError:
+        return False
+
+    try:
+        owner = int(original_contents) if original_contents else None
+    except ValueError:
+        owner = None
+
+    if owner is not None:
+        if _pid_is_running(owner):
+            return False
+    elif time.time() - original_stat.st_mtime < _EMPTY_LOCK_GRACE_SECONDS:
+        # The installer creates the lock before writing its PID.
+        return False
+
+    try:
+        current_stat = lock_path.stat()
+        current_contents = lock_path.read_text(encoding="ascii").strip()
+        if (
+            current_stat.st_ino != original_stat.st_ino
+            or current_stat.st_mtime_ns != original_stat.st_mtime_ns
+            or current_contents != original_contents
+        ):
+            return False
+        lock_path.unlink()
+    except FileNotFoundError:
+        pass
+    except OSError:
+        return False
+    return True
+
+
+def _wait_for_download_lock(lock_path: Path, progress=None) -> None:
+    deadline = time.monotonic() + _DOWNLOAD_LOCK_WAIT_SECONDS
+    waiting_reported = False
+    while not _remove_stale_download_lock(lock_path):
+        if time.monotonic() >= deadline:
+            raise RuntimeError("Another Skyshot index download still holds the lock after one hour.")
+        if progress and not waiting_reported:
+            progress("Waiting for another Skyshot index download to finish...", 5, 0)
+            waiting_reported = True
+        time.sleep(1)
+
+
 def ensure_default_skyshot_index(progress=None, *, fetcher=None, data_home=None, release_path=None) -> str:
     """Return a verified local Full index, fetching the pinned public bundle if absent.
 
@@ -107,14 +209,25 @@ def ensure_default_skyshot_index(progress=None, *, fetcher=None, data_home=None,
                 progress(f"Skyshot index: {name} ({percent}%)", 10 + percent * 75 // 100, percent)
 
         try:
-            installer.fetch_and_install(
-                release_file,
-                cache,
-                destination,
-                "full",
-                _SKYSHOT_ENGINE_VERSION,
-                progress=report,
-            )
+            lock_path = cache / ".download.lock"
+            cache.mkdir(parents=True, exist_ok=True)
+            while True:
+                _wait_for_download_lock(lock_path, progress)
+                try:
+                    installer.fetch_and_install(
+                        release_file,
+                        cache,
+                        destination,
+                        "full",
+                        _SKYSHOT_ENGINE_VERSION,
+                        progress=report,
+                    )
+                    break
+                except FileExistsError:
+                    # Another process can win between our check and the
+                    # upstream installer's exclusive lock-file creation.
+                    if not lock_path.exists() or _read_lock_owner(lock_path) == os.getpid():
+                        raise
         except Exception as exc:
             raise RuntimeError(f"Automatic Skyshot index installation failed: {exc}") from None
 
