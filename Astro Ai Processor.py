@@ -642,7 +642,7 @@ ACCENT_PRESETS = {
         "link": "#ffb36f",
     },
     "SkyWatcher Green": {
-        "base": "#7fcf4f",
+        "base": "#328500",
         "border": "#9be06d",
         "hover": "#8cd95b",
         "pressed": "#63ac3a",
@@ -650,7 +650,7 @@ ACCENT_PRESETS = {
         "link": "#b8ee97",
     },
     "ZWO Red": {
-        "base": "#d93a3a",
+        "base": "#d51313",
         "border": "#ef5a5a",
         "hover": "#e64949",
         "pressed": "#b22a2a",
