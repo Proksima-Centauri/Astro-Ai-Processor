@@ -57,6 +57,17 @@ assert window.layer_visibility["object_labels"]
 assert window.layer_visibility["plate_solve_overlay"]
 assert window.plate_solving_dialog.chk_grid_overlay.isChecked()
 assert window.plate_solving_dialog.chk_annotate_overlay.isChecked()
+assert window.plate_solving_dialog.spin_grid_scale.value() == 1.0
+assert window.plate_solving_dialog.spin_label_scale.value() == 1.0
+window.plate_solving_dialog.spin_grid_scale.setValue(1.8)
+window.plate_solving_dialog.spin_label_scale.setValue(1.4)
+assert abs(window.plate_grid_scale - 1.8) < 1e-9
+assert abs(window.plate_label_scale - 1.4) < 1e-9
+calls = []
+window.run_plate_solve = lambda automatic=False: calls.append(bool(automatic))
+window.load_image_from_path("tests/fixtures/color16_5x5.tiff")
+app.processEvents()
+assert calls == [True]
 window.close()
 temporary_home.cleanup()
 '''

@@ -1529,6 +1529,8 @@ class PlateSolvingDialog(QDialog):
     gridOverlayToggled = pyqtSignal(bool)
     annotateOverlayToggled = pyqtSignal(bool)
     constellationOverlayToggled = pyqtSignal(bool)
+    gridScaleChanged = pyqtSignal(float)
+    labelScaleChanged = pyqtSignal(float)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -1579,12 +1581,31 @@ class PlateSolvingDialog(QDialog):
         overlay_row.addStretch(1)
         layout.addLayout(overlay_row)
 
+        scale_row = QGridLayout()
+        scale_row.addWidget(QLabel("Grid scale"), 0, 0)
+        self.spin_grid_scale = QDoubleSpinBox()
+        self.spin_grid_scale.setRange(0.5, 4.0)
+        self.spin_grid_scale.setSingleStep(0.1)
+        self.spin_grid_scale.setValue(1.0)
+        self.spin_grid_scale.setSuffix("x")
+        scale_row.addWidget(self.spin_grid_scale, 0, 1)
+        scale_row.addWidget(QLabel("Label scale"), 1, 0)
+        self.spin_label_scale = QDoubleSpinBox()
+        self.spin_label_scale.setRange(0.5, 4.0)
+        self.spin_label_scale.setSingleStep(0.1)
+        self.spin_label_scale.setValue(1.0)
+        self.spin_label_scale.setSuffix("x")
+        scale_row.addWidget(self.spin_label_scale, 1, 1)
+        layout.addLayout(scale_row)
+
         self.chk_grid_overlay.hide()
         self.chk_annotate_overlay.hide()
         self.chk_constellation_overlay.hide()
         self.chk_grid_overlay.toggled.connect(self.gridOverlayToggled.emit)
         self.chk_annotate_overlay.toggled.connect(self.annotateOverlayToggled.emit)
         self.chk_constellation_overlay.toggled.connect(self.constellationOverlayToggled.emit)
+        self.spin_grid_scale.valueChanged.connect(self.gridScaleChanged.emit)
+        self.spin_label_scale.valueChanged.connect(self.labelScaleChanged.emit)
 
         self.btn_close = QPushButton("Close")
         self.btn_close.clicked.connect(self.close)
@@ -17910,15 +17931,15 @@ class CommandPaletteDialog(QDialog):
             "QDialog#commandPaletteDialog { background: transparent; }"
             "QFrame#commandPaletteCard { background: #151a24; color: #e5eaf2; "
             "border: 1px solid #33415a; border-radius: 13px; }"
-            "QFrame#commandPaletteSearchRow { background: #141923; border-radius: 12px 12px 0 0; }"
-            "QLabel#commandPaletteSearchIcon { color: #3fc2ec; font-size: 25px; font-weight: 400; }"
+            "QFrame#commandPaletteSearchRow { background: #141923; border: 0; border-radius: 12px 12px 0 0; }"
+            "QLabel#commandPaletteSearchIcon { color: #3fc2ec; background: transparent; border: 0; font-size: 25px; font-weight: 400; }"
             "QLineEdit#commandPaletteSearchEdit { background: transparent; border: 0; color: #e8edf6; "
             "font-size: 14px; selection-background-color: #30466c; }"
             "QPushButton#commandPaletteEscape { background: #171e2a; color: #99a8c0; "
             "border: 1px solid #30405a; border-radius: 5px; padding: 3px 8px; }"
             "QPushButton#commandPaletteEscape:hover { color: #e8edf6; border-color: #58708f; }"
             "QFrame#commandPaletteDivider { background: #2c3546; border: 0; }"
-            "QLabel#commandPaletteSection { color: #8797b0; background: #151a24; "
+            "QLabel#commandPaletteSection { color: #8797b0; background: #151a24; border: 0; "
             "font-size: 9px; font-weight: 700; letter-spacing: 1px; }"
             "QListWidget#commandPaletteTools { background: #151a24; border: 0; outline: 0; "
             "padding: 0 5px; }"
@@ -17929,12 +17950,12 @@ class CommandPaletteDialog(QDialog):
             "QPushButton#commandPaletteAsk { text-align: left; color: #dce5f2; background: #151a24; "
             "border: 0; border-radius: 8px; margin: 0 7px 5px; }"
             "QPushButton#commandPaletteAsk:hover, QPushButton#commandPaletteAsk:focus { background: #202c46; }"
-            "QLabel#commandPaletteAskIcon { color: #3fc2ec; font-size: 18px; }"
-            "QLabel#commandPaletteAskTitle { color: #dce5f2; font-size: 12px; font-weight: 600; }"
-            "QLabel#commandPaletteAskDescription { color: #8292a9; font-size: 10px; }"
+            "QLabel#commandPaletteAskIcon { color: #3fc2ec; background: transparent; border: 0; font-size: 18px; }"
+            "QLabel#commandPaletteAskTitle { color: #dce5f2; background: transparent; border: 0; font-size: 12px; font-weight: 600; }"
+            "QLabel#commandPaletteAskDescription { color: #8292a9; background: transparent; border: 0; font-size: 10px; }"
             "QFrame#commandPaletteFooter { background: #171d29; border-top: 1px solid #2a3446; "
-            "border-radius: 0 0 12px 12px; }"
-            "QFrame#commandPaletteFooter QLabel { color: #8292a9; font-size: 10px; }"
+            "border-left: 0; border-right: 0; border-bottom: 0; border-radius: 0 0 12px 12px; }"
+            "QFrame#commandPaletteFooter QLabel { color: #8292a9; background: transparent; border: 0; font-size: 10px; }"
         )
         self.set_language(self.language)
 
@@ -18841,6 +18862,9 @@ class AstroApp(QMainWindow):
         self.latest_image_analysis = {}
         self.analysis_dirty = True
         self.plate_solve_object_info = {}
+        self._plate_solve_request_id = 0
+        self.plate_grid_scale = 1.0
+        self.plate_label_scale = 1.0
         self.ai_assistant_panel = None
         self.blur_dialog = None
         self.background_extraction_dialog = None
@@ -22949,6 +22973,8 @@ class AstroApp(QMainWindow):
         self.plate_solving_dialog.gridOverlayToggled.connect(self._on_plate_dialog_grid_toggled)
         self.plate_solving_dialog.annotateOverlayToggled.connect(self._on_plate_dialog_annotate_toggled)
         self.plate_solving_dialog.constellationOverlayToggled.connect(self._on_plate_dialog_constellation_toggled)
+        self.plate_solving_dialog.gridScaleChanged.connect(self._on_plate_grid_scale_changed)
+        self.plate_solving_dialog.labelScaleChanged.connect(self._on_plate_label_scale_changed)
 
         processing_label = QLabel("Processing:")
         top_panel_layout.addWidget(processing_label)
@@ -24316,6 +24342,10 @@ class AstroApp(QMainWindow):
             self.current_fits_header = loaded_header if _is_fits_path(path) else None
             self.latest_image_analysis = {}
             self.analysis_dirty = True
+            # Invalidate a late result from a previous image before starting
+            # the non-blocking automatic solve for this newly loaded frame.
+            self._plate_solve_request_id += 1
+            self._clear_plate_solving_layers()
 
             # Czyszczenie historii operacji dla nowego pliku
             if hasattr(self, 'undo_stack'): self.undo_stack.clear()
@@ -24335,6 +24365,11 @@ class AstroApp(QMainWindow):
             self.add_thumbnail(filename, self.processed_img)
             
             self.log(f"Successfully loaded: {filename}", "success")
+            QTimer.singleShot(
+                0,
+                lambda loaded_path=path: self.run_plate_solve(automatic=True)
+                if self.current_image_path == loaded_path else None,
+            )
 
         except Exception as e:
             self.magic_img = None
@@ -24924,23 +24959,31 @@ class AstroApp(QMainWindow):
                 return
         self.log(f"3D FLY finished. Output saved: {output_path}", "success")
 
-    def run_plate_solve(self):
+    def run_plate_solve(self, automatic: bool = False):
         if self.original_img is None:
             self.log("Plate Solving skipped: no image loaded.", "warning")
+            return
+
+        active_worker = getattr(self, "plate_solve_worker", None)
+        if active_worker is not None and active_worker.isRunning():
+            self.log("Plate Solving skipped: a solve is already running.", "warning")
             return
 
         header_result = self._build_plate_solve_result_from_current_fits_header()
         if header_result is not None:
             self.log("Plate Solving: using WCS found in FITS header.", "info")
-            self.show_plate_solving_dialog()
+            if not automatic:
+                self.show_plate_solving_dialog()
             self.on_plate_solve_finished(header_result, "", True)
             return
 
         try:
             self.skyshot_binary = resolve_skyshot(self.skyshot_binary)
         except RuntimeError as exc:
-            self.log(f"Plate Solving unavailable: {exc}", "error")
-            QMessageBox.warning(self, "Skyshot Solver", str(exc))
+            level = "warning" if automatic else "error"
+            self.log(f"Plate Solving unavailable: {exc}", level)
+            if not automatic:
+                QMessageBox.warning(self, "Skyshot Solver", str(exc))
             return
         APP_PREFERENCES["skyshot_binary"] = self.skyshot_binary
         save_config(
@@ -24951,13 +24994,16 @@ class AstroApp(QMainWindow):
             self.starnet_stride,
         )
 
-        self.log("Plate Solving started.")
-        self.show_plate_solving_dialog()
+        self.log("Plate Solving started automatically." if automatic else "Plate Solving started.")
+        if not automatic:
+            self.show_plate_solving_dialog()
         self.plate_solving_dialog.set_overlay_controls_visible(False)
         self.plate_solving_dialog.set_overlay_controls_state(False, False, False)
         self.lbl_plate_solve_status.setText("Plate solve status: solving...")
         self.plate_solve_start_time = time.time()
 
+        self._plate_solve_request_id += 1
+        request_id = self._plate_solve_request_id
         self.plate_solve_worker = PlateSolveWorker(
             self.original_img.copy(),
             solver_path=self.skyshot_binary,
@@ -24965,7 +25011,10 @@ class AstroApp(QMainWindow):
         )
         self.plate_solve_worker.progress_signal.connect(self.on_plate_solve_progress)
         self.plate_solve_worker.finished_signal.connect(
-            lambda result, error: self.on_plate_solve_finished(result, error, True)
+            lambda result, error, solve_id=request_id: (
+                self.on_plate_solve_finished(result, error, True)
+                if solve_id == self._plate_solve_request_id else None
+            )
         )
         self.plate_solve_worker.start()
 
@@ -25028,6 +25077,16 @@ class AstroApp(QMainWindow):
         self._sync_plate_overlay_controls()
         self.update_viewer_overlay()
         self.update_photoshop_panel()
+
+    def _on_plate_grid_scale_changed(self, value: float):
+        self.plate_grid_scale = float(np.clip(value, 0.5, 4.0))
+        if self.latest_plate_solve_result is not None:
+            self._update_plate_solve_layers(self.latest_plate_solve_result)
+
+    def _on_plate_label_scale_changed(self, value: float):
+        self.plate_label_scale = float(np.clip(value, 0.5, 4.0))
+        if self.latest_plate_solve_result is not None:
+            self._update_plate_solve_layers(self.latest_plate_solve_result)
 
     def _build_plate_solve_result_from_current_fits_header(self):
         header = getattr(self, "current_fits_header", None)
@@ -25755,6 +25814,8 @@ class AstroApp(QMainWindow):
     def _build_grid_overlay(self, width: int, height: int, header, render_size=None):
         overlay, painter = self._new_overlay_canvas(width, height, render_size)
         painter.setRenderHint(QPainter.Antialiasing, True)
+        grid_scale = float(np.clip(getattr(self, "plate_grid_scale", 1.0), 0.5, 4.0))
+        label_scale = float(np.clip(getattr(self, "plate_label_scale", 1.0), 0.5, 4.0))
 
         crval1 = header.get("CRVAL1")
         crval2 = header.get("CRVAL2")
@@ -25795,7 +25856,7 @@ class AstroApp(QMainWindow):
             dec_lines.append(dec_value)
             dec_value += dec_step
 
-        font_size = max(11, min(18, int(min(width, height) / 80.0)))
+        font_size = max(8, min(48, int(min(width, height) / 80.0 * label_scale)))
         label_font = QFont()
         label_font.setPointSize(font_size)
         label_font.setBold(True)
@@ -25803,9 +25864,9 @@ class AstroApp(QMainWindow):
         metrics = painter.fontMetrics()
 
         ra_pen = QPen(QColor(0, 225, 255, 190))
-        ra_pen.setWidth(2)
+        ra_pen.setWidthF(2.0 * grid_scale)
         dec_pen = QPen(QColor(120, 255, 170, 190))
-        dec_pen.setWidth(2)
+        dec_pen.setWidthF(2.0 * grid_scale)
 
         draw_ra_label_every = 1 if len(ra_lines) <= 6 else 2
         draw_dec_label_every = 1 if len(dec_lines) <= 6 else 2
@@ -25853,8 +25914,10 @@ class AstroApp(QMainWindow):
 
     def _build_plate_solve_overlay(self, width: int, height: int, result, render_size=None):
         overlay, painter = self._new_overlay_canvas(width, height, render_size)
+        grid_scale = float(np.clip(getattr(self, "plate_grid_scale", 1.0), 0.5, 4.0))
+        label_scale = float(np.clip(getattr(self, "plate_label_scale", 1.0), 0.5, 4.0))
         pen = QPen(QColor(255, 255, 100, 190))
-        pen.setWidth(2)
+        pen.setWidthF(2.0 * grid_scale)
         painter.setPen(pen)
         painter.drawLine(width // 2, 0, width // 2, height)
         painter.drawLine(0, height // 2, width, height // 2)
@@ -25872,7 +25935,10 @@ class AstroApp(QMainWindow):
             info.append(f"Rot: {rotation:.2f}Â°")
         if scale is not None:
             info.append(f"Scale: {scale:.3f}â€ł/px")
-        painter.drawText(12, height - 36, " | ".join(info))
+        font = QFont()
+        font.setPointSize(max(8, min(36, int(12 * label_scale))))
+        painter.setFont(font)
+        painter.drawText(12, height - 12, " | ".join(info))
         painter.end()
         return overlay
 
@@ -25898,8 +25964,9 @@ class AstroApp(QMainWindow):
                                      render_size=None):
         overlay, painter = self._new_overlay_canvas(width, height, render_size)
         painter.setRenderHint(QPainter.Antialiasing, True)
+        label_scale = float(np.clip(getattr(self, "plate_label_scale", 1.0), 0.5, 4.0))
         base_pen = QPen(QColor(255, 200, 120, 220))
-        base_pen.setWidth(2)
+        base_pen.setWidthF(2.0 * label_scale)
         painter.setPen(base_pen)
 
         header = result.get('wcs_header', {}) if isinstance(result, dict) else {}
@@ -25919,7 +25986,8 @@ class AstroApp(QMainWindow):
                 except Exception:
                     continue
                 if 0 <= px < width and 0 <= py < height:
-                    painter.drawEllipse(px - 2, py - 2, 4, 4)
+                    point_radius = max(1, int(round(2 * label_scale)))
+                    painter.drawEllipse(px - point_radius, py - point_radius, point_radius * 2, point_radius * 2)
 
         normalized = [self._normalize_object_name(o) for o in (objects or [])]
         normalized = [o for o in normalized if o]
@@ -25937,7 +26005,7 @@ class AstroApp(QMainWindow):
             if target_obj:
                 object_label = self._format_plate_object_label([], ra_center, dec_center)
 
-        font_size = max(12, int(12 * max(1.0, current_zoom)))
+        font_size = max(8, min(48, int(12 * max(1.0, current_zoom) * label_scale)))
         font = QFont()
         font.setPointSize(font_size)
         font.setBold(True)
@@ -25959,15 +26027,17 @@ class AstroApp(QMainWindow):
         if marker_pos is not None:
             px, py = marker_pos
             painter.setPen(base_pen)
-            painter.drawEllipse(px - 6, py - 6, 12, 12)
-            text_x = px + 12
-            text_y = py - 12
+            marker_radius = max(3, int(round(6 * label_scale)))
+            marker_offset = max(8, int(round(12 * label_scale)))
+            painter.drawEllipse(px - marker_radius, py - marker_radius, marker_radius * 2, marker_radius * 2)
+            text_x = px + marker_offset
+            text_y = py - marker_offset
             if text_x + text_width + 12 > width:
-                text_x = px - text_width - 16
+                text_x = px - text_width - marker_offset - 4
             if text_x < 8:
                 text_x = 8
             if text_y < text_height + 8:
-                text_y = min(height - 8, py + text_height + 12)
+                text_y = min(height - 8, py + text_height + marker_offset)
         else:
             text_x = max(8, width // 2 - text_width // 2)
             text_y = max(text_height + 8, height // 2)
@@ -25993,7 +26063,7 @@ class AstroApp(QMainWindow):
         star_names = [name for name in object_names if "star" in name.lower()]
         if star_names:
             legend_font = QFont()
-            legend_font.setPointSize(max(11, int(10 * max(1.0, current_zoom))))
+            legend_font.setPointSize(max(8, min(42, int(10 * max(1.0, current_zoom) * label_scale))) )
             legend_font.setBold(True)
             painter.setFont(legend_font)
             legend_metrics = painter.fontMetrics()
