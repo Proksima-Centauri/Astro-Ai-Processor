@@ -25254,7 +25254,6 @@ class AstroApp(QMainWindow):
         self.lbl_plate_solve_status.setText(f"Plate solve status: solved ({source_label})")
         self.lbl_plate_solve_details.setText("\n".join(details))
         self._refresh_plate_solve_object_panel()
-        self.add_thumbnail("Plate Solve", self.processed_img, copy_images=False)
         self.log("Plate Solving succeeded. " + " | ".join(details), "success")
         self._update_current_fits_header_with_plate_result(result)
 
