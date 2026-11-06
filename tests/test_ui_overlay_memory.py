@@ -118,6 +118,10 @@ assert sum(not card.isHidden() for card in window.dashboard_cards_by_tab["galler
 window.dashboard_search.clear()
 window._set_dashboard_tab(3)
 assert window.dashboard_stack.currentWidget().findChild(module.AIAssistantPanel) is window.dashboard_altair_chat
+assert window.dashboard_page.styleSheet().find("background: #000000") >= 0
+assert window.dashboard_sidebar.styleSheet().find("background: #000000") >= 0
+assert window.dashboard_content.styleSheet().find("background: #000000") >= 0
+assert window.dashboard_tab_buttons[3].styleSheet().find("background: #000000") >= 0
 assert window.dashboard_altair_chat.btn_analyze.isHidden()
 script_request = "Wygeneruj skrypt, który otworzy obraz M27 i wykona Astro Upscale x2"
 assert window.dashboard_altair_chat._is_script_generation_request(script_request)
@@ -162,6 +166,7 @@ chat_panel.chat_history_combo.setCurrentIndex(chat_panel.chat_history_combo.find
 assert chat_panel.current_chat_id == first_chat_id
 assert chat_panel.current_chat_messages[-1]["content"] == "M27 will be located automatically."
 window._set_dashboard_tab(4)
+assert window.dashboard_page.styleSheet().find("background: #151a22") >= 0
 assert window.dashboard_script_view_stack.currentIndex() == 0
 assert len(window.dashboard_script_cards) == 1
 new_script_card = window.dashboard_script_cards[0]

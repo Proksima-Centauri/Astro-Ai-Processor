@@ -4,13 +4,14 @@ import json
 import os
 import sys
 from pathlib import Path
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 
 import pytest
 
 from processing.openrouter import (
     OPENROUTER_CHAT_URL,
     OPENROUTER_DEFAULT_MODEL,
+    OpenRouterConnectionError,
     OpenRouterError,
     create_chat_completion,
 )
@@ -120,6 +121,18 @@ def test_openrouter_requires_key_and_never_echoes_it_on_auth_failure():
     assert secret not in str(error.value)
 
 
+def test_openrouter_reports_connection_failures_without_raw_dns_details():
+    def offline(_request, timeout):
+        raise URLError(OSError(-3, "Temporary failure in name resolution"))
+
+    with pytest.raises(OpenRouterConnectionError, match="Brak połączenia z internetem"):
+        create_chat_completion(
+            "test-key",
+            [{"role": "user", "content": "hello"}],
+            opener=offline,
+        )
+
+
 def test_altair_uses_only_the_openrouter_worker():
     worker = APP.AltairAIWorker("test", {}, api_key="key")
     assert worker.api_key == "key"
@@ -173,13 +186,16 @@ def test_altair_welcome_switches_to_chat_after_first_prompt(monkeypatch, tmp_pat
         def connect(self, _callback):
             pass
 
+    started_workers = []
+
     class WorkerStub:
-        def __init__(self, *_args, **_kwargs):
+        def __init__(self, message, *_args, **_kwargs):
+            self.message = message
             self.chunk_signal = SignalStub()
             self.finished_signal = SignalStub()
 
         def start(self):
-            pass
+            started_workers.append(self)
 
     monkeypatch.setattr(APP, "AltairAIWorker", WorkerStub)
     panel.get_context_payload = lambda: {}
@@ -187,7 +203,18 @@ def test_altair_welcome_switches_to_chat_after_first_prompt(monkeypatch, tmp_pat
     panel.on_send_message()
     assert panel.conversation_stack.currentWidget() is panel.chat_page
     assert panel.current_chat_messages[0]["role"] == "User"
+    assert panel.chat_history_combo.currentText() == "Pomóż mi obrobić zdjęcie"
 
+    panel.on_ai_finished("", "", {"network_error": True})
+    assert panel.stacked_layout.currentWidget() is panel.network_error_page
+    assert panel.lbl_network_error.text() == "Brak połączenia z internetem"
+    assert panel.network_error_page.styleSheet().find("background: #000000") >= 0
+    assert panel.current_chat_messages == [{"role": "User", "content": "Pomóż mi obrobić zdjęcie"}]
+    panel.btn_retry_connection.click()
+    assert len(started_workers) == 2
+    assert started_workers[-1].message == "Pomóż mi obrobić zdjęcie"
+    assert len(panel.current_chat_messages) == 1
+    assert panel.stacked_layout.currentWidget() is panel.content_widget
     panel._start_new_chat()
     assert panel.conversation_stack.currentWidget() is panel.welcome_page
     panel.close()

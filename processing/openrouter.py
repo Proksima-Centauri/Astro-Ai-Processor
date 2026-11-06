@@ -18,6 +18,10 @@ class OpenRouterError(RuntimeError):
     """A safe-to-display OpenRouter request error without credential material."""
 
 
+class OpenRouterConnectionError(OpenRouterError):
+    """The OpenRouter request could not reach the service."""
+
+
 def create_chat_completion(api_key: str, messages: list[dict], *, model: str = OPENROUTER_DEFAULT_MODEL,
                            max_tokens: int = 900, temperature: float = 0.2,
                            timeout: float = 120.0, opener=None, stream: bool = False,
@@ -108,9 +112,9 @@ def create_chat_completion(api_key: str, messages: list[dict], *, model: str = O
             raise OpenRouterError("OpenRouter nie udzielił dostępu do modelu (sprawdź saldo, limity lub uprawnienia).") from None
         raise OpenRouterError(f"OpenRouter zwrócił błąd HTTP {exc.code}: {detail or 'brak szczegółów'}") from None
     except URLError as exc:
-        raise OpenRouterError(f"Nie można połączyć się z OpenRouter: {exc.reason}") from None
+        raise OpenRouterConnectionError("Brak połączenia z internetem.") from None
     except TimeoutError:
-        raise OpenRouterError("Przekroczono limit czasu odpowiedzi OpenRouter.") from None
+        raise OpenRouterConnectionError("Brak połączenia z internetem.") from None
     except (json.JSONDecodeError, UnicodeDecodeError):
         raise OpenRouterError("OpenRouter zwrócił niepoprawną odpowiedź.") from None
 

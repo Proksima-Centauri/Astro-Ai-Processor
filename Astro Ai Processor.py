@@ -31,7 +31,11 @@ from processing.color_processor import ColorProcessor
 from processing.preview import PreviewCache, parameter_key
 from processing.export import normalized_to_uint16
 from processing.pipeline import process_image
-from processing.openrouter import OPENROUTER_DEFAULT_MODEL, create_chat_completion
+from processing.openrouter import (
+    OPENROUTER_DEFAULT_MODEL,
+    OpenRouterConnectionError,
+    create_chat_completion,
+)
 from processing.plate_solver import resolve_skyshot, solve_with_skyshot
 from processing.image_analysis import compute_image_analysis_metrics
 from processing.image_effects import _normalize_mask01, local_contrast_enhancement, neutralize_background
@@ -7212,6 +7216,38 @@ class AIAssistantPanel(QFrame):
         self.content_widget = QWidget()
         self.stacked_layout.addWidget(self.content_widget)
 
+        self.network_error_page = QWidget()
+        self.network_error_page.setObjectName("altairNetworkErrorPage")
+        self.network_error_page.setStyleSheet(
+            "QWidget#altairNetworkErrorPage { background: #000000; color: #ffffff; }"
+        )
+        self.lbl_network_error = QLabel(
+            "Brak połączenia z internetem"
+            if not str(getattr(app, "language", "pl") or "pl").lower().startswith("en")
+            else "No internet connection",
+            self.network_error_page,
+        )
+        self.lbl_network_error.setObjectName("altairNetworkErrorMessage")
+        self.lbl_network_error.setStyleSheet("color: #ffffff; background: #000000; font-size: 18px;")
+        network_error_layout = QVBoxLayout(self.network_error_page)
+        network_error_layout.addStretch(1)
+        network_error_layout.addWidget(self.lbl_network_error, 0, Qt.AlignCenter)
+        self.btn_retry_connection = QPushButton(
+            "Spróbuj ponownie"
+            if not str(getattr(app, "language", "pl") or "pl").lower().startswith("en")
+            else "Try again",
+            self.network_error_page,
+        )
+        self.btn_retry_connection.setStyleSheet(
+            "QPushButton { color: #ffffff; background: #111111; border: 1px solid #555555; "
+            "border-radius: 6px; padding: 10px 18px; }"
+            "QPushButton:hover { background: #222222; }"
+        )
+        network_error_layout.addWidget(self.btn_retry_connection, 0, Qt.AlignCenter)
+        network_error_layout.addStretch(1)
+        self.stacked_layout.addWidget(self.network_error_page)
+        self.btn_retry_connection.clicked.connect(self._retry_last_ai_request)
+
         content_layout = QVBoxLayout(self.content_widget)
         apply_standard_layout_margins(content_layout)
 
@@ -7390,6 +7426,7 @@ class AIAssistantPanel(QFrame):
         self.current_chat_messages = []
         self._chat_history_cache = {}
         self._loading_chat_history = False
+        self.last_failed_prompt = ""
         self.file_search_worker = None
         self.pending_frame_confirmation = None
         self.chat_history_combo.currentIndexChanged.connect(self._select_chat_history)
@@ -7460,7 +7497,11 @@ class AIAssistantPanel(QFrame):
         if not self.current_chat_id or self._loading_chat_history:
             return
         first_prompt = next(
-            (message["content"] for message in self.current_chat_messages if message["role"] == "user"),
+            (
+                message["content"]
+                for message in self.current_chat_messages
+                if str(message.get("role") or "").casefold() == "user"
+            ),
             "",
         )
         title = " ".join(str(first_prompt).split())[:48] or "New Altair chat"
@@ -7498,6 +7539,8 @@ class AIAssistantPanel(QFrame):
     def _start_new_chat(self):
         if self.current_chat_id:
             self._save_chat_history()
+        self.last_failed_prompt = ""
+        self.stacked_layout.setCurrentWidget(self.content_widget)
         self._loading_chat_history = True
         self.current_chat_id = uuid.uuid4().hex
         self.current_chat_messages = []
@@ -7513,6 +7556,18 @@ class AIAssistantPanel(QFrame):
         self._loading_chat_history = False
         self._save_chat_history()
         self._show_welcome_panel()
+
+    def _discard_streaming_assistant_message(self):
+        label = self.streaming_message_label
+        self.streaming_message_label = None
+        self.streaming_response = ""
+        if label is None:
+            return
+        response_widget = label.parentWidget()
+        row = response_widget.parentWidget() if response_widget is not None else None
+        if row is not None:
+            self.chat_layout.removeWidget(row)
+            row.deleteLater()
 
     def _select_chat_history(self, index: int):
         if index < 0:
@@ -7538,6 +7593,8 @@ class AIAssistantPanel(QFrame):
             self._log_chat_history_error(f"Invalid Altair chat history messages: {chat_id}")
             return
         self._loading_chat_history = True
+        self.last_failed_prompt = ""
+        self.stacked_layout.setCurrentWidget(self.content_widget)
         self.current_chat_id = chat_id
         self.current_chat_messages = []
         self.last_assistant_message = ""
@@ -7852,10 +7909,15 @@ class AIAssistantPanel(QFrame):
                 self._start_image_search(image_query)
                 return
 
+        self.last_failed_prompt = message
+        self._start_ai_request(message)
+
+    def _start_ai_request(self, message: str):
         payload = self.get_context_payload()
         self.status_label.setText("")
         self.streaming_response = ""
         self.streaming_message_label = None
+        self.stacked_layout.setCurrentWidget(self.content_widget)
         self._show_assistant_typing_indicator()
         self.btn_send.setEnabled(False)
         self.btn_run_python.setEnabled(False)
@@ -7867,6 +7929,13 @@ class AIAssistantPanel(QFrame):
         self.ai_worker.chunk_signal.connect(self.on_ai_chunk)
         self.ai_worker.finished_signal.connect(self.on_ai_finished)
         self.ai_worker.start()
+
+    def _retry_last_ai_request(self):
+        message = self.last_failed_prompt.strip()
+        if not message:
+            self.stacked_layout.setCurrentWidget(self.content_widget)
+            return
+        self._start_ai_request(message)
 
     @staticmethod
     def _is_script_generation_request(message: str) -> bool:
@@ -8100,6 +8169,10 @@ class AIAssistantPanel(QFrame):
         self.status_label.setText("")
         self._hide_assistant_typing_indicator()
         self.last_generated_python = ""
+        if isinstance(token_meta, dict) and token_meta.get("network_error"):
+            self._discard_streaming_assistant_message()
+            self.stacked_layout.setCurrentWidget(self.network_error_page)
+            return
         if error:
             self._refresh_model_label()
             self.append_assistant_message(f"Błąd Altair: {error}")
@@ -9327,6 +9400,8 @@ class AltairAIWorker(QThread):
                 "usage": usage,
                 "max_tokens": ALTAIR_DEFAULT_MAX_TOKENS,
             })
+        except OpenRouterConnectionError:
+            self.finished_signal.emit("", "", {"network_error": True})
         except Exception as e:
             self.finished_signal.emit("", str(e), {})
 
@@ -23162,6 +23237,8 @@ class AstroApp(QMainWindow):
         self.dashboard_sidebar.setStyleSheet(
             "QFrame#dashboardSidebar { background: #1b222c; border: 1px solid #303a47; border-radius: 12px; }"
         )
+        self._dashboard_default_page_stylesheet = page.styleSheet()
+        self._dashboard_default_sidebar_stylesheet = self.dashboard_sidebar.styleSheet()
         sidebar_layout = QVBoxLayout(self.dashboard_sidebar)
         sidebar_layout.setContentsMargins(14, 14, 14, 14)
         sidebar_layout.setSpacing(10)
@@ -23217,6 +23294,8 @@ class AstroApp(QMainWindow):
         page_layout.addWidget(self.dashboard_sidebar)
 
         content = QWidget(page)
+        self.dashboard_content = content
+        self._dashboard_default_content_stylesheet = content.styleSheet()
         content_layout = QVBoxLayout(content)
         content_layout.setContentsMargins(0, 0, 0, 0)
         content_layout.setSpacing(10)
@@ -23436,6 +23515,10 @@ class AstroApp(QMainWindow):
         self.dashboard_stack.addWidget(settings_tab)
 
         altair_tab = QWidget(self.dashboard_stack)
+        altair_tab.setObjectName("dashboardAltairTab")
+        altair_tab.setStyleSheet(
+            "QWidget#dashboardAltairTab { background: #000000; color: #ffffff; }"
+        )
         altair_layout = QVBoxLayout(altair_tab)
         altair_layout.setContentsMargins(0, 0, 0, 0)
         self.dashboard_altair_chat = AIAssistantPanel(parent=altair_tab, app=self)
@@ -23609,8 +23692,32 @@ class AstroApp(QMainWindow):
 
     def _set_dashboard_tab(self, index: int):
         self.dashboard_stack.setCurrentIndex(index)
+        if index == 3:
+            self.dashboard_page.setStyleSheet(
+                "QWidget#imageDashboard { background: #000000; }"
+                "QLabel { border: none; background: transparent; color: #ffffff; }"
+            )
+            self.dashboard_sidebar.setStyleSheet(
+                "QFrame#dashboardSidebar { background: #000000; border: 1px solid #222222; border-radius: 12px; }"
+            )
+            self.dashboard_content.setStyleSheet("background: #000000; color: #ffffff;")
+        else:
+            self.dashboard_page.setStyleSheet(self._dashboard_default_page_stylesheet)
+            self.dashboard_sidebar.setStyleSheet(self._dashboard_default_sidebar_stylesheet)
+            self.dashboard_content.setStyleSheet(self._dashboard_default_content_stylesheet)
         for button_index, button in enumerate(self.dashboard_tab_buttons):
             button.setChecked(button_index == index)
+            if button_index == 3 and index == 3:
+                button.setStyleSheet(
+                    "QPushButton { text-align: left; padding: 8px 12px; border: none; "
+                    "border-radius: 6px; background: #000000; color: #ffffff; font-weight: 600; }"
+                )
+            else:
+                button.setStyleSheet(
+                    "QPushButton { text-align: left; padding: 8px 12px; border: none; "
+                    "border-radius: 6px; background: transparent; }"
+                    "QPushButton:checked { background: #263648; color: #ffffff; font-weight: 600; }"
+                )
         self._filter_dashboard_cards()
 
     def _dashboard_scripts_directory(self) -> str:
