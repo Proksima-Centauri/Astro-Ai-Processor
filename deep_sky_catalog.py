@@ -5,6 +5,10 @@ objects and serves as a local offline fallback when remote lookup is
 unavailable.
 """
 
+import json
+import sys
+from pathlib import Path
+
 _MESSIER_DATA = """
 M1|Crab Nebula|NGC1952,Taurus A|83.6331|22.0145
 M2|NGC7089|NGC7089|323.3625|-0.8233
@@ -269,14 +273,38 @@ def _parse_extra_catalog():
     return catalog
 
 
+def _load_simbad_catalog():
+    bundle_root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
+    path = bundle_root / "deep_sky_catalog_simbad.json"
+    try:
+        with path.open("r", encoding="utf-8") as source:
+            payload = json.load(source)
+    except (OSError, json.JSONDecodeError):
+        return []
+    objects = payload.get("objects", []) if isinstance(payload, dict) else []
+    return [item for item in objects if isinstance(item, dict) and item.get("name")]
+
+
 DEEP_SKY_CATALOG = []
-_seen_names = set()
-for _obj in list(MESSIER_CATALOG) + _parse_extra_catalog():
+_objects_by_name = {}
+for _obj in list(MESSIER_CATALOG) + _parse_extra_catalog() + _load_simbad_catalog():
     _copy = dict(_obj)
     _copy.setdefault("catalog", "Messier")
-    _key = _copy["name"].upper()
-    if _key in _seen_names:
+    _copy.setdefault("aliases", [])
+    _copy["catalogs"] = list(dict.fromkeys(_copy.get("catalogs", []) + [_copy["catalog"]]))
+    _key = str(_copy["name"]).upper()
+    _existing = _objects_by_name.get(_key)
+    if _existing is not None:
+        _existing["aliases"] = list(dict.fromkeys(
+            list(_existing.get("aliases", [])) + list(_copy.get("aliases", []))
+        ))
+        _existing["catalogs"] = list(dict.fromkeys(
+            list(_existing.get("catalogs", [_existing.get("catalog", "")]))
+            + list(_copy.get("catalogs", [_copy.get("catalog", "")]))
+        ))
+        if not _existing.get("object_type") and _copy.get("object_type"):
+            _existing["object_type"] = _copy["object_type"]
         continue
-    _seen_names.add(_key)
+    _objects_by_name[_key] = _copy
     DEEP_SKY_CATALOG.append(_copy)
 

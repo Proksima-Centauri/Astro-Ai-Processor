@@ -20,6 +20,7 @@ Astro AI Processor combines classic editing tools (Levels, Curves, Histogram, Bl
 ## Key features
 
 - Image I/O: PNG, JPG, TIFF, and FITS (`.fits`, `.fit`, `.fts`).
+- Separate startup dashboard with left-side vertical Projects, Gallery, Settings, Altair chat, and Scripts navigation, searchable recent images, a wide image gallery, and AutoStretch previews for linear images. Altair chat history is stored under `~/.astroaiprocessor/altair_chats`; Altair replies are formatted, and AstroAP scripts can find images by name (for example, `M27`) without requiring a full path. Settings include appearance, processor/ONNX, AI assistant, model paths, home folder, and joystick configuration. Generated workflows appear as gallery-style cards and can be assembled from reorderable no-code blocks, validated, saved, and run through the restricted AstroAP interface. AstroAP includes image loading, background extraction, denoising, upscaling, saving, display stretch, undo, and redo actions. The application uses native system window decorations.
 - Layers and history: undo/redo, thumbnails, basic layer operations.
 - Tone and color tools: Levels, Curves (LUT), Histogram, GHS, RGB/HSL correction.
 - Astro tools:
@@ -29,7 +30,7 @@ Astro AI Processor combines classic editing tools (Levels, Curves, Histogram, Bl
   - deepSNR external denoise,
   - frame mosaic stitching,
   - 3D FLY clip rendering (optional audio).
-- Altair AI assistant using NVIDIA Nemotron 3 Super through OpenRouter's free route.
+- Altair AI assistant using NVIDIA Nemotron 3 Super through OpenRouter.
 - PL/EN UI with configurable preferences and workspaces.
 
 ## Requirements
@@ -44,7 +45,7 @@ Optional external tools:
 - StarNet++ CLI.
 - deepSNR CLI.
 - `ffmpeg` for attaching audio in 3D FLY output.
-- OpenRouter API key for the default Nemotron provider (configure in Preferences → AI Chat; free route may have rate limits).
+- OpenRouter API key for the default Nemotron provider (configure in Preferences → AI Chat; model limits and charges may apply).
 
 ## Installation
 

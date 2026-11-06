@@ -128,7 +128,7 @@ try:
     assert not window.ai_assistant_panel.input_text.isReadOnly()
     window.show_preferences_dialog()
     app.processEvents()
-    assert window.preferences_dialog.lbl_altair_model.text() == "NVIDIA Nemotron 3 Super (OpenRouter Free)"
+    assert window.preferences_dialog.lbl_altair_model.text() == "NVIDIA Nemotron 3 Super (OpenRouter)"
     assert window.preferences_dialog.edit_openrouter_api_key.echoMode() == module.QLineEdit.Password
     window.preferences_dialog.close()
     app.processEvents()

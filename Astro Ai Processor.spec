@@ -21,6 +21,7 @@ a = Analysis(
     datas=[
         ('assets', 'assets'),
         ('favicon-32.png', '.'),
+        ('deep_sky_catalog_simbad.json', '.'),
         ('loading.png', '.'),
         ('NOTICE', '.'),
         ('LICENSE', '.'),

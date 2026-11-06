@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import sys
 import os
@@ -10,6 +10,7 @@ import subprocess
 import tempfile
 import time
 import threading
+import uuid
 import re
 import shlex
 import math
@@ -25,6 +26,7 @@ import webbrowser
 from datetime import datetime, timedelta, timezone
 import numpy as np
 import cv2
+import astroap
 from processing.color_processor import ColorProcessor
 from processing.preview import PreviewCache, parameter_key
 from processing.export import normalized_to_uint16
@@ -151,10 +153,10 @@ from PyQt5.QtWidgets import (
     QGraphicsScene, QSlider, QLabel, QFrame, QTabWidget, QGridLayout,
     QMenuBar, QMenu, QAction, QDialog, QStyle, QSpinBox,
     QDoubleSpinBox, QTextEdit, QLineEdit, QComboBox, QCompleter, QSplitter, QDialogButtonBox,
-    QScrollArea, QStackedLayout, QTabBar, QListWidget, QListWidgetItem, QStackedWidget, QPlainTextEdit,
+    QScrollArea, QStackedLayout, QTabBar, QListWidget, QListWidgetItem, QStackedWidget, QPlainTextEdit, QSizeGrip,
     QSplashScreen, QStyledItemDelegate,
 )
-from PyQt5.QtGui import QImage, QPixmap, QPainter, QIcon, QColor, QFont, QPolygon, QPolygonF, QPen, QPalette, QRegion, QLinearGradient, QDrag, QCursor, QTransform
+from PyQt5.QtGui import QImage, QPixmap, QPainter, QIcon, QColor, QFont, QPolygon, QPolygonF, QPen, QPalette, QRegion, QLinearGradient, QDrag, QCursor, QTransform, QImageReader, QTextDocument
 from PyQt5.QtCore import Qt, QPoint, QPointF, QRect, QRectF, QThread, pyqtSignal, QTimer, QSize, QByteArray, QEvent, qInstallMessageHandler, QMimeData
 from PyQt5.QtWidgets import QSizePolicy, QCheckBox, QInputDialog, QMessageBox, QGraphicsItem, QProgressBar
 from PyQt5.QtGui import QPainterPath, QBrush
@@ -197,7 +199,25 @@ except ImportError:
 from deep_sky_catalog import DEEP_SKY_CATALOG
 
 I18N = {
-    "app_title": {"pl": "Astro AI Processor v1.0.0", "en": "Astro AI Processor v1.0.0"},
+    "app_title": {"pl": "Astro AI Processor", "en": "Astro AI Processor"},
+    "dashboard_title": {"pl": "Witaj w Astro AI Processor", "en": "Welcome to Astro AI Processor"},
+    "dashboard_subtitle": {"pl": "Otwórz obraz albo wybierz jeden z ostatnio używanych.", "en": "Open an image or choose one of your recent files."},
+    "dashboard_open_image": {"pl": "Otwórz obraz", "en": "Open image"},
+    "dashboard_empty": {"pl": "Ostatnio otwierane obrazy pojawią się tutaj.", "en": "Recently opened images will appear here."},
+    "dashboard_search": {"pl": "Szukaj obiektu lub pliku…", "en": "Search objects or files…"},
+    "dashboard_projects": {"pl": "Projekty", "en": "Projects"},
+    "dashboard_gallery": {"pl": "Galeria", "en": "Gallery"},
+    "dashboard_settings": {"pl": "Ustawienia", "en": "Settings"},
+    "dashboard_altair": {"pl": "Altair", "en": "Altair"},
+    "dashboard_scripts": {"pl": "Skrypty", "en": "Scripts"},
+    "dashboard_gallery_empty": {"pl": "Brak gotowych zdjęć.", "en": "No ready images found."},
+    "dashboard_no_results": {"pl": "Brak pasujących zdjęć.", "en": "No matching images."},
+    "dashboard_unknown_object": {"pl": "Zdjęcie astronomiczne", "en": "Astronomical image"},
+    "dashboard_theme": {"pl": "Motyw", "en": "Theme"},
+    "dashboard_accent": {"pl": "Kolor", "en": "Accent"},
+    "dashboard_language": {"pl": "Język", "en": "Language"},
+    "dashboard_apply_settings": {"pl": "Zastosuj ustawienia", "en": "Apply settings"},
+    "dashboard_saved": {"pl": "Ustawienia zapisane", "en": "Settings saved"},
     "action_open": {"pl": "Otwórz", "en": "Open"},
     "action_save": {"pl": "Zapisz", "en": "Save"},
     "action_save_as": {"pl": "Zapisz jako...", "en": "Save As..."},
@@ -514,8 +534,206 @@ def top_bar_svg_icon_with_accent(svg_path: str, accent_color: str, size: int = 6
         return fallback_icon
 
 
-def apply_dialog_window_flags(widget):
-    widget.setWindowFlags(widget.windowFlags() & ~Qt.WindowContextHelpButtonHint)
+_WHITE_SUR_THEME_ACTIVE = None
+
+
+def is_white_sur_desktop_theme_active() -> bool:
+    """Detect a WhiteSur GTK theme so Qt dialogs expose matching window controls."""
+    global _WHITE_SUR_THEME_ACTIVE
+    env_theme = str(os.environ.get("GTK_THEME", "") or "").strip().lower()
+    if env_theme:
+        return "whitesur" in env_theme.replace("-", "").replace("_", "")
+    if _WHITE_SUR_THEME_ACTIVE is not None:
+        return _WHITE_SUR_THEME_ACTIVE
+
+    active = False
+    if sys.platform.startswith("linux") and shutil.which("gsettings"):
+        try:
+            result = subprocess.run(
+                ["gsettings", "get", "org.gnome.desktop.interface", "gtk-theme"],
+                capture_output=True,
+                text=True,
+                timeout=1.0,
+                check=False,
+            )
+            theme_name = str(result.stdout or "").strip().strip("'").lower()
+            active = "whitesur" in theme_name.replace("-", "").replace("_", "")
+        except Exception:
+            active = False
+    _WHITE_SUR_THEME_ACTIVE = active
+    return active
+
+
+def apply_dialog_window_flags(widget, white_sur_active=None):
+    flags = widget.windowFlags() & ~Qt.WindowContextHelpButtonHint
+    use_white_sur_controls = (
+        is_white_sur_desktop_theme_active() if white_sur_active is None else bool(white_sur_active)
+    )
+    if use_white_sur_controls:
+        flags |= Qt.WindowMinimizeButtonHint | Qt.WindowMaximizeButtonHint
+    widget.setWindowFlags(flags)
+
+
+class DashboardImageCard(QWidget):
+    activated = pyqtSignal(str)
+
+    def __init__(
+        self,
+        path: str,
+        title: str,
+        filename: str,
+        extension: str,
+        pixmap: QPixmap,
+        search_text: str,
+        auto_stretched: bool = False,
+        parent=None,
+    ):
+        super().__init__(parent)
+        self.image_path = path
+        self.setObjectName("dashboardImageCard")
+        self.setProperty("dashboardSearchText", search_text.casefold())
+        self.setFixedWidth(184)
+        self.setCursor(Qt.PointingHandCursor)
+        self.setToolTip(path)
+        self.set_dashboard_theme(True)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(8, 8, 8, 9)
+        layout.setSpacing(4)
+        image = QLabel(self)
+        image.setFixedSize(168, 96)
+        image.setAlignment(Qt.AlignCenter)
+        image.setPixmap(pixmap.scaled(image.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        image.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+        image_frame = QWidget(self)
+        image_frame.setFixedSize(image.size())
+        image_layout = QGridLayout(image_frame)
+        image_layout.setContentsMargins(0, 0, 0, 0)
+        image_layout.setSpacing(0)
+        image_layout.addWidget(image, 0, 0)
+        if auto_stretched:
+            badge = QLabel("AutoStretch", image_frame)
+            badge.setObjectName("dashboardCardAutostretchBadge")
+            badge.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+            badge.setStyleSheet(
+                "QLabel#dashboardCardAutostretchBadge { color: #ffffff; background: #187b56; "
+                "border: none; border-radius: 4px; padding: 3px 6px; font-size: 10px; font-weight: 600; }"
+            )
+            image_layout.addWidget(badge, 0, 0, Qt.AlignRight | Qt.AlignTop)
+        layout.addWidget(image_frame)
+
+        object_title = QLabel(title, self)
+        object_title.setObjectName("dashboardCardObject")
+        object_title.setWordWrap(True)
+        object_title.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+        layout.addWidget(object_title)
+
+        filename_label = QLabel(filename, self)
+        filename_label.setObjectName("dashboardCardFilename")
+        filename_label.setWordWrap(True)
+        filename_label.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+        layout.addWidget(filename_label)
+
+        extension_label = QLabel(extension, self)
+        extension_label.setObjectName("dashboardCardExtension")
+        extension_label.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+        layout.addWidget(extension_label)
+
+    def set_dashboard_theme(self, dark: bool):
+        background = "#202a35" if dark else "#ffffff"
+        hover = "#293747" if dark else "#e8eef4"
+        title_color = "#e8edf5" if dark else "#20252b"
+        filename_color = "#aab8cb" if dark else "#596575"
+        extension_color = "#77869b" if dark else "#77818d"
+        self.setStyleSheet(
+            "QWidget#dashboardImageCard { "
+            f"background: {background}; border: none; border-radius: 8px; }}"
+            "QWidget#dashboardImageCard:hover { "
+            f"background: {hover}; }}"
+            f"QLabel#dashboardCardObject {{ font-size: 13px; font-weight: 600; color: {title_color}; }}"
+            f"QLabel#dashboardCardFilename {{ font-size: 11px; color: {filename_color}; }}"
+            f"QLabel#dashboardCardExtension {{ font-size: 10px; color: {extension_color}; }}"
+            "QLabel { border: none; background: transparent; }"
+        )
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.activated.emit(self.image_path)
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+
+class DashboardScriptBlockFrame(QFrame):
+    dropped = pyqtSignal(int, int)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAcceptDrops(True)
+        self._drag_start_position = None
+
+    def enable_drag_from(self, widget: QWidget):
+        widget.installEventFilter(self)
+
+    def eventFilter(self, watched, event):
+        if event.type() == QEvent.MouseButtonPress and event.button() == Qt.LeftButton:
+            self._drag_start_position = watched.mapTo(self, event.pos())
+        elif (
+            event.type() == QEvent.MouseMove
+            and self._drag_start_position is not None
+            and event.buttons() & Qt.LeftButton
+            and (watched.mapTo(self, event.pos()) - self._drag_start_position).manhattanLength()
+            >= QApplication.startDragDistance()
+        ):
+            self._start_drag()
+            return True
+        return super().eventFilter(watched, event)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self._drag_start_position = event.pos()
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if (
+            self._drag_start_position is None
+            or not event.buttons() & Qt.LeftButton
+            or (event.pos() - self._drag_start_position).manhattanLength()
+            < QApplication.startDragDistance()
+        ):
+            super().mouseMoveEvent(event)
+            return
+        self._start_drag()
+
+    def _start_drag(self):
+        source_index = self.property("blockIndex")
+        if source_index is None:
+            return
+        drag = QDrag(self)
+        mime_data = QMimeData()
+        mime_data.setData("application/x-astroap-script-block", str(int(source_index)).encode("ascii"))
+        drag.setMimeData(mime_data)
+        drag.exec_(Qt.MoveAction)
+        self._drag_start_position = None
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasFormat("application/x-astroap-script-block"):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event):
+        if not event.mimeData().hasFormat("application/x-astroap-script-block"):
+            event.ignore()
+            return
+        try:
+            source_index = int(bytes(event.mimeData().data("application/x-astroap-script-block")).decode("ascii"))
+            target_index = int(self.property("blockIndex"))
+        except (TypeError, ValueError, UnicodeDecodeError):
+            event.ignore()
+            return
+        self.dropped.emit(source_index, target_index)
+        event.acceptProposedAction()
 
 
 def apply_standard_layout_margins(layout, margins=(20, 20, 20, 20), spacing=12):
@@ -665,6 +883,14 @@ ACCENT_PRESETS = {
         "soft": "#f4ebd2",
         "link": "#e7cc7b",
     },
+}
+
+ACCENT_ASSISTANT_ICON_FILES = {
+    "Ultra Blue": "ai_blue.png",
+    "Celestron Orange": "ai_orange.png",
+    "SkyWatcher Green": "ai_green.png",
+    "ZWO Red": "ai_red.png",
+    "William Optics Gold": "ai_gold.png",
 }
 
 ACCENT_NAME_ALIASES = {
@@ -6964,9 +7190,12 @@ class AltairStartupWidget(QWidget):
 
 
 class AIAssistantPanel(QFrame):
+    script_generated = pyqtSignal(str)
+
     def __init__(self, parent=None, app=None):
         super().__init__(parent)
         self.app = app
+        astroap.configure(app, find_image_paths_by_name, get_image_search_roots)
         self._analysis_chat_pending = False
         if app is not None and hasattr(app, "image_analysis_completed"):
             app.image_analysis_completed.connect(self._on_analysis_completed)
@@ -6986,6 +7215,81 @@ class AIAssistantPanel(QFrame):
         content_layout = QVBoxLayout(self.content_widget)
         apply_standard_layout_margins(content_layout)
 
+        self.conversation_stack = QStackedWidget(self.content_widget)
+        content_layout.addWidget(self.conversation_stack, 1)
+
+        self.welcome_page = QWidget(self.conversation_stack)
+        self.welcome_page.setObjectName("altairWelcomePage")
+        self.welcome_page.setStyleSheet(
+            "QWidget#altairWelcomePage {"
+            "background: qlineargradient(x1:0, y1:0, x2:1, y2:1, "
+            "stop:0 #111b2d, stop:0.52 #10141f, stop:1 #21152b);"
+            "border-radius: 14px;}"
+        )
+        welcome_layout = QVBoxLayout(self.welcome_page)
+        welcome_layout.setContentsMargins(22, 22, 22, 22)
+        welcome_layout.addStretch(1)
+
+        welcome_row = QHBoxLayout()
+        welcome_row.addStretch(1)
+        self.welcome_card = QFrame(self.welcome_page)
+        self.welcome_card.setObjectName("altairWelcomeCard")
+        self.welcome_card.setMaximumWidth(880)
+        self.welcome_card.setStyleSheet(
+            "QFrame#altairWelcomeCard {"
+            "background: qlineargradient(x1:0, y1:0, x2:1, y2:0, "
+            "stop:0 #1a2940, stop:0.52 #192131, stop:1 #291b35);"
+            "border: 1px solid #39465f; border-radius: 20px;}"
+        )
+        welcome_card_layout = QVBoxLayout(self.welcome_card)
+        welcome_card_layout.setContentsMargins(30, 28, 30, 24)
+        welcome_card_layout.setSpacing(12)
+
+        is_english = str(getattr(app, "language", "pl") or "pl").lower().startswith("en")
+        self.welcome_heading = QLabel(
+            "Let's process something" if is_english else "Jak mogę pomóc?"
+        )
+        self.welcome_heading.setAlignment(Qt.AlignCenter)
+        self.welcome_heading.setStyleSheet(
+            "color: #f2f6ff; background: transparent; border: 0; "
+            "font-size: 28px; font-weight: 700;"
+        )
+        self.welcome_subtitle = QLabel(
+            "Describe what you'd like to do with your image."
+            if is_english else "Opisz, co chcesz zrobić ze swoim zdjęciem."
+        )
+        self.welcome_subtitle.setAlignment(Qt.AlignCenter)
+        self.welcome_subtitle.setWordWrap(True)
+        self.welcome_subtitle.setStyleSheet(
+            "color: #aebbd0; background: transparent; border: 0; font-size: 13px;"
+        )
+        welcome_card_layout.addWidget(self.welcome_heading)
+        welcome_card_layout.addWidget(self.welcome_subtitle)
+        welcome_card_layout.addSpacing(8)
+        self.welcome_composer_row = QHBoxLayout()
+        self.welcome_composer_row.addStretch(1)
+        self.welcome_composer_row.addStretch(1)
+        welcome_card_layout.addLayout(self.welcome_composer_row)
+        welcome_row.addWidget(self.welcome_card, 1)
+        welcome_row.addStretch(1)
+        welcome_layout.addLayout(welcome_row)
+        welcome_layout.addStretch(1)
+        self.conversation_stack.addWidget(self.welcome_page)
+
+        self.chat_page = QWidget(self.conversation_stack)
+        self.chat_page_layout = QVBoxLayout(self.chat_page)
+        self.chat_page_layout.setContentsMargins(0, 0, 0, 0)
+        self.chat_page_layout.setSpacing(8)
+
+        history_layout = QHBoxLayout()
+        history_layout.addWidget(QLabel("Chat history", self.chat_page))
+        self.chat_history_combo = QComboBox(self.content_widget)
+        self.chat_history_combo.setMinimumWidth(180)
+        self.btn_new_chat = QPushButton("New chat", self.content_widget)
+        history_layout.addWidget(self.chat_history_combo, 1)
+        history_layout.addWidget(self.btn_new_chat)
+        content_layout.insertLayout(0, history_layout)
+
         self.chat_scroll = QScrollArea()
         self.chat_scroll.setWidgetResizable(True)
         self.chat_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
@@ -6997,15 +7301,20 @@ class AIAssistantPanel(QFrame):
         self.chat_layout.setSpacing(8)
         self.chat_layout.addStretch(1)
         self.chat_scroll.setWidget(self.chat_container)
-        content_layout.addWidget(self.chat_scroll, 1)
 
+        self.composer_widget = QWidget(self.content_widget)
+        composer_layout = QVBoxLayout(self.composer_widget)
+        composer_layout.setContentsMargins(0, 0, 0, 0)
+        composer_layout.setSpacing(8)
         self.input_text = QTextEdit()
         self.input_text.setFixedHeight(100)
-        self.input_text.setPlaceholderText("Type your message here...")
+        self.input_text.setPlaceholderText(
+            "Ask Altair about your image..." if is_english else "Zapytaj Altaira o swoje zdjęcie..."
+        )
         self.input_text.setReadOnly(False)
         self.input_text.setEnabled(True)
         self.input_text.setFocusPolicy(Qt.StrongFocus)
-        content_layout.addWidget(self.input_text)
+        composer_layout.addWidget(self.input_text)
 
         button_layout = QHBoxLayout()
         self.btn_voice = QPushButton("")
@@ -7016,7 +7325,7 @@ class AIAssistantPanel(QFrame):
         self.btn_analyze = QPushButton("Analizuj")
         self.btn_send = QPushButton("Send")
         self.btn_send.setProperty("accent", True)
-        self.btn_run_ase = QPushButton("Run ASE")
+        self.btn_run_python = QPushButton("Uruchom Python")
 
         self.token_usage_bar = CircularProgressBar()
         self.token_usage_bar.setRange(0, 100)
@@ -7029,38 +7338,44 @@ class AIAssistantPanel(QFrame):
         button_layout.addWidget(self.btn_voice)
         button_layout.addWidget(self.btn_analyze)
         button_layout.addWidget(self.btn_send)
-        button_layout.addWidget(self.btn_run_ase)
+        button_layout.addWidget(self.btn_run_python)
         button_layout.addWidget(self.token_usage_bar)
-        content_layout.addLayout(button_layout)
+        composer_layout.addLayout(button_layout)
 
-        self.status_label = QLabel("")
+        self.status_label = QLabel("", self.chat_page)
         self.status_label.setStyleSheet("color: #a0a0a0;")
-        content_layout.addWidget(self.status_label)
 
+        settings_widget = QWidget(self.chat_page)
         settings_layout = QGridLayout()
         settings_layout.addWidget(QLabel("Model Altair:"), 0, 0)
         self.lbl_local_model = QLabel("auto")
         self.lbl_local_model.setStyleSheet("color: #c7d3de;")
         settings_layout.addWidget(self.lbl_local_model, 0, 1)
-        settings_layout.addWidget(QLabel("ASE:"), 1, 0)
-        self.combo_ase_execution = QComboBox()
-        self.combo_ase_execution.addItem("Nie wykonuj poleceń", "deny")
-        self.combo_ase_execution.addItem("Pytaj o zgodę", "ask")
-        self.combo_ase_execution.addItem(
+        settings_layout.addWidget(QLabel("Skrypty Python:"), 1, 0)
+        self.combo_python_execution = QComboBox()
+        self.combo_python_execution.addItem("Nie wykonuj skryptów", "deny")
+        self.combo_python_execution.addItem("Pytaj o zgodę", "ask")
+        self.combo_python_execution.addItem(
             svg_icon_from_text(self._warning_svg(), 16),
-            "Zezwalaj na wykonywanie poleceń",
+            "Zezwalaj na wykonywanie skryptów",
             "allow",
         )
-        self.combo_ase_execution.setCurrentIndex(1)
-        settings_layout.addWidget(self.combo_ase_execution, 1, 1)
-        content_layout.addLayout(settings_layout)
+        self.combo_python_execution.setCurrentIndex(1)
+        settings_layout.addWidget(self.combo_python_execution, 1, 1)
+        settings_widget.setLayout(settings_layout)
+        self.chat_page_layout.addWidget(self.chat_scroll, 1)
+        self.chat_page_layout.addWidget(self.composer_widget)
+        self.chat_page_layout.addWidget(self.status_label)
+        self.chat_page_layout.addWidget(settings_widget)
+        self._composer_layout = self.chat_page_layout
+        self.conversation_stack.addWidget(self.chat_page)
 
         self.btn_voice.clicked.connect(self.on_voice_to_text)
         self.btn_analyze.clicked.connect(self.on_analyze)
         self.btn_send.clicked.connect(self.on_send_message)
-        self.btn_run_ase.clicked.connect(self.on_run_ase)
+        self.btn_run_python.clicked.connect(self.on_run_python)
 
-        self.last_generated_ase = ""
+        self.last_generated_python = ""
         self.last_assistant_message = ""
         self.pending_assistant_row = None
         self.pending_indicator_widget = None
@@ -7068,23 +7383,186 @@ class AIAssistantPanel(QFrame):
         self.pending_analysis_indicator_widget = None
         self.stt_worker = None
         self.ai_worker = None
+        self.streaming_response = ""
+        self.streaming_message_label = None
+        self.chat_history_dir = os.path.join(os.path.expanduser("~"), ".astroaiprocessor", "altair_chats")
+        self.current_chat_id = ""
+        self.current_chat_messages = []
+        self._chat_history_cache = {}
+        self._loading_chat_history = False
         self.file_search_worker = None
         self.pending_frame_confirmation = None
+        self.chat_history_combo.currentIndexChanged.connect(self._select_chat_history)
+        self.btn_new_chat.clicked.connect(self._start_new_chat)
+        self._initialize_chat_history()
         self._refresh_model_label()
         if not SPEECH_RECOGNITION_AVAILABLE:
             self.btn_voice.setToolTip("Voice to Text wymaga pakietu SpeechRecognition")
-        self._show_chat_panel()
         if sys.platform.startswith("win"):
             self.append_assistant_message("Przepraszamy, Asystent AI jest niedostępny w wersji Windows.")
 
     def _refresh_model_label(self):
-        self.lbl_local_model.setText("Nemotron 3 Super (OpenRouter Free)")
+        self.lbl_local_model.setText("Nemotron 3 Super (OpenRouter)")
         api_key = str(getattr(self.app, "openrouter_api_key", "") or os.environ.get("OPENROUTER_API_KEY", "")).strip()
         self.token_usage_bar.setValue(0)
         self.token_usage_bar.setToolTip(
             f"OpenRouter\nModel: {OPENROUTER_DEFAULT_MODEL}\n"
             + ("Klucz API skonfigurowany" if api_key else "Dodaj klucz w Preferencje → AI Chat")
         )
+
+    def _chat_history_file(self, chat_id: str) -> str:
+        return os.path.join(self.chat_history_dir, f"{chat_id}.json")
+
+    def _initialize_chat_history(self):
+        try:
+            os.makedirs(self.chat_history_dir, exist_ok=True)
+            filenames = os.listdir(self.chat_history_dir)
+        except OSError as exc:
+            self._log_chat_history_error(f"Could not initialize Altair chat history: {exc}")
+            self._start_new_chat()
+            return
+        history_items = []
+        for filename in filenames:
+            if not filename.endswith(".json"):
+                continue
+            path = os.path.join(self.chat_history_dir, filename)
+            try:
+                with open(path, encoding="utf-8") as history_file:
+                    history = json.load(history_file)
+            except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+                self._log_chat_history_error(f"Could not read Altair chat history {path}: {exc}")
+                continue
+            if not isinstance(history, dict) or not isinstance(history.get("messages"), list):
+                self._log_chat_history_error(f"Invalid Altair chat history format: {path}")
+                continue
+            chat_id = str(history.get("id") or os.path.splitext(filename)[0])
+            title = str(history.get("title") or "Altair chat")
+            updated = str(history.get("updated_at") or "")
+            history_items.append((updated, chat_id, title, history))
+        history_items.sort(key=lambda item: item[0], reverse=True)
+        self.chat_history_combo.blockSignals(True)
+        for _updated, chat_id, title, history in history_items:
+            self.chat_history_combo.addItem(title, chat_id)
+            self._chat_history_cache[chat_id] = history
+        self.chat_history_combo.blockSignals(False)
+        if history_items:
+            self.chat_history_combo.setCurrentIndex(0)
+            self._load_chat_history(history_items[0][1])
+        else:
+            self._start_new_chat()
+
+    def _log_chat_history_error(self, message: str):
+        logger = getattr(self.app, "log", None)
+        if callable(logger):
+            logger(message, "error")
+
+    def _save_chat_history(self):
+        if not self.current_chat_id or self._loading_chat_history:
+            return
+        first_prompt = next(
+            (message["content"] for message in self.current_chat_messages if message["role"] == "user"),
+            "",
+        )
+        title = " ".join(str(first_prompt).split())[:48] or "New Altair chat"
+        history = {
+            "id": self.current_chat_id,
+            "title": title,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "messages": self.current_chat_messages,
+        }
+        try:
+            os.makedirs(self.chat_history_dir, exist_ok=True)
+            with open(self._chat_history_file(self.current_chat_id), "w", encoding="utf-8") as history_file:
+                json.dump(history, history_file, ensure_ascii=False, indent=2)
+            if os.name == "posix":
+                os.chmod(self.chat_history_dir, 0o700)
+                os.chmod(self._chat_history_file(self.current_chat_id), 0o600)
+        except OSError as exc:
+            self._log_chat_history_error(f"Could not save Altair chat history: {exc}")
+            return
+        self._chat_history_cache[self.current_chat_id] = history
+        self._refresh_current_chat_history_title(title)
+
+    def _refresh_current_chat_history_title(self, title: str):
+        combo = self.chat_history_combo
+        index = combo.findData(self.current_chat_id)
+        if index < 0:
+            combo.blockSignals(True)
+            combo.insertItem(0, title, self.current_chat_id)
+            combo.setCurrentIndex(0)
+            combo.blockSignals(False)
+            return
+        if combo.itemText(index) != title:
+            combo.setItemText(index, title)
+
+    def _start_new_chat(self):
+        if self.current_chat_id:
+            self._save_chat_history()
+        self._loading_chat_history = True
+        self.current_chat_id = uuid.uuid4().hex
+        self.current_chat_messages = []
+        self._clear_chat_messages()
+        self.last_assistant_message = ""
+        self.last_generated_python = ""
+        self.streaming_response = ""
+        self.streaming_message_label = None
+        self.chat_history_combo.blockSignals(True)
+        self.chat_history_combo.insertItem(0, "New Altair chat", self.current_chat_id)
+        self.chat_history_combo.setCurrentIndex(0)
+        self.chat_history_combo.blockSignals(False)
+        self._loading_chat_history = False
+        self._save_chat_history()
+        self._show_welcome_panel()
+
+    def _select_chat_history(self, index: int):
+        if index < 0:
+            return
+        chat_id = str(self.chat_history_combo.itemData(index) or "")
+        if not chat_id or chat_id == self.current_chat_id:
+            return
+        self._save_chat_history()
+        self._load_chat_history(chat_id)
+
+    def _load_chat_history(self, chat_id: str):
+        history = self._chat_history_cache.get(chat_id)
+        if history is None:
+            path = self._chat_history_file(chat_id)
+            try:
+                with open(path, encoding="utf-8") as history_file:
+                    history = json.load(history_file)
+            except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+                self._log_chat_history_error(f"Could not load Altair chat history {path}: {exc}")
+                return
+        messages = history.get("messages")
+        if not isinstance(messages, list):
+            self._log_chat_history_error(f"Invalid Altair chat history messages: {chat_id}")
+            return
+        self._loading_chat_history = True
+        self.current_chat_id = chat_id
+        self.current_chat_messages = []
+        self.last_assistant_message = ""
+        self.last_generated_python = ""
+        self._clear_chat_messages()
+        for message in messages:
+            if not isinstance(message, dict):
+                continue
+            role = str(message.get("role") or "")
+            content = str(message.get("content") or "")
+            if role and content:
+                self._append_message(role, content)
+                if role.casefold() == AI_ASSISTANT_NAME.casefold():
+                    self.last_assistant_message = content
+                    self.last_generated_python = self._extract_python_from_text(content)
+        self.current_chat_messages = [
+            {"role": str(message.get("role") or ""), "content": str(message.get("content") or "")}
+            for message in messages
+            if isinstance(message, dict) and message.get("role") and message.get("content")
+        ]
+        self._loading_chat_history = False
+        if self.current_chat_messages:
+            self._show_chat_panel(focus=False)
+        else:
+            self._show_welcome_panel()
 
     def _release_worker_reference_after_stop(self, attr_name: str, worker):
         if worker is None:
@@ -7101,9 +7579,24 @@ class AIAssistantPanel(QFrame):
         if getattr(self, attr_name, None) is worker:
             setattr(self, attr_name, None)
 
-    def _show_chat_panel(self):
-        self.stacked_layout.setCurrentWidget(self.content_widget)
+    def _show_welcome_panel(self):
+        if self._composer_layout is not self.welcome_composer_row:
+            self._composer_layout.removeWidget(self.composer_widget)
+            self.welcome_composer_row.insertWidget(1, self.composer_widget)
+            self._composer_layout = self.welcome_composer_row
+        self.composer_widget.setMaximumWidth(740)
+        self.conversation_stack.setCurrentWidget(self.welcome_page)
         QTimer.singleShot(0, self.input_text.setFocus)
+
+    def _show_chat_panel(self, focus=True):
+        if self._composer_layout is not self.chat_page_layout:
+            self._composer_layout.removeWidget(self.composer_widget)
+            self.chat_page_layout.insertWidget(2, self.composer_widget)
+            self._composer_layout = self.chat_page_layout
+        self.composer_widget.setMaximumWidth(16777215)
+        self.conversation_stack.setCurrentWidget(self.chat_page)
+        if focus:
+            QTimer.singleShot(0, self.input_text.setFocus)
 
 
     def _microphone_svg(self) -> str:
@@ -7175,34 +7668,76 @@ class AIAssistantPanel(QFrame):
         self.last_assistant_message = str(text or "")
         self._append_message(AI_ASSISTANT_NAME, text)
 
+    def _create_assistant_response_label(self, row=None, role=AI_ASSISTANT_NAME):
+        accent = get_active_accent_colors()
+        insert_row = row is None
+        if insert_row:
+            row = QWidget()
+            row_layout = QHBoxLayout(row)
+            row_layout.setContentsMargins(0, 0, 0, 0)
+            row_layout.setSpacing(8)
+        else:
+            row_layout = row.layout()
+        response = QWidget(row)
+        response_layout = QVBoxLayout(response)
+        response_layout.setContentsMargins(0, 3, 0, 6)
+        response_layout.setSpacing(3)
+        role_label = QLabel(role, response)
+        role_label.setStyleSheet(f"color: {accent['border']}; font-size: 10px; font-weight: 600;")
+        message_label = QLabel(response)
+        message_label.setWordWrap(True)
+        message_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        message_label.setStyleSheet("color: #f0f2f4; background: transparent; border: none;")
+        response_layout.addWidget(role_label)
+        response_layout.addWidget(message_label)
+        row_layout.addWidget(response, 1)
+        if insert_row:
+            self.chat_layout.insertWidget(max(0, self.chat_layout.count() - 1), row)
+        return message_label
+
+    @staticmethod
+    def _set_assistant_response_text(message_label, text: str):
+        markdown_document = QTextDocument(message_label)
+        markdown_document.setDefaultStyleSheet(
+            "body { color: #f0f2f4; font-family: sans-serif; font-size: 12px; } "
+            "a { color: #82aaff; }"
+        )
+        markdown_document.setMarkdown(str(text or ""))
+        message_label.setTextFormat(Qt.RichText)
+        message_label.setText(markdown_document.toHtml())
+
+    def on_ai_chunk(self, chunk: str):
+        if not chunk:
+            return
+        self.streaming_response += chunk
+        if self.streaming_message_label is None:
+            self.streaming_message_label = self._create_assistant_response_label()
+        self._set_assistant_response_text(self.streaming_message_label, self.streaming_response)
+        self._scroll_chat_to_bottom()
+
     def _append_message(self, role: str, text: str):
         role_key = (role or AI_ASSISTANT_NAME).strip().lower()
         is_user = role_key == "user"
         accent = get_active_accent_colors()
-
-        assistant_tint = QColor(accent["base"])
-        assistant_tint.setAlpha(34)
-        assistant_bg = f"rgba({assistant_tint.red()}, {assistant_tint.green()}, {assistant_tint.blue()}, {assistant_tint.alpha()})"
+        if not self._loading_chat_history:
+            self._show_chat_panel(focus=False)
 
         row = QWidget()
         row_layout = QHBoxLayout(row)
         row_layout.setContentsMargins(0, 0, 0, 0)
         row_layout.setSpacing(8)
 
-        bubble = QFrame()
-        bubble_layout = QVBoxLayout(bubble)
-        bubble_layout.setContentsMargins(10, 8, 10, 8)
-        bubble_layout.setSpacing(4)
-
-        role_label = QLabel(role)
-        bubble_layout.addWidget(role_label)
-
-        message_label = QLabel(text)
-        message_label.setWordWrap(True)
-        message_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        bubble_layout.addWidget(message_label)
-
         if is_user:
+            bubble = QFrame()
+            bubble_layout = QVBoxLayout(bubble)
+            bubble_layout.setContentsMargins(10, 8, 10, 8)
+            bubble_layout.setSpacing(4)
+            role_label = QLabel(role, bubble)
+            message_label = QLabel(str(text or ""), bubble)
+            message_label.setWordWrap(True)
+            message_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+            bubble_layout.addWidget(role_label)
+            bubble_layout.addWidget(message_label)
             bubble.setStyleSheet(
                 f"QFrame {{ background: {accent['pressed']}; border: 1px solid {accent['border']}; border-radius: 12px; }}"
             )
@@ -7211,15 +7746,13 @@ class AIAssistantPanel(QFrame):
             row_layout.addStretch(1)
             row_layout.addWidget(bubble, 0)
         else:
-            bubble.setStyleSheet(
-                f"QFrame {{ background: {assistant_bg}; border: 1px solid {accent['base']}; border-radius: 12px; }}"
-            )
-            role_label.setStyleSheet(f"color: {accent['border']}; font-size: 10px; font-weight: 600;")
-            message_label.setStyleSheet("color: #f0f2f4; font-size: 12px;")
-            row_layout.addWidget(bubble, 0)
-            row_layout.addStretch(1)
+            message_label = self._create_assistant_response_label(row, role)
+            self._set_assistant_response_text(message_label, str(text or ""))
 
         self.chat_layout.insertWidget(max(0, self.chat_layout.count() - 1), row)
+        if not self._loading_chat_history and self.current_chat_id:
+            self.current_chat_messages.append({"role": role, "content": str(text or "")})
+            self._save_chat_history()
         self._scroll_chat_to_bottom()
 
     def _clear_chat_messages(self):
@@ -7308,28 +7841,37 @@ class AIAssistantPanel(QFrame):
                 return
             self._dismiss_pending_frame_confirmation()
 
-        frame_number = extract_frame_number_open_request(message)
-        if frame_number:
-            self._start_image_search(frame_number, match_mode="frame")
-            return
+        if not self._is_script_generation_request(message):
+            frame_number = extract_frame_number_open_request(message)
+            if frame_number:
+                self._start_image_search(frame_number, match_mode="frame")
+                return
 
-        image_query = extract_image_open_request(message)
-        if image_query:
-            self._start_image_search(image_query)
-            return
+            image_query = extract_image_open_request(message)
+            if image_query:
+                self._start_image_search(image_query)
+                return
 
         payload = self.get_context_payload()
         self.status_label.setText("")
+        self.streaming_response = ""
+        self.streaming_message_label = None
         self._show_assistant_typing_indicator()
         self.btn_send.setEnabled(False)
-        self.btn_run_ase.setEnabled(False)
+        self.btn_run_python.setEnabled(False)
         self.ai_worker = AltairAIWorker(
             message,
             payload,
             api_key=(getattr(self.app, "openrouter_api_key", "") or os.environ.get("OPENROUTER_API_KEY", "")),
         )
+        self.ai_worker.chunk_signal.connect(self.on_ai_chunk)
         self.ai_worker.finished_signal.connect(self.on_ai_finished)
         self.ai_worker.start()
+
+    @staticmethod
+    def _is_script_generation_request(message: str) -> bool:
+        normalized = _normalize_search_text(message)
+        return bool(re.search(r"\b(?:skrypt\w*|script\w*|automatyzac\w*|automation)\b", normalized))
 
     def _start_image_search(self, filename: str, match_mode: str = "name"):
         if self.app is None or not hasattr(self.app, "load_image_from_path"):
@@ -7341,7 +7883,7 @@ class AIAssistantPanel(QFrame):
 
         self._show_assistant_typing_indicator()
         self.btn_send.setEnabled(False)
-        self.btn_run_ase.setEnabled(False)
+        self.btn_run_python.setEnabled(False)
         if match_mode == "frame":
             self.status_label.setText(f"Szukam klatki o numerze {filename}...")
         else:
@@ -7357,7 +7899,7 @@ class AIAssistantPanel(QFrame):
     def _on_image_search_finished(self, requested_name: str, match_mode: str, matches, error: str):
         self._hide_assistant_typing_indicator()
         self.btn_send.setEnabled(True)
-        self.btn_run_ase.setEnabled(True)
+        self.btn_run_python.setEnabled(True)
         self.status_label.setText("")
         self._release_worker_reference_after_stop("file_search_worker", self.file_search_worker)
 
@@ -7554,26 +8096,37 @@ class AIAssistantPanel(QFrame):
 
     def on_ai_finished(self, response: str, error: str, token_meta: dict):
         self.btn_send.setEnabled(True)
-        self.btn_run_ase.setEnabled(True)
+        self.btn_run_python.setEnabled(True)
         self.status_label.setText("")
         self._hide_assistant_typing_indicator()
+        self.last_generated_python = ""
         if error:
             self._refresh_model_label()
             self.append_assistant_message(f"Błąd Altair: {error}")
         else:
             self._refresh_model_label()
-            self.append_assistant_message(response)
-            code = self._extract_ase_from_text(response)
+            self.last_assistant_message = response
+            if self.streaming_message_label is None:
+                self.append_assistant_message(response)
+            else:
+                self._set_assistant_response_text(self.streaming_message_label, response)
+                self.current_chat_messages.append({
+                    "role": AI_ASSISTANT_NAME,
+                    "content": response,
+                })
+                self._save_chat_history()
+            code = self._extract_python_from_text(response)
+            self.last_generated_python = code
             if code:
-                self.last_generated_ase = code
+                self.script_generated.emit(code)
+        self.streaming_response = ""
+        self.streaming_message_label = None
 
     def on_clear(self):
         self._hide_assistant_typing_indicator()
         self._hide_analysis_chat_indicator()
-        self._clear_chat_messages()
         self.status_label.setText("")
-        self.last_generated_ase = ""
-        self.last_assistant_message = ""
+        self._start_new_chat()
 
     def shutdown_workers(self):
         self._hide_assistant_typing_indicator()
@@ -7594,47 +8147,49 @@ class AIAssistantPanel(QFrame):
                 pass
             setattr(self, attr_name, None)
 
-    def on_run_ase(self):
-        code = self._extract_ase_from_text(self.last_assistant_message)
+    def on_run_python(self):
+        code = self._extract_python_from_text(self.last_assistant_message)
         if not code:
-            code = self.last_generated_ase.strip()
+            code = self.last_generated_python.strip()
         if not code:
-            self.append_assistant_message("Brak wygenerowanego ASE.")
+            self.append_assistant_message("Brak wygenerowanego skryptu Python AstroAP.")
             return
 
-        ase_policy = self._get_ase_execution_policy()
-        if ase_policy == "deny":
-            self.append_assistant_message("ASE zablokowane przez ustawienie: 'Nie wykonuj poleceń'.")
+        execution_policy = self._get_python_execution_policy()
+        if execution_policy == "deny":
+            self.append_assistant_message("Wykonywanie skryptów jest wyłączone w ustawieniach.")
             return
 
-        valid, error = self.validate_ase_code(code)
-        if not valid:
-            self.append_assistant_message(f"ASE nieprawidĹ‚owy: {error}")
+        try:
+            astroap.validate_script(code)
+        except astroap.AstroAPError as exc:
+            self.append_assistant_message(f"Nieprawidłowy skrypt AstroAP: {exc}")
             return
 
-        if ase_policy == "ask":
+        if execution_policy == "ask":
             decision = QMessageBox.question(
                 self,
-                "Potwierdzenie ASE",
-                "Altair chce wykonać polecenia ASE. Czy zezwalasz?",
+                "Potwierdzenie skryptu",
+                "Altair chce wykonać ograniczony skrypt Python AstroAP. Czy zezwalasz?",
                 QMessageBox.Yes | QMessageBox.No,
                 QMessageBox.No,
             )
             if decision != QMessageBox.Yes:
-                self.append_assistant_message("Wykonanie ASE anulowane przez użytkownika.")
+                self.append_assistant_message("Wykonanie skryptu anulowane przez użytkownika.")
                 return
 
-        self.status_label.setText("Uruchamiam ASE...")
-        for raw_line in code.splitlines():
-            line = raw_line.strip()
-            if not line or line.startswith("#"):
-                continue
-            self.execute_ase_line(line)
+        self.status_label.setText("Uruchamiam AstroAP...")
+        try:
+            astroap.execute_script(code)
+        except Exception as exc:
+            self.status_label.setText("")
+            self.append_assistant_message(f"Nie udało się wykonać skryptu AstroAP: {exc}")
+            return
         self.status_label.setText("")
-        self.append_assistant_message("ASE wykonano.")
+        self.append_assistant_message("Skrypt AstroAP został uruchomiony.")
 
-    def _get_ase_execution_policy(self) -> str:
-        combo = getattr(self, "combo_ase_execution", None)
+    def _get_python_execution_policy(self) -> str:
+        combo = getattr(self, "combo_python_execution", None)
         if combo is None:
             return "ask"
         value = combo.currentData()
@@ -7642,23 +8197,18 @@ class AIAssistantPanel(QFrame):
             return str(value)
         return "ask"
 
-    def _extract_ase_from_text(self, text: str) -> str:
+    def _extract_python_from_text(self, text: str) -> str:
         raw = str(text or "").strip()
         if not raw:
             return ""
 
-        fenced = re.search(r"```(?:ase|txt|python)?\s*(.*?)```", raw, flags=re.IGNORECASE | re.DOTALL)
+        fenced = re.search(r"```python\s*(.*?)```", raw, flags=re.IGNORECASE | re.DOTALL)
         candidate = fenced.group(1).strip() if fenced else raw
-
-        lines = []
-        for line in candidate.splitlines():
-            stripped = line.strip()
-            if not stripped:
-                continue
-            if self._parse_ase_command(stripped) is not None:
-                lines.append(stripped)
-
-        return "\n".join(lines).strip()
+        try:
+            astroap.validate_script(candidate)
+        except astroap.AstroAPError:
+            return ""
+        return candidate
 
     def execute_ase_line(self, line: str):
         parsed = self._parse_ase_command(line)
@@ -8111,7 +8661,17 @@ class AIAssistantPanel(QFrame):
             "plate_solve_info": self.app.plate_solve_object_info or {},
             "plate_solve_result": self.app.latest_plate_solve_result or {},
             "analysis_metrics": analysis_metrics,
-            "available_ase_commands": self._build_available_ase_commands(),
+            "available_astroap_functions": [
+                'astroap.load("image name or /path/to/image.fit")',
+                'astroap.bge(type="ai", correction="subtraction", smoothing=20)',
+                'astroap.bge(type="rfb", sample_size=25, kernel="thin_plate", spline_order=3, background_sample_points=15, correction="subtraction", smoothing=20, show_dialog=False)',
+                "astroap.denoise(model=2)",
+                "astroap.astroupscale(amount=2)",
+                'astroap.save("/path/to/output.tif")',
+                'astroap.stretch(mode="autostretch")',
+                "astroap.undo()",
+                "astroap.redo()",
+            ],
         }
         return payload
 
@@ -8156,7 +8716,7 @@ class AIAssistantPanel(QFrame):
         if any(keyword in text for keyword in ["exposure", "gain", "temperature", "filter", "noise", "histogram", "fwhm", "fhwm", "star", "gwiazd"]):
             return self.build_metadata_hint(text, payload)
 
-        return "Jestem gotowy do analizy dostÄ™pnych danych. Zadaj pytanie lub wygeneruj ASE, jeĹ›li potrzebujesz automatyzacji."
+        return "Jestem gotowy do analizy dostępnych danych. Mogę przygotować skrypt Python korzystający z biblioteki AstroAP."
 
     def build_recommendation(self, payload: dict) -> str:
         plate_info = payload.get("plate_solve_info", {}) or {}
@@ -8716,15 +9276,19 @@ def build_altair_system_prompt() -> str:
         "Jesli temat jest szeroki, zacznij od konkretnej odpowiedzi i dopiero potem dopisz krotkie doprecyzowanie. "
         "Na powitanie daj krótki komunikat bez podsumowywania payload. "
         "Jeśli użytkownik pyta o filtr 3D FLY, najpierw opieraj odpowiedź o lokalną instrukcję 3d_fly_help.md. "
-        "Jesli uzytkownik prosi o ASE, NIE generuj kodu od razu. "
-        "Najpierw zrob etap uzgodnienia celu: krotko sparafrazuj plan i zadaj pytania doprecyzowujace brakujace dane (sciezki, kolejnosc krokow, wynik, nazwa pliku). "
-        "Dopiero gdy uzytkownik potwierdzi i poda brakujace informacje, wygeneruj ASE. "
-        "Kod ASE zwracaj tylko jako czysty blok komend ASE, bez opisu i bez markdown. "
-        "Uzywaj wylacznie komend z available_ase_commands z payload. "
-        "Nigdy nie wymyslaj nowych komend ani argumentow. "
-        "Przy prosbie o ASE nie zaczynaj od powitania ani zbednego wstepu. Przejdz od razu do konkretu. "
-        "Jesli uzytkownik poda ogolna lokalizacje typu Desktop/Pulpit, podaj od razu gotowy szablon komendy z placeholderem nazwy pliku zamiast blokowac odpowiedz. "
-        "Jesli zadany krok nie ma odpowiednika w available_ase_commands, napisz to wprost i zapytaj o alternatywe zamiast generowac niepoprawny ASE."
+        "Dla automatyzacji AstroAP najpierw sprawdź, czy cel i wymagane parametry są już podane. "
+        "Jeśli użytkownik poda cel, obiekt i operację (np. skrypt otwierający M27 i wykonujący Astro Upscale x2), "
+        "wygeneruj od razu kompletny skrypt bez dodatkowego potwierdzenia. "
+        "Nie pytaj o pełną ścieżkę ani nazwę pliku, gdy użytkownik podał nazwę obiektu lub pliku do wyszukania; "
+        "użyj jej jako argumentu astroap.load(), np. astroap.load(\"M27\"). "
+        "Pytaj tylko o informacje niezbędne do wykonania zadania, których użytkownik rzeczywiście nie podał. "
+        "Skrypt zwracaj jako czysty blok ```python``` i używaj w nim wyłącznie `import astroap` oraz bezpośrednich wywołań funkcji AstroAP. "
+        "Dozwolone funkcje i przykładowe argumenty są w available_astroap_functions z payload. "
+        "Nie generuj innych importów, zmiennych, wyrażeń ani kodu Python. Nie wymyślaj funkcji ani argumentów. "
+        "Przy prośbie o automatyzację przejdź od razu do konkretu, bez powitania. "
+        "astroap.load() sam wyszukuje nazwę obrazu w folderach obrazów, katalogu domowym i innych dostępnych lokalizacjach; "
+        "nie wymagaj od użytkownika podania ścieżki, jeśli nazwa obrazu jest znana. "
+        "Jeśli zadany krok nie ma odpowiednika w dostępnych funkcjach AstroAP, napisz to wprost i zapytaj o alternatywę."
     )
     guide = _load_altair_3d_fly_guide_text()
     if not guide:
@@ -8734,6 +9298,7 @@ def build_altair_system_prompt() -> str:
 
 class AltairAIWorker(QThread):
     finished_signal = pyqtSignal(str, str, object)
+    chunk_signal = pyqtSignal(str)
 
     def __init__(self, message: str, payload: dict, api_key: str = ""):
         super().__init__()
@@ -8753,6 +9318,8 @@ class AltairAIWorker(QThread):
                 model=OPENROUTER_DEFAULT_MODEL,
                 max_tokens=ALTAIR_DEFAULT_MAX_TOKENS,
                 temperature=ALTAIR_DEFAULT_TEMPERATURE,
+                stream=True,
+                on_chunk=self.chunk_signal.emit,
             )
             self.finished_signal.emit(response, "", {
                 "engine": "OpenRouter",
@@ -10798,7 +11365,7 @@ class PreferencesDialog(QDialog):
         ai_chat_layout.setHorizontalSpacing(10)
         ai_chat_layout.setVerticalSpacing(10)
         ai_chat_layout.addWidget(QLabel("Model Altair:"), 0, 0)
-        self.lbl_altair_model = QLabel("NVIDIA Nemotron 3 Super (OpenRouter Free)")
+        self.lbl_altair_model = QLabel("NVIDIA Nemotron 3 Super (OpenRouter)")
         self.lbl_altair_model.setWordWrap(True)
         ai_chat_layout.addWidget(self.lbl_altair_model, 0, 1)
         ai_chat_layout.addWidget(QLabel("OpenRouter API key:"), 1, 0)
@@ -10810,7 +11377,7 @@ class PreferencesDialog(QDialog):
         ai_chat_layout.addWidget(self.edit_openrouter_api_key, 1, 1)
         self.lbl_openrouter_hint = QLabel(
             f"Model: {OPENROUTER_DEFAULT_MODEL}\n"
-            "Wiadomości i kontekst Altaira są wysyłane do OpenRouter. Bezpłatna trasa może mieć limity/rate limit. "
+            "Wiadomości i kontekst Altaira są wysyłane do OpenRouter. Model może podlegać limitom lub opłatom. "
             "Klucz jest zapisywany w lokalnej konfiguracji użytkownika. "
             "Utwórz go na openrouter.ai/settings/keys."
         )
@@ -12465,6 +13032,7 @@ def load_config() -> dict:
         "workspaces": [],
         "home_folder": "",
         "topbar_button_order": [],
+        "recent_images": [],
     }
 
     try:
@@ -12530,6 +13098,28 @@ def load_config() -> dict:
                     for name in config["topbar_button_order"]
                     if str(name).strip()
                 ]
+
+            recent_images = config.get("recent_images", [])
+            if not isinstance(recent_images, list):
+                recent_images = []
+            cleaned_recent_images = []
+            seen_recent_images = set()
+            for path in recent_images:
+                if not isinstance(path, str) or not path.strip():
+                    continue
+                normalized_path = os.path.abspath(os.path.expanduser(path.strip()))
+                extension = os.path.splitext(normalized_path)[1].lower()
+                if (
+                    normalized_path in seen_recent_images
+                    or extension not in IMAGE_EXTENSIONS
+                    or not os.path.isfile(normalized_path)
+                ):
+                    continue
+                seen_recent_images.add(normalized_path)
+                cleaned_recent_images.append(normalized_path)
+                if len(cleaned_recent_images) >= 8:
+                    break
+            config["recent_images"] = cleaned_recent_images
 
             if source_path in {project_config_path, legacy_config_path} or legacy_plate_config:
                 try:
@@ -12599,6 +13189,7 @@ def save_config(denoise_path: str = None, bg_removal_path: str = None,
     deconvolution_path = deconvolution_stellar_path
     if openrouter_api_key is None:
         openrouter_api_key = APP_PREFERENCES.get("openrouter_api_key", "")
+    recent_images = APP_PREFERENCES.get("recent_images", [])
 
     config = {
         "denoise_model_path": denoise_path,
@@ -12627,6 +13218,7 @@ def save_config(denoise_path: str = None, bg_removal_path: str = None,
             for name in (topbar_button_order if isinstance(topbar_button_order, list) else [])
             if str(name).strip()
         ],
+        "recent_images": list(recent_images)[:8] if isinstance(recent_images, list) else [],
     }
 
     try:
@@ -12653,6 +13245,7 @@ APP_PREFERENCES = {
     "workspaces": [],
     "home_folder": "",
     "topbar_button_order": [],
+    "recent_images": [],
     "deepsnr_path": None,
     "deepsnr_args": DEFAULT_DEEPSNR_ARGS,
     "deepsnr_strength": DEFAULT_DEEPSNR_STRENGTH,
@@ -12720,7 +13313,29 @@ def get_theme_stylesheet(theme_name: str, accent_name: str = "Ultra Blue") -> st
     top_action_background = accent_color.darker(320).name(QColor.HexRgb)
     top_action_hover_background = accent_color.darker(230).name(QColor.HexRgb)
     top_action_pressed_background = accent_color.darker(400).name(QColor.HexRgb)
+    is_light_theme = normalized in ("light", "jasny")
+    splitter_track = "#cfcfcf" if is_light_theme else "#3d3d3d"
     return themed + "\n" + f"""
+    QSplitter::handle {{
+        background-color: {splitter_track};
+        border-radius: 2px;
+    }}
+
+    QSplitter::handle:horizontal {{
+        width: 5px;
+        margin: 0 1px;
+    }}
+
+    QSplitter::handle:vertical {{
+        height: 5px;
+        margin: 1px 0;
+    }}
+
+    QSplitter::handle:hover,
+    QSplitter::handle:pressed {{
+        background-color: {accent["base"]};
+    }}
+
     QPushButton[featuredTopAction="true"] {{
         background-color: {top_action_background};
         border: 2px solid {accent["border"]};
@@ -16781,6 +17396,8 @@ def get_dark_stylesheet() -> str:
 
     QLabel {
         color: #f0f0f0;
+        background-color: transparent;
+        border: none;
     }
 
     QLineEdit,
@@ -17101,6 +17718,12 @@ def get_light_stylesheet() -> str:
     QMenu::item:selected {
         background-color: #d9e8fb;
         color: #111111;
+    }
+
+    QLabel {
+        color: #1f1f1f;
+        background-color: transparent;
+        border: none;
     }
 
     QToolBar {
@@ -17888,8 +18511,10 @@ class CommandPaletteDialog(QDialog):
         ask_layout = QHBoxLayout(self.ask_button)
         ask_layout.setContentsMargins(14, 4, 14, 4)
         ask_layout.setSpacing(12)
-        self.ask_icon = QLabel("▣", self.ask_button)
+        self.ask_icon = QLabel(self.ask_button)
         self.ask_icon.setObjectName("commandPaletteAskIcon")
+        self.ask_icon.setFixedSize(30, 30)
+        self.ask_icon.setAlignment(Qt.AlignCenter)
         self.ask_icon.setAttribute(Qt.WA_TransparentForMouseEvents, True)
         ask_layout.addWidget(self.ask_icon)
         ask_text_layout = QVBoxLayout()
@@ -17927,6 +18552,7 @@ class CommandPaletteDialog(QDialog):
         self.search_edit.dismissRequested.connect(self.reject)
         self.search_edit.settingsRequested.connect(self.open_settings)
         self.ask_button.installEventFilter(self)
+        self.set_accent(getattr(parent, "accent_name", "Ultra Blue"))
         self.setStyleSheet(
             "QDialog#commandPaletteDialog { background: transparent; }"
             "QFrame#commandPaletteCard { background: #151a24; color: #e5eaf2; "
@@ -17976,6 +18602,20 @@ class CommandPaletteDialog(QDialog):
         self.footer_enter.setText("Enter run" if english else "Enter uruchom")
         self.footer_settings.setText("Tab open settings" if english else "Tab otwórz ustawienia")
         self.refresh_results()
+
+    def set_accent(self, accent_name: str):
+        normalized = normalize_accent_name(accent_name)
+        icon_file = ACCENT_ASSISTANT_ICON_FILES.get(normalized, "ai_blue.png")
+        icon_path = Path(get_runtime_base_dir()) / "assets" / icon_file
+        pixmap = QPixmap(str(icon_path))
+        if pixmap.isNull():
+            self.ask_icon.setPixmap(QPixmap())
+            self.ask_icon.setText("▣")
+            return
+        self.ask_icon.setText("")
+        self.ask_icon.setPixmap(
+            pixmap.scaled(self.ask_icon.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        )
 
     def set_entries(self, entries):
         self.entries = list(entries or [])
@@ -18597,13 +19237,19 @@ class AstroApp(QMainWindow):
             return ""
         return temp_path
 
-    def run_deepsnr(self):
-        dialog = self._get_deepsnr_dialog()
-        if dialog.exec_() != QDialog.Accepted:
-            self.log("deepSNR canceled.", "warning")
-            return
+    def run_deepsnr(self, strength=None):
+        if strength is None:
+            dialog = self._get_deepsnr_dialog()
+            if dialog.exec_() != QDialog.Accepted:
+                self.log("deepSNR canceled.", "warning")
+                return False
+            params = dialog.get_parameters()
+        else:
+            selected_strength = int(strength)
+            if selected_strength not in (1, 2):
+                raise ValueError("deepSNR model must be 1 or 2.")
+            params = {"strength": selected_strength}
 
-        params = dialog.get_parameters()
         self.deepsnr_strength = normalize_deepsnr_strength(params.get("strength", DEFAULT_DEEPSNR_STRENGTH))
         APP_PREFERENCES["deepsnr_strength"] = self.deepsnr_strength
         save_config(
@@ -18620,7 +19266,7 @@ class AstroApp(QMainWindow):
         input_path = self._export_temp_image_for_external_tool("deepsnr")
         if not input_path:
             self.log("deepSNR skipped: no image loaded.", "warning")
-            return
+            return False
 
         self._deepsnr_input_image_u8 = None
         try:
@@ -18646,6 +19292,7 @@ class AstroApp(QMainWindow):
         self.deepsnr_worker.finished_signal.connect(self._on_deepsnr_finished)
         self.deepsnr_worker.finished.connect(self._on_deepsnr_worker_thread_finished)
         self.deepsnr_worker.start()
+        return True
 
     def _start_deepsnr_progress_dialog(self):
         self._stop_deepsnr_progress_dialog()
@@ -18742,10 +19389,11 @@ class AstroApp(QMainWindow):
 
     def __init__(self):
         super().__init__()
+        apply_dialog_window_flags(self)
         self.setAcceptDrops(True)
         self.update_check_result_ready.connect(self._handle_update_result)
 
-        self.setWindowTitle(f"Astro AI Processor v{APP_VERSION}")
+        self.setWindowTitle("Astro AI Processor")
 
         icon_path = get_app_icon_path()
 
@@ -19013,11 +19661,13 @@ class AstroApp(QMainWindow):
         self._notified_update_versions = set()
         self.workspaces = config.get("workspaces", []) if isinstance(config.get("workspaces", []), list) else []
         self.home_folder = str(config.get("home_folder", "") or "").strip()
+        self.recent_image_paths = config.get("recent_images", []) if isinstance(config.get("recent_images", []), list) else []
         self.topbar_button_order = config.get("topbar_button_order", []) if isinstance(config.get("topbar_button_order", []), list) else []
         if self.home_folder and not os.path.isdir(self.home_folder):
             self.home_folder = ""
         APP_PREFERENCES["workspaces"] = self.workspaces
         APP_PREFERENCES["home_folder"] = self.home_folder
+        APP_PREFERENCES["recent_images"] = list(self.recent_image_paths)
         APP_PREFERENCES["topbar_button_order"] = list(self.topbar_button_order)
         APP_PREFERENCES["accent_name"] = self.accent_name
         APP_PREFERENCES["deepsnr_path"] = self.deepsnr_path
@@ -21196,7 +21846,7 @@ class AstroApp(QMainWindow):
                     pass
 
     def _update_ui_language(self):
-        self.setWindowTitle(self.tr("app_title", "Astro AI Processor v1.0.0"))
+        self.setWindowTitle(self.tr("app_title", "Astro AI Processor"))
 
         action_map = [
             ("action_open", "action_open", "Open"),
@@ -21345,6 +21995,7 @@ class AstroApp(QMainWindow):
             dialog = getattr(self, dialog_name, None)
             if dialog is not None:
                 self._translate_widgets_recursive(dialog)
+        self._update_dashboard_language()
 
     def _refresh_topbar_icons(self):
         icons_dir = getattr(self, "_top_button_icons_dir", "")
@@ -21405,6 +22056,9 @@ class AstroApp(QMainWindow):
         if app is not None:
             apply_theme_application(app, self.theme_name, self.accent_name)
         self._refresh_topbar_icons()
+        palette = getattr(self, "command_palette_dialog", None)
+        if palette is not None:
+            palette.set_accent(self.accent_name)
         self._update_ui_language()
         panel = getattr(self, "ai_assistant_panel", None)
         if panel is not None and hasattr(panel, "_refresh_model_label"):
@@ -22163,6 +22817,10 @@ class AstroApp(QMainWindow):
             self.btn_arduino_joystick.setText(button_text)
         if hasattr(self, "lbl_arduino_status") and status_text is not None:
             self.lbl_arduino_status.setText(status_text)
+        if hasattr(self, "dashboard_joystick_button") and button_text is not None:
+            self.dashboard_joystick_button.setText(button_text)
+        if hasattr(self, "dashboard_joystick_status") and status_text is not None:
+            self.dashboard_joystick_status.setText(status_text)
 
         prefs = getattr(self, "preferences_dialog", None)
         if prefs is not None:
@@ -22394,8 +23052,1264 @@ class AstroApp(QMainWindow):
         self._close_after_workers_finished = False
         super().closeEvent(event)
 
+    def _dashboard_image_pixmap(self, path: str) -> tuple[QPixmap, bool]:
+        linear_source = _is_fits_path(path)
+        if _is_fits_path(path):
+            image_data, _ = safe_fits_read_with_header(path)
+            if image_data is None or getattr(image_data, "size", 0) == 0:
+                raise ValueError("The FITS file contains no image data.")
+        else:
+            image_data = safe_imread(path)
+            if image_data is not None and getattr(image_data, "size", 0):
+                if np.issubdtype(image_data.dtype, np.floating):
+                    linear_source = True
+                elif np.issubdtype(image_data.dtype, np.integer):
+                    linear_source = np.iinfo(image_data.dtype).bits > 8
+
+        if linear_source:
+            image_data = normalize_to_linear_bgr(image_data)
+            image_size = QSize(image_data.shape[1], image_data.shape[0]).scaled(
+                QSize(360, 240), Qt.KeepAspectRatio
+            )
+            image_data = cv2.resize(
+                image_data,
+                (image_size.width(), image_size.height()),
+                interpolation=cv2.INTER_AREA,
+            )
+            pixmap = np_to_qpixmap(
+                stretch_image(image_data, "autostretch"),
+                apply_display_stretch=False,
+            )
+        else:
+            reader = QImageReader(path)
+            reader.setAutoTransform(True)
+            image_size = reader.size()
+            if image_size.isValid():
+                reader.setScaledSize(image_size.scaled(QSize(360, 240), Qt.KeepAspectRatio))
+            image = reader.read()
+            if image.isNull():
+                raise RuntimeError(reader.errorString() or "The image could not be decoded.")
+            pixmap = QPixmap.fromImage(image)
+
+        if pixmap.isNull():
+            raise RuntimeError("The image preview could not be created.")
+        return pixmap.scaled(QSize(200, 125), Qt.KeepAspectRatio, Qt.SmoothTransformation), linear_source
+
+    def _dashboard_catalog_object(self, path: str):
+        components = [os.path.splitext(os.path.basename(path))[0]]
+        parent = os.path.dirname(path)
+        components.extend((os.path.basename(parent), os.path.basename(os.path.dirname(parent))))
+        for component in components:
+            match = re.search(r"(?i)(NGC|IC|M|C)[\s_-]*(\d+)", component)
+            if not match:
+                continue
+            designation = self._normalize_object_name(f"{match.group(1)}{match.group(2)}")
+            for obj in DEEP_SKY_CATALOG:
+                names = [obj.get("name", ""), *(obj.get("aliases") or [])]
+                if any(self._normalize_object_name(name) == designation for name in names):
+                    return obj
+        return None
+
+    def _dashboard_image_card(self, path: str) -> DashboardImageCard:
+        filename = os.path.splitext(os.path.basename(path))[0]
+        extension = os.path.splitext(path)[1].lower()
+        obj = self._dashboard_catalog_object(path)
+        if obj:
+            designation = str(obj.get("name") or "").strip()
+            display_name = str(obj.get("display_name") or designation).strip()
+            title = f"{display_name} · {designation}" if display_name != designation else designation
+            aliases = " ".join(str(alias) for alias in obj.get("aliases", []))
+        else:
+            title = self.tr("dashboard_unknown_object", "Astronomical image")
+            aliases = ""
+
+        search_text = " ".join((title, filename, extension, aliases, path))
+        try:
+            pixmap, auto_stretched = self._dashboard_image_pixmap(path)
+        except Exception as exc:
+            self.log(f"Could not create dashboard preview for {path}: {exc}", "warning")
+            pixmap = QPixmap(168, 96)
+            pixmap.fill(QColor("#111820"))
+            auto_stretched = False
+        card = DashboardImageCard(
+            path,
+            title,
+            filename,
+            extension,
+            pixmap,
+            search_text,
+            auto_stretched,
+            self.dashboard_page,
+        )
+        card.activated.connect(self.load_image_from_path)
+        return card
+
+    def _build_dashboard_page(self) -> QWidget:
+        page = QWidget(self)
+        self.dashboard_page = page
+        page.setObjectName("imageDashboard")
+        page.setStyleSheet(
+            "QWidget#imageDashboard { background: #151a22; }"
+            "QLabel { border: none; background: transparent; }"
+        )
+        page_layout = QHBoxLayout(page)
+        page_layout.setContentsMargins(22, 18, 22, 18)
+        page_layout.setSpacing(18)
+
+        self.dashboard_sidebar = QFrame(page)
+        self.dashboard_sidebar.setObjectName("dashboardSidebar")
+        self.dashboard_sidebar.setFixedWidth(220)
+        self.dashboard_sidebar.setStyleSheet(
+            "QFrame#dashboardSidebar { background: #1b222c; border: 1px solid #303a47; border-radius: 12px; }"
+        )
+        sidebar_layout = QVBoxLayout(self.dashboard_sidebar)
+        sidebar_layout.setContentsMargins(14, 14, 14, 14)
+        sidebar_layout.setSpacing(10)
+
+        self.dashboard_open_button = QPushButton(self.tr("dashboard_open_image", "Open image"), self.dashboard_sidebar)
+        self.dashboard_open_button.setMinimumHeight(40)
+        self.dashboard_open_button.setCursor(Qt.PointingHandCursor)
+        self.dashboard_open_button.clicked.connect(self.load_image)
+        sidebar_layout.addWidget(self.dashboard_open_button)
+        sidebar_layout.addSpacing(8)
+        self.dashboard_search = QLineEdit(self.dashboard_sidebar)
+        self.dashboard_search.setObjectName("dashboardSearch")
+        self.dashboard_search.setClearButtonEnabled(True)
+        self.dashboard_search.setPlaceholderText(self.tr("dashboard_search", "Search objects or files…"))
+        self.dashboard_search.setMinimumHeight(38)
+        sidebar_layout.addWidget(self.dashboard_search)
+        sidebar_layout.addSpacing(8)
+        self.dashboard_tab_buttons = []
+        tab_icons = {
+            "projects": QIcon(os.path.join(get_runtime_base_dir(), "assets", "icons", "top bar", "home.svg")),
+            "gallery": svg_icon_from_text(
+                '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="1" fill="none" stroke="#82aaff" stroke-width="2"/><rect x="13" y="3" width="8" height="8" rx="1" fill="none" stroke="#82aaff" stroke-width="2"/><rect x="3" y="13" width="8" height="8" rx="1" fill="none" stroke="#82aaff" stroke-width="2"/><rect x="13" y="13" width="8" height="8" rx="1" fill="none" stroke="#82aaff" stroke-width="2"/></svg>',
+                20,
+            ),
+            "settings": QIcon(os.path.join(get_runtime_base_dir(), "assets", "icons", "top bar", "prefs.svg")),
+            "altair": QIcon(os.path.join(get_runtime_base_dir(), "assets", "ai_kolor.png")),
+            "scripts": svg_icon_from_text(
+                '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M5 3h9l5 5v13H5z" fill="none" stroke="#82aaff" stroke-width="2"/><path d="M14 3v6h6M8 14l2 2-2 2m4 0h4" fill="none" stroke="#82aaff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+                20,
+            ),
+        }
+        altair_icon_path = os.path.join(get_runtime_base_dir(), "assets", "ai_kolor.png")
+        if not os.path.isfile(altair_icon_path):
+            altair_icon_path = os.path.join(get_runtime_base_dir(), "assets", "ai_blue.png")
+        tab_icons["altair"] = QIcon(altair_icon_path)
+        for index, key in enumerate(("projects", "gallery", "settings", "altair", "scripts")):
+            button = QPushButton(self.dashboard_sidebar)
+            button.setObjectName(f"dashboardTab{key.title()}")
+            button.setCheckable(True)
+            button.setMinimumHeight(42)
+            button.setCursor(Qt.PointingHandCursor)
+            button.setIcon(tab_icons[key])
+            button.setIconSize(QSize(20, 20))
+            button.setStyleSheet(
+                "QPushButton { text-align: left; padding: 8px 12px; border: none; "
+                "border-radius: 6px; background: transparent; }"
+                "QPushButton:checked { background: #263648; color: #ffffff; font-weight: 600; }"
+            )
+            button.clicked.connect(lambda _checked=False, tab_index=index: self._set_dashboard_tab(tab_index))
+            sidebar_layout.addWidget(button)
+            self.dashboard_tab_buttons.append(button)
+        sidebar_layout.addStretch(1)
+        page_layout.addWidget(self.dashboard_sidebar)
+
+        content = QWidget(page)
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(10)
+        self.dashboard_title_label = QLabel(self.tr("dashboard_title", "Welcome to Astro AI Processor"), content)
+        self.dashboard_title_label.setWordWrap(True)
+        self.dashboard_title_label.setStyleSheet("font-size: 28px; font-weight: 650; color: #f0f3f8;")
+        self.dashboard_subtitle_label = QLabel(
+            self.tr("dashboard_subtitle", "Open an image or choose one of your recent files."),
+            content,
+        )
+        self.dashboard_subtitle_label.setWordWrap(True)
+        self.dashboard_subtitle_label.setStyleSheet("font-size: 14px; color: #9aa8b8;")
+        content_layout.addWidget(self.dashboard_title_label)
+        content_layout.addWidget(self.dashboard_subtitle_label)
+
+        self.dashboard_stack = QStackedWidget(content)
+        self.dashboard_stack.setObjectName("dashboardContent")
+        content_layout.addWidget(self.dashboard_stack, 1)
+        self.dashboard_cards_by_tab = {"projects": [], "gallery": []}
+
+        projects_tab = QWidget(self.dashboard_stack)
+        projects_layout = QVBoxLayout(projects_tab)
+        projects_layout.setContentsMargins(4, 2, 4, 2)
+        self.projects_scroll, self.projects_page, self.projects_grid, self.dashboard_empty_label = (
+            self._dashboard_grid_page(
+                projects_tab,
+                self.tr("dashboard_empty", "Recently opened images will appear here."),
+            )
+        )
+        projects_layout.addWidget(self.projects_scroll)
+        self.dashboard_stack.addWidget(projects_tab)
+
+        gallery_tab = QWidget(self.dashboard_stack)
+        gallery_layout = QVBoxLayout(gallery_tab)
+        gallery_layout.setContentsMargins(4, 2, 4, 2)
+        self.gallery_scroll, self.gallery_page, self.gallery_grid, self.dashboard_gallery_empty_label = (
+            self._dashboard_grid_page(
+                gallery_tab,
+                self.tr("dashboard_gallery_empty", "No ready images found."),
+            )
+        )
+        gallery_layout.addWidget(self.gallery_scroll)
+        self.dashboard_stack.addWidget(gallery_tab)
+
+        settings_tab = QWidget(self.dashboard_stack)
+        settings_layout = QVBoxLayout(settings_tab)
+        settings_layout.setContentsMargins(8, 8, 8, 8)
+        self.dashboard_settings_scroll = QScrollArea(settings_tab)
+        self.dashboard_settings_scroll.setWidgetResizable(True)
+        self.dashboard_settings_scroll.setFrameShape(QFrame.NoFrame)
+        settings_content = QWidget()
+        settings_content_layout = QGridLayout(settings_content)
+        settings_content_layout.setContentsMargins(8, 8, 8, 8)
+        settings_content_layout.setHorizontalSpacing(12)
+        settings_content_layout.setVerticalSpacing(12)
+        for column in range(3):
+            settings_content_layout.setColumnStretch(column, 1)
+        section_positions = {
+            "Appearance": (0, 0, 1, 1),
+            "Processor": (0, 1, 1, 1),
+            "Joystick": (0, 2, 1, 1),
+            "Models and tools": (1, 0, 1, 3),
+            "Layers": (2, 0, 1, 1),
+            "AI Assistant": (2, 1, 1, 2),
+        }
+
+        def add_settings_section(title: str) -> QVBoxLayout:
+            section = QFrame(settings_content)
+            section.setObjectName("dashboardSettingsSection")
+            section.setStyleSheet(
+                "QFrame#dashboardSettingsSection { background: rgba(120, 140, 160, 0.08); "
+                "border: 1px solid rgba(120, 140, 160, 0.25); border-radius: 8px; }"
+            )
+            section_layout = QVBoxLayout(section)
+            section_layout.setContentsMargins(14, 12, 14, 14)
+            section_layout.setSpacing(10)
+            heading = QLabel(title, section)
+            heading.setStyleSheet("font-size: 15px; font-weight: 600;")
+            section_layout.addWidget(heading)
+            settings_content_layout.addWidget(section, *section_positions[title])
+            return section_layout
+
+        def add_setting_row(section_layout: QVBoxLayout, label_text: str, control: QWidget):
+            row = QWidget(settings_content)
+            row_layout = QGridLayout(row)
+            row_layout.setContentsMargins(0, 0, 0, 0)
+            row_layout.setColumnStretch(1, 1)
+            label = QLabel(label_text, row)
+            label.setMinimumWidth(140)
+            label.setMaximumWidth(180)
+            row_layout.addWidget(label, 0, 0)
+            row_layout.addWidget(control, 0, 1)
+            section_layout.addWidget(row)
+
+        appearance_layout = add_settings_section("Appearance")
+        self.dashboard_theme_label = QLabel(self.tr("dashboard_theme", "Theme"), settings_tab)
+        self.dashboard_theme_combo = QComboBox(settings_tab)
+        self.dashboard_theme_combo.addItems(["Fusion Dark", "Graphite", "Midnight", "Light"])
+        self.dashboard_theme_combo.setCurrentText(self.theme_name)
+        self.dashboard_accent_label = QLabel(self.tr("dashboard_accent", "Accent"), settings_tab)
+        self.dashboard_accent_combo = QComboBox(settings_tab)
+        self.dashboard_accent_combo.addItems(list(ACCENT_PRESETS.keys()))
+        self.dashboard_accent_combo.setCurrentText(self.accent_name)
+        self.dashboard_language_label = QLabel(self.tr("dashboard_language", "Language"), settings_tab)
+        self.dashboard_language_combo = QComboBox(settings_tab)
+        self.dashboard_language_combo.addItem("Polski", "pl")
+        self.dashboard_language_combo.addItem("English", "en")
+        language_index = self.dashboard_language_combo.findData(self.language)
+        if language_index >= 0:
+            self.dashboard_language_combo.setCurrentIndex(language_index)
+        add_setting_row(appearance_layout, self.dashboard_theme_label.text(), self.dashboard_theme_combo)
+        add_setting_row(appearance_layout, self.dashboard_accent_label.text(), self.dashboard_accent_combo)
+        add_setting_row(appearance_layout, self.dashboard_language_label.text(), self.dashboard_language_combo)
+
+        processor_layout = add_settings_section("Processor")
+        self.dashboard_cpu_cores = QSpinBox(settings_content)
+        self.dashboard_cpu_cores.setRange(1, max(1, os.cpu_count() or 1))
+        self.dashboard_cpu_cores.setValue(int(self.processor_cores))
+        self.dashboard_onnx_provider = QComboBox(settings_content)
+        self.dashboard_onnx_provider.addItems(["Auto", "CPU only", "NVIDIA / CUDA", "DirectML"])
+        self.dashboard_onnx_provider.setCurrentText(self.onnx_provider)
+        add_setting_row(processor_layout, "CPU cores", self.dashboard_cpu_cores)
+        add_setting_row(processor_layout, "ONNX accelerator", self.dashboard_onnx_provider)
+
+        models_layout = add_settings_section("Models and tools")
+        model_controls = QWidget(settings_content)
+        model_controls_layout = QGridLayout(model_controls)
+        model_controls_layout.setContentsMargins(0, 0, 0, 0)
+        model_controls_layout.setHorizontalSpacing(12)
+        model_controls_layout.setVerticalSpacing(8)
+        self.dashboard_models_info = QLabel(settings_content)
+        self.dashboard_models_info.setWordWrap(True)
+        self.dashboard_select_models_button = QPushButton("Select ONNX models", settings_content)
+        self.dashboard_select_models_button.clicked.connect(self._select_dashboard_onnx_models)
+        model_controls_layout.addWidget(self.dashboard_models_info, 0, 0)
+        model_controls_layout.addWidget(self.dashboard_select_models_button, 0, 1, Qt.AlignLeft)
+        self.dashboard_starnet_info = QLabel(settings_content)
+        self.dashboard_starnet_info.setWordWrap(True)
+        self.dashboard_select_starnet_button = QPushButton("Select StarNet++", settings_content)
+        self.dashboard_select_starnet_button.clicked.connect(self._select_dashboard_starnet)
+        model_controls_layout.addWidget(self.dashboard_starnet_info, 1, 0)
+        model_controls_layout.addWidget(self.dashboard_select_starnet_button, 1, 1, Qt.AlignLeft)
+        self.dashboard_deepsnr_info = QLabel(settings_content)
+        self.dashboard_deepsnr_info.setWordWrap(True)
+        deepsnr_actions = QWidget(settings_content)
+        deepsnr_actions_layout = QHBoxLayout(deepsnr_actions)
+        deepsnr_actions_layout.setContentsMargins(0, 0, 0, 0)
+        self.dashboard_select_deepsnr_button = QPushButton("Select deepSNR", deepsnr_actions)
+        self.dashboard_select_deepsnr_button.clicked.connect(self._select_dashboard_deepsnr)
+        self.dashboard_run_deepsnr_button = QPushButton("Run deepSNR", deepsnr_actions)
+        self.dashboard_run_deepsnr_button.clicked.connect(self.run_deepsnr)
+        deepsnr_actions_layout.addWidget(self.dashboard_select_deepsnr_button)
+        deepsnr_actions_layout.addWidget(self.dashboard_run_deepsnr_button)
+        deepsnr_actions_layout.addStretch(1)
+        model_controls_layout.addWidget(self.dashboard_deepsnr_info, 2, 0)
+        model_controls_layout.addWidget(deepsnr_actions, 2, 1)
+        self.dashboard_home_folder_info = QLabel(settings_content)
+        self.dashboard_home_folder_info.setWordWrap(True)
+        self.dashboard_home_folder_button = QPushButton("Choose home folder", settings_content)
+        self.dashboard_home_folder_button.clicked.connect(self.choose_home_folder)
+        model_controls_layout.addWidget(self.dashboard_home_folder_info, 3, 0)
+        model_controls_layout.addWidget(self.dashboard_home_folder_button, 3, 1, Qt.AlignLeft)
+        models_layout.addWidget(model_controls)
+
+        joystick_layout = add_settings_section("Joystick")
+        joystick_actions = QWidget(settings_content)
+        joystick_actions_layout = QHBoxLayout(joystick_actions)
+        joystick_actions_layout.setContentsMargins(0, 0, 0, 0)
+        self.dashboard_joystick_button = QPushButton(joystick_actions)
+        self.dashboard_joystick_button.clicked.connect(self.connect_arduino_joystick)
+        self.dashboard_joystick_status = QLabel(joystick_actions)
+        self.dashboard_joystick_status.setWordWrap(True)
+        joystick_actions_layout.addWidget(self.dashboard_joystick_button)
+        joystick_actions_layout.addWidget(self.dashboard_joystick_status, 1)
+        joystick_layout.addWidget(joystick_actions)
+
+        layers_layout = add_settings_section("Layers")
+        self.dashboard_layers_info = QLabel(
+            "Layer visibility, order, and masks are managed in the editor and Curves tools.",
+            settings_content,
+        )
+        self.dashboard_layers_info.setWordWrap(True)
+        layers_layout.addWidget(self.dashboard_layers_info)
+
+        ai_layout = add_settings_section("AI Assistant")
+        self.dashboard_ai_model_info = QLabel(
+            f"Altair model: NVIDIA Nemotron 3 Super (OpenRouter)\nModel ID: {OPENROUTER_DEFAULT_MODEL}",
+            settings_content,
+        )
+        self.dashboard_ai_model_info.setWordWrap(True)
+        self.dashboard_api_key = QLineEdit(str(self.openrouter_api_key or ""), settings_content)
+        self.dashboard_api_key.setEchoMode(QLineEdit.Password)
+        self.dashboard_api_key.setPlaceholderText(
+            "Provided by OPENROUTER_API_KEY environment variable"
+            if os.environ.get("OPENROUTER_API_KEY") else "OpenRouter API key"
+        )
+        self.dashboard_ai_hint = QLabel(
+            "Altair sends messages and context to OpenRouter. The key is stored in your local application configuration.",
+            settings_content,
+        )
+        self.dashboard_ai_hint.setWordWrap(True)
+        add_setting_row(ai_layout, "API key", self.dashboard_api_key)
+        ai_layout.addWidget(self.dashboard_ai_model_info)
+        ai_layout.addWidget(self.dashboard_ai_hint)
+
+        self.dashboard_settings_scroll.setWidget(settings_content)
+        settings_layout.addWidget(self.dashboard_settings_scroll, 1)
+        self.dashboard_save_settings_button = QPushButton(
+            self.tr("dashboard_apply_settings", "Apply settings"),
+            settings_tab,
+        )
+        self.dashboard_save_settings_button.clicked.connect(self._apply_dashboard_settings)
+        settings_layout.addWidget(self.dashboard_save_settings_button)
+        self.dashboard_settings_status = QLabel("", settings_tab)
+        self.dashboard_settings_status.setStyleSheet("color: #8dbf9a;")
+        settings_layout.addWidget(self.dashboard_settings_status)
+        self.dashboard_stack.addWidget(settings_tab)
+
+        altair_tab = QWidget(self.dashboard_stack)
+        altair_layout = QVBoxLayout(altair_tab)
+        altair_layout.setContentsMargins(0, 0, 0, 0)
+        self.dashboard_altair_chat = AIAssistantPanel(parent=altair_tab, app=self)
+        self.dashboard_altair_chat.setFrameShape(QFrame.NoFrame)
+        self.dashboard_altair_chat.btn_analyze.hide()
+        self.dashboard_altair_chat.script_generated.connect(self._save_generated_dashboard_script)
+        altair_layout.addWidget(self.dashboard_altair_chat)
+        self.dashboard_stack.addWidget(altair_tab)
+
+        scripts_tab = QWidget(self.dashboard_stack)
+        scripts_layout = QVBoxLayout(scripts_tab)
+        scripts_layout.setContentsMargins(0, 0, 0, 0)
+        self.dashboard_script_view_stack = QStackedWidget(scripts_tab)
+        scripts_layout.addWidget(self.dashboard_script_view_stack)
+        self.dashboard_scripts_browse_page = QWidget(scripts_tab)
+        browse_layout = QVBoxLayout(self.dashboard_scripts_browse_page)
+        browse_layout.setContentsMargins(0, 0, 0, 0)
+        browse_layout.addWidget(QLabel("Your AstroAP workflows", self.dashboard_scripts_browse_page))
+        (
+            self.dashboard_scripts_scroll,
+            self.dashboard_scripts_page,
+            self.dashboard_scripts_grid,
+            self.dashboard_scripts_empty,
+        ) = self._dashboard_grid_page(
+            self.dashboard_scripts_browse_page,
+            "Create a workflow with blocks or choose a saved script.",
+        )
+        browse_layout.addWidget(self.dashboard_scripts_scroll, 1)
+        self.dashboard_script_view_stack.addWidget(self.dashboard_scripts_browse_page)
+        script_editor_panel = QWidget(scripts_tab)
+        script_editor_layout = QVBoxLayout(script_editor_panel)
+        script_editor_layout.setContentsMargins(0, 0, 0, 0)
+        script_toolbar = QHBoxLayout()
+        self.dashboard_script_back_button = QPushButton("Back to scripts", script_editor_panel)
+        self.dashboard_script_back_button.clicked.connect(
+            lambda: self.dashboard_script_view_stack.setCurrentIndex(0)
+        )
+        self.dashboard_script_title = QLabel("Select a generated Python script", script_editor_panel)
+        self.dashboard_script_title.setWordWrap(True)
+        self.dashboard_save_script_button = QPushButton("Save script", script_editor_panel)
+        self.dashboard_save_script_button.clicked.connect(self._save_dashboard_script)
+        self.dashboard_run_script_button = QPushButton("Run AstroAP script", script_editor_panel)
+        self.dashboard_run_script_button.setProperty("accent", True)
+        self.dashboard_run_script_button.clicked.connect(self._run_dashboard_script)
+        script_toolbar.addWidget(self.dashboard_script_back_button)
+        script_toolbar.addWidget(self.dashboard_script_title, 1)
+        script_toolbar.addWidget(self.dashboard_save_script_button)
+        script_toolbar.addWidget(self.dashboard_run_script_button)
+        script_editor_layout.addLayout(script_toolbar)
+        block_toolbar = QHBoxLayout()
+        self.dashboard_add_block_type = QComboBox(script_editor_panel)
+        for label, operation in (
+            ("Open image", "load"),
+            ("Background extraction", "bge"),
+            ("Denoise", "denoise"),
+            ("Astro Upscale", "astroupscale"),
+            ("Save image", "save"),
+            ("Display stretch", "stretch"),
+            ("Undo", "undo"),
+            ("Redo", "redo"),
+        ):
+            self.dashboard_add_block_type.addItem(label, operation)
+        self.dashboard_add_block_button = QPushButton("Add block", script_editor_panel)
+        self.dashboard_add_block_button.clicked.connect(
+            lambda: self._add_dashboard_script_block(
+                str(self.dashboard_add_block_type.currentData() or "load")
+            )
+        )
+        block_toolbar.addWidget(self.dashboard_add_block_type, 1)
+        block_toolbar.addWidget(self.dashboard_add_block_button)
+        script_editor_layout.addLayout(block_toolbar)
+        self.dashboard_script_blocks_scroll = QScrollArea(script_editor_panel)
+        self.dashboard_script_blocks_scroll.setWidgetResizable(True)
+        self.dashboard_script_blocks_scroll.setFrameShape(QFrame.NoFrame)
+        self.dashboard_script_blocks_container = QWidget()
+        self.dashboard_script_blocks_layout = QVBoxLayout(self.dashboard_script_blocks_container)
+        self.dashboard_script_blocks_layout.setContentsMargins(6, 6, 6, 6)
+        self.dashboard_script_blocks_layout.setSpacing(8)
+        self.dashboard_script_empty_label = QLabel(
+            "Add an action block to start building this workflow.",
+            self.dashboard_script_blocks_container,
+        )
+        self.dashboard_script_empty_label.setObjectName("dashboardScriptEmptyState")
+        self.dashboard_script_empty_label.setWordWrap(True)
+        self.dashboard_script_blocks_layout.addWidget(self.dashboard_script_empty_label)
+        self.dashboard_script_blocks_layout.addStretch(1)
+        self.dashboard_script_blocks_scroll.setWidget(self.dashboard_script_blocks_container)
+        script_editor_layout.addWidget(self.dashboard_script_blocks_scroll, 1)
+        self.dashboard_script_blocks = []
+        self.dashboard_script_path = ""
+        self.dashboard_script_errors = QPlainTextEdit(script_editor_panel)
+        self.dashboard_script_errors.setObjectName("dashboardScriptErrors")
+        self.dashboard_script_errors.setReadOnly(True)
+        self.dashboard_script_errors.setMaximumHeight(90)
+        self.dashboard_script_errors.setPlaceholderText("Workflow validation errors will appear here.")
+        self.dashboard_script_errors.setStyleSheet(
+            "QPlainTextEdit#dashboardScriptErrors { color: #ff9a9a; border: 1px solid #9a4545; "
+            "border-radius: 6px; background: rgba(130, 35, 35, 0.12); }"
+        )
+        script_editor_layout.addWidget(self.dashboard_script_errors)
+        self.dashboard_script_output = QPlainTextEdit(script_editor_panel)
+        self.dashboard_script_output.setReadOnly(True)
+        self.dashboard_script_output.setMaximumHeight(120)
+        self.dashboard_script_output.setPlaceholderText(
+            "Scripts are validated and run through the restricted AstroAP interface."
+        )
+        script_editor_layout.addWidget(self.dashboard_script_output)
+        self.dashboard_script_view_stack.addWidget(script_editor_panel)
+        self.dashboard_stack.addWidget(scripts_tab)
+        page_layout.addWidget(content, 1)
+        self._refresh_dashboard_script_list()
+        self._refresh_dashboard_settings_paths()
+        self._refresh_dashboard_joystick()
+
+        for path in self._dashboard_gallery_paths():
+            card = self._dashboard_image_card(path)
+            self._add_dashboard_card(self.gallery_grid, card, len(self.dashboard_cards_by_tab["gallery"]))
+            self.dashboard_cards_by_tab["gallery"].append(card)
+        self.dashboard_gallery_empty_label.setVisible(not self.dashboard_cards_by_tab["gallery"])
+        self.dashboard_search.textChanged.connect(self._filter_dashboard_cards)
+        self.dashboard_tab_buttons[0].setChecked(True)
+        self._refresh_dashboard_recent_images()
+        self._update_dashboard_language()
+        return page
+
+    @staticmethod
+    def _dashboard_grid_page(parent: QWidget, empty_text: str):
+        page = QWidget(parent)
+        layout = QGridLayout(page)
+        layout.setContentsMargins(2, 8, 2, 8)
+        layout.setHorizontalSpacing(10)
+        layout.setVerticalSpacing(12)
+        layout.setAlignment(Qt.AlignTop | Qt.AlignLeft)
+        empty_label = QLabel(empty_text, page)
+        empty_label.setObjectName("dashboardEmptyState")
+        empty_label.setWordWrap(True)
+        empty_label.setStyleSheet("color: #8998aa; padding: 12px 4px;")
+        layout.addWidget(empty_label, 0, 0, 1, 2)
+        scroll = QScrollArea(parent)
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setWidget(page)
+        return scroll, page, layout, empty_label
+
+    def _dashboard_gallery_paths(self):
+        assets = os.path.join(get_runtime_base_dir(), "assets", "website")
+        relative_paths = (
+            "astro-upscale/ngc281/ngc_281.png",
+            "background-exctaction/ngc281/ngc281_gradientcorected.png",
+            "deep-snr/ngc281/ngc281_denoised.png",
+            "star-shrink/ngc281/ngc_281_shrinked.png",
+            "astro-upscale/ngc281/ngc_281_upscaled.png",
+            "astro-upscale/c11/c11.png",
+            "background-exctaction/c11/c11_coreccted.png",
+            "deep-snr/c11/c11_denoised.png",
+            "star-shrink/c11/c11_shrinked.png",
+            "astro-upscale/c11/c11_upscaled.png",
+        )
+        return [
+            os.path.join(assets, relative_path)
+            for relative_path in relative_paths
+            if os.path.isfile(os.path.join(assets, relative_path))
+        ]
+
+    def _add_dashboard_card(self, layout: QGridLayout, card: DashboardImageCard, index: int):
+        columns = 5
+        layout.addWidget(card, index // columns, index % columns, Qt.AlignLeft | Qt.AlignTop)
+
+    def _dashboard_tab_key(self):
+        return {0: "projects", 1: "gallery"}.get(self.dashboard_stack.currentIndex())
+
+    def _set_dashboard_tab(self, index: int):
+        self.dashboard_stack.setCurrentIndex(index)
+        for button_index, button in enumerate(self.dashboard_tab_buttons):
+            button.setChecked(button_index == index)
+        self._filter_dashboard_cards()
+
+    def _dashboard_scripts_directory(self) -> str:
+        return os.path.join(os.path.dirname(get_config_path()), "scripts")
+
+    def _save_generated_dashboard_script(self, source: str):
+        code = str(source or "").strip()
+        try:
+            astroap.validate_script(code)
+        except astroap.AstroAPError as exc:
+            self.log(f"Generated script was not saved: {exc}", "warning")
+            return ""
+        try:
+            scripts_directory = self._dashboard_scripts_directory()
+            os.makedirs(scripts_directory, exist_ok=True)
+            filename = f"altair_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.py"
+            script_path = os.path.join(scripts_directory, filename)
+            with open(script_path, "w", encoding="utf-8", newline="\n") as script_file:
+                script_file.write(code + "\n")
+        except OSError as exc:
+            self.log(f"Could not save generated Python script: {exc}", "error")
+            if hasattr(self, "dashboard_script_output"):
+                self.dashboard_script_output.setPlainText(f"Could not save generated script: {exc}")
+            return ""
+        if hasattr(self, "dashboard_scripts_grid"):
+            self._refresh_dashboard_script_list(select_path=script_path)
+        self.log(f"Generated Python script saved: {filename}", "success")
+        return script_path
+
+    def _clear_dashboard_script_blocks(self):
+        while self.dashboard_script_blocks_layout.count():
+            item = self.dashboard_script_blocks_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+        self.dashboard_script_blocks.clear()
+        self.dashboard_script_blocks_layout.addWidget(self.dashboard_script_empty_label)
+        self.dashboard_script_blocks_layout.addStretch(1)
+        self._validate_dashboard_script_blocks()
+
+    def _add_dashboard_script_block(self, operation: str, call=None):
+        block_frame = DashboardScriptBlockFrame(self.dashboard_script_blocks_container)
+        block_frame.setObjectName("dashboardScriptBlock")
+        block_frame.setStyleSheet(
+            "QFrame#dashboardScriptBlock { background: rgba(72, 132, 184, 0.14); "
+            "border: 1px solid rgba(93, 164, 220, 0.65); border-radius: 8px; }"
+        )
+        block_layout = QVBoxLayout(block_frame)
+        block_layout.setContentsMargins(12, 8, 12, 10)
+        block_layout.setSpacing(8)
+        toolbar = QHBoxLayout()
+        operation_combo = QComboBox(block_frame)
+        operations = (
+            ("Open image", "load"),
+            ("Background extraction", "bge"),
+            ("Denoise", "denoise"),
+            ("Astro Upscale", "astroupscale"),
+            ("Save image", "save"),
+            ("Display stretch", "stretch"),
+            ("Undo", "undo"),
+            ("Redo", "redo"),
+        )
+        for label, value in operations:
+            operation_combo.addItem(label, value)
+        operation_index = operation_combo.findData(operation)
+        if operation_index >= 0:
+            operation_combo.setCurrentIndex(operation_index)
+        toolbar.addWidget(QLabel("Action", block_frame))
+        toolbar.addWidget(operation_combo, 1)
+        drag_handle = QLabel("⠿", block_frame)
+        drag_handle.setToolTip("Drag this block to reorder it")
+        drag_handle.setStyleSheet("font-size: 20px; color: #aab8cb;")
+        block_frame.enable_drag_from(drag_handle)
+        remove_button = QPushButton("Remove", block_frame)
+        toolbar.addWidget(drag_handle)
+        toolbar.addWidget(remove_button)
+        block_layout.addLayout(toolbar)
+        parameters = QWidget(block_frame)
+        parameter_layout = QGridLayout(parameters)
+        parameter_layout.setContentsMargins(0, 0, 0, 0)
+        parameter_layout.setHorizontalSpacing(10)
+        parameter_layout.setVerticalSpacing(6)
+        parameter_layout.setColumnStretch(1, 1)
+        block_layout.addWidget(parameters)
+        block = {
+            "frame": block_frame,
+            "operation": operation_combo,
+            "parameters": parameters,
+            "parameter_layout": parameter_layout,
+            "fields": {},
+        }
+        operation_combo.currentIndexChanged.connect(
+            lambda _index, item=block: self._populate_dashboard_script_block(item)
+        )
+        block_frame.dropped.connect(self._move_dashboard_script_block_to)
+        remove_button.clicked.connect(lambda _checked=False, item=block: self._remove_dashboard_script_block(item))
+        self.dashboard_script_blocks.append(block)
+        block_frame.setProperty("blockIndex", len(self.dashboard_script_blocks) - 1)
+        self.dashboard_script_empty_label.hide()
+        self.dashboard_script_blocks_layout.insertWidget(len(self.dashboard_script_blocks) - 1, block_frame)
+        self._populate_dashboard_script_block(block, call)
+        self._validate_dashboard_script_blocks()
+        return block
+
+    def _populate_dashboard_script_block(self, block, call=None):
+        layout = block["parameter_layout"]
+        while layout.count():
+            item = layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+        block["fields"] = {}
+        operation = str(block["operation"].currentData() or "load")
+        args = tuple(getattr(call, "args", ()) or ())
+        kwargs = dict(getattr(call, "kwargs", {}) or {})
+
+        def value(name, default, position=None):
+            if name in kwargs:
+                return kwargs[name]
+            if position is not None and position < len(args):
+                return args[position]
+            return default
+
+        def add_field(name, label_text, control):
+            row = layout.rowCount()
+            label = QLabel(label_text, block["parameters"])
+            layout.addWidget(label, row, 0)
+            layout.addWidget(control, row, 1)
+            block["fields"][name] = control
+            for signal_name in ("textChanged", "valueChanged", "currentIndexChanged", "toggled"):
+                signal = getattr(control, signal_name, None)
+                if signal is not None:
+                    signal.connect(lambda *_args: self._validate_dashboard_script_blocks())
+                    break
+            return control
+
+        if operation == "load":
+            query = value("path_or_query", "", 0)
+            field = QLineEdit(str(query or ""), block["parameters"])
+            field.setPlaceholderText("Image name, e.g. M27 (no full path needed)")
+            add_field("path_or_query", "Image", field)
+        elif operation == "bge":
+            method = QComboBox(block["parameters"])
+            method.addItem("AI", "ai")
+            method.addItem("RBF", "rfb")
+            method.setCurrentIndex(max(0, method.findData(value("type", "ai", 0))))
+            add_field("type", "Method", method)
+            correction = QComboBox(block["parameters"])
+            correction.addItem("Subtraction", "subtraction")
+            correction.addItem("Division", "division")
+            correction_value = value("correction", "subtraction")
+            correction.setCurrentIndex(max(0, correction.findData(correction_value)))
+            add_field("correction", "Correction", correction)
+            smoothing = QDoubleSpinBox(block["parameters"])
+            smoothing.setRange(0, 100)
+            smoothing.setDecimals(1)
+            smoothing.setSuffix("%")
+            smoothing.setValue(float(value("smoothing", 20)))
+            add_field("smoothing", "Smoothing", smoothing)
+            sample_size = QSpinBox(block["parameters"])
+            sample_size.setRange(5, 50)
+            sample_size.setValue(int(value("sample_size", 25)))
+            add_field("sample_size", "Sample size", sample_size)
+            kernel = QComboBox(block["parameters"])
+            for item in ("thin_plate", "quintic", "cubic", "linear"):
+                kernel.addItem(item, item)
+            kernel.setCurrentIndex(max(0, kernel.findData(value("kernel", "thin_plate"))))
+            add_field("kernel", "RBF kernel", kernel)
+            spline_order = QSpinBox(block["parameters"])
+            spline_order.setRange(1, 5)
+            spline_order.setValue(int(value("spline_order", 3)))
+            add_field("spline_order", "Spline order", spline_order)
+            points = QSpinBox(block["parameters"])
+            points.setRange(2, 40)
+            points.setValue(int(value("background_sample_points", 15)))
+            add_field("background_sample_points", "Grid points", points)
+            show_dialog = QCheckBox("Show processing dialog", block["parameters"])
+            show_dialog.setChecked(bool(value("show_dialog", False)))
+            add_field("show_dialog", "Options", show_dialog)
+        elif operation == "denoise":
+            model = QComboBox(block["parameters"])
+            model.addItem("Model 1", 1)
+            model.addItem("Model 2", 2)
+            model.setCurrentIndex(max(0, model.findData(value("model", 2, 0))))
+            add_field("model", "deepSNR model", model)
+        elif operation == "astroupscale":
+            amount = QComboBox(block["parameters"])
+            amount.addItem("2×", 2)
+            amount.addItem("4×", 4)
+            amount.setCurrentIndex(max(0, amount.findData(value("amount", 2, 0))))
+            add_field("amount", "Scale", amount)
+        elif operation == "save":
+            path = QLineEdit(str(value("path", "", 0) or ""), block["parameters"])
+            path.setPlaceholderText("Leave blank to save over the current image")
+            add_field("path", "Output file", path)
+        elif operation == "stretch":
+            mode = QComboBox(block["parameters"])
+            for label, mode_value in (
+                ("AutoStretch", "autostretch"),
+                ("Linear", "linear"),
+                ("Histogram", "histogram"),
+            ):
+                mode.addItem(label, mode_value)
+            mode.setCurrentIndex(max(0, mode.findData(value("mode", "autostretch", 0))))
+            add_field("mode", "Display stretch", mode)
+        elif operation in {"undo", "redo"}:
+            description = QLabel(
+                "Undo the last image operation." if operation == "undo" else "Redo the last undone operation.",
+                block["parameters"],
+            )
+            layout.addWidget(description, 0, 0, 1, 2)
+        self._validate_dashboard_script_blocks()
+
+    def _move_dashboard_script_block_to(self, source_index: int, target_index: int):
+        if (
+            not 0 <= source_index < len(self.dashboard_script_blocks)
+            or not 0 <= target_index < len(self.dashboard_script_blocks)
+            or source_index == target_index
+        ):
+            return
+        block = self.dashboard_script_blocks.pop(source_index)
+        self.dashboard_script_blocks.insert(target_index, block)
+        for index, item in enumerate(self.dashboard_script_blocks):
+            item["frame"].setProperty("blockIndex", index)
+            self.dashboard_script_blocks_layout.removeWidget(item["frame"])
+            self.dashboard_script_blocks_layout.insertWidget(index, item["frame"])
+        self._validate_dashboard_script_blocks()
+
+    def _remove_dashboard_script_block(self, block):
+        if block not in self.dashboard_script_blocks:
+            return
+        self.dashboard_script_blocks.remove(block)
+        self.dashboard_script_blocks_layout.removeWidget(block["frame"])
+        block["frame"].deleteLater()
+        if not self.dashboard_script_blocks:
+            self.dashboard_script_empty_label.show()
+        for index, item in enumerate(self.dashboard_script_blocks):
+            item["frame"].setProperty("blockIndex", index)
+        self._validate_dashboard_script_blocks()
+
+    def _validate_dashboard_script_blocks(self):
+        if not hasattr(self, "dashboard_script_errors"):
+            return
+        try:
+            self._dashboard_script_source()
+        except astroap.AstroAPError as exc:
+            self.dashboard_script_errors.setPlainText(str(exc))
+        else:
+            self.dashboard_script_errors.clear()
+
+    def _dashboard_script_source(self) -> str:
+        lines = ["import astroap"]
+        for block in self.dashboard_script_blocks:
+            operation = str(block["operation"].currentData() or "")
+            fields = block["fields"]
+            if operation == "load":
+                query = fields["path_or_query"].text().strip()
+                if not query:
+                    raise astroap.AstroAPError("The image block needs an image name.")
+                arguments = {"path_or_query": query}
+            elif operation == "bge":
+                arguments = {
+                    "type": fields["type"].currentData(),
+                    "correction": fields["correction"].currentData(),
+                    "smoothing": fields["smoothing"].value(),
+                    "sample_size": fields["sample_size"].value(),
+                    "kernel": fields["kernel"].currentData(),
+                    "spline_order": fields["spline_order"].value(),
+                    "background_sample_points": fields["background_sample_points"].value(),
+                    "show_dialog": fields["show_dialog"].isChecked(),
+                }
+            elif operation == "denoise":
+                arguments = {"model": fields["model"].currentData()}
+            elif operation == "astroupscale":
+                arguments = {"amount": fields["amount"].currentData()}
+            elif operation == "save":
+                path = fields["path"].text().strip()
+                arguments = {"path": path} if path else {}
+            elif operation == "stretch":
+                arguments = {"mode": fields["mode"].currentData()}
+            elif operation in {"undo", "redo"}:
+                arguments = {}
+            else:
+                raise astroap.AstroAPError("Unknown AstroAP block.")
+            rendered_arguments = ", ".join(
+                f"{name}={value!r}"
+                for name, value in arguments.items()
+            )
+            lines.append(f"astroap.{operation}({rendered_arguments})")
+        source = "\n".join(lines)
+        astroap.validate_script(source)
+        return source
+
+    def _dashboard_script_card_pixmap(self, operation: str = "") -> QPixmap:
+        assets = os.path.join(get_runtime_base_dir(), "assets", "icons", "top bar")
+        icon_names = {
+            "load": "open.svg",
+            "bge": "background_extraction.svg",
+            "denoise": "deepsnr.svg",
+            "astroupscale": "astro_upscale.svg",
+            "save": "save.svg",
+            "stretch": "histogram.svg",
+            "undo": "undo.svg",
+            "redo": "redo.svg",
+        }
+        icon_path = os.path.join(assets, icon_names.get(operation, "workspace.svg"))
+        pixmap = QPixmap(168, 96)
+        pixmap.fill(QColor("#1b2735"))
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor("#26384b"))
+        painter.drawRoundedRect(pixmap.rect(), 10, 10)
+        if operation == "new":
+            icon = svg_icon_from_text(
+                '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="#82aaff" stroke-width="2"/><path d="M12 7v10M7 12h10" stroke="#82aaff" stroke-width="2" stroke-linecap="round"/></svg>',
+                48,
+            )
+        else:
+            icon = QIcon(icon_path)
+        if icon.isNull():
+            icon = svg_icon_from_text(
+                '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M5 3h9l5 5v13H5z" fill="none" stroke="#82aaff" stroke-width="2"/><path d="M14 3v6h6" fill="none" stroke="#82aaff" stroke-width="2"/></svg>',
+                48,
+            )
+        painter.drawPixmap(60, 12, 48, 48, icon.pixmap(48, 48))
+        painter.end()
+        return pixmap
+
+    def _dashboard_script_card(self, script_path: str, *, is_new: bool = False) -> DashboardImageCard:
+        if is_new:
+            card = DashboardImageCard(
+                "__new_dashboard_script__",
+                "New script",
+                "Create a visual AstroAP workflow",
+                "BLOCK EDITOR",
+                self._dashboard_script_card_pixmap("new"),
+                "new script create workflow",
+            )
+            card.activated.connect(lambda _path: self._open_new_dashboard_script())
+            return card
+        filename = os.path.basename(script_path)
+        action_summary = "AstroAP workflow"
+        operation = ""
+        try:
+            with open(script_path, encoding="utf-8") as script_file:
+                calls = astroap.validate_script(script_file.read())
+            labels = {
+                "load": "Open image",
+                "bge": "Background",
+                "denoise": "Denoise",
+                "astroupscale": "Astro Upscale",
+                "save": "Save",
+                "stretch": "Stretch",
+                "undo": "Undo",
+                "redo": "Redo",
+            }
+            operation = calls[0].function
+            action_summary = " → ".join(labels.get(call.function, call.function) for call in calls)
+        except (OSError, UnicodeError, astroap.AstroAPError):
+            action_summary = "Needs attention"
+        title = os.path.splitext(filename)[0].replace("_", " ")
+        card = DashboardImageCard(
+            script_path,
+            title,
+            action_summary,
+            ".py",
+            self._dashboard_script_card_pixmap(operation),
+            f"{title} {filename} {action_summary}",
+        )
+        card.activated.connect(self._load_selected_dashboard_script)
+        return card
+
+    def _refresh_dashboard_script_list(self, select_path: str = ""):
+        if not hasattr(self, "dashboard_scripts_grid"):
+            return
+        scripts_directory = self._dashboard_scripts_directory()
+        try:
+            filenames = [
+                filename for filename in os.listdir(scripts_directory)
+                if filename.lower().endswith(".py")
+                and os.path.isfile(os.path.join(scripts_directory, filename))
+            ]
+        except FileNotFoundError:
+            filenames = []
+        except OSError as exc:
+            self.log(f"Could not read generated scripts: {exc}", "error")
+            self.dashboard_script_output.setPlainText(f"Could not read scripts: {exc}")
+            return
+
+        filenames.sort(
+            key=lambda filename: os.path.getmtime(os.path.join(scripts_directory, filename)),
+            reverse=True,
+        )
+        while self.dashboard_scripts_grid.count():
+            item = self.dashboard_scripts_grid.takeAt(0)
+            widget = item.widget()
+            if widget is not None and widget is not self.dashboard_scripts_empty:
+                widget.deleteLater()
+        self.dashboard_script_cards = []
+        new_script_card = self._dashboard_script_card("", is_new=True)
+        self._add_dashboard_card(self.dashboard_scripts_grid, new_script_card, 0)
+        self.dashboard_script_cards.append(new_script_card)
+        for filename in filenames:
+            path = os.path.join(scripts_directory, filename)
+            card = self._dashboard_script_card(path)
+            self._add_dashboard_card(self.dashboard_scripts_grid, card, len(self.dashboard_script_cards))
+            self.dashboard_script_cards.append(card)
+        self.dashboard_scripts_empty.hide()
+        if select_path:
+            self.dashboard_script_path = os.path.abspath(select_path)
+
+    def _open_new_dashboard_script(self):
+        self._clear_dashboard_script_blocks()
+        self.dashboard_script_path = ""
+        self.dashboard_script_title.setText("New AstroAP workflow")
+        self.dashboard_script_output.clear()
+        self.dashboard_script_errors.setPlainText("Add at least one action block to build this workflow.")
+        self.dashboard_script_view_stack.setCurrentIndex(1)
+
+    def _load_selected_dashboard_script(self, script_path: str):
+        script_path = str(script_path or "")
+        if not script_path:
+            return
+        try:
+            with open(script_path, "r", encoding="utf-8") as script_file:
+                source = script_file.read()
+        except (OSError, UnicodeError) as exc:
+            self.dashboard_script_errors.setPlainText(f"Could not open script: {exc}")
+            self.log(f"Could not open Python script {script_path}: {exc}", "error")
+            self.dashboard_script_view_stack.setCurrentIndex(1)
+            return
+        try:
+            calls = astroap.validate_script(source)
+        except astroap.AstroAPError as exc:
+            self._clear_dashboard_script_blocks()
+            self.dashboard_script_errors.setPlainText(f"Could not load script blocks: {exc}")
+            self.log(f"Could not parse Python script {script_path}: {exc}", "error")
+            self.dashboard_script_view_stack.setCurrentIndex(1)
+            return
+        self._clear_dashboard_script_blocks()
+        for call in calls:
+            self._add_dashboard_script_block(call.function, call)
+        self.dashboard_script_path = script_path
+        self.dashboard_script_title.setText(os.path.basename(script_path))
+        self.dashboard_script_view_stack.setCurrentIndex(1)
+        self.dashboard_script_output.clear()
+
+    def _save_dashboard_script(self):
+        try:
+            source = self._dashboard_script_source()
+        except astroap.AstroAPError as exc:
+            self.dashboard_script_errors.setPlainText(str(exc))
+            return
+        script_path = str(self.dashboard_script_path or "")
+        if not script_path:
+            scripts_directory = self._dashboard_scripts_directory()
+            filename = f"script_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.py"
+            script_path = os.path.join(scripts_directory, filename)
+        try:
+            os.makedirs(os.path.dirname(script_path), exist_ok=True)
+            with open(script_path, "w", encoding="utf-8", newline="\n") as script_file:
+                script_file.write(source)
+        except OSError as exc:
+            self.dashboard_script_errors.setPlainText(f"Could not save script: {exc}")
+            self.log(f"Could not save Python script: {exc}", "error")
+            return
+        self.dashboard_script_path = script_path
+        self.dashboard_script_title.setText(os.path.basename(script_path))
+        self._refresh_dashboard_script_list(select_path=script_path)
+        self.log(f"Python script saved: {script_path}", "success")
+
+    def _run_dashboard_script(self):
+        try:
+            source = self._dashboard_script_source()
+            astroap.validate_script(source)
+            astroap.execute_script(source)
+        except Exception as exc:
+            self.dashboard_script_output.setPlainText(f"Script failed: {exc}")
+            self.dashboard_script_errors.setPlainText(str(exc))
+            self.log(f"Python script failed: {exc}", "error")
+            return
+        self.dashboard_script_errors.clear()
+        self.dashboard_script_output.setPlainText("AstroAP script completed successfully.")
+        self.log("AstroAP script completed successfully.", "success")
+
+    def _filter_dashboard_cards(self):
+        key = self._dashboard_tab_key()
+        if key is None:
+            return
+        query = self.dashboard_search.text().strip().casefold()
+        cards = self.dashboard_cards_by_tab[key]
+        visible_count = 0
+        for card in cards:
+            visible = query in str(card.property("dashboardSearchText") or "")
+            card.setVisible(visible)
+            visible_count += int(visible)
+        empty_label = self.dashboard_empty_label if key == "projects" else self.dashboard_gallery_empty_label
+        if not visible_count and query:
+            empty_label.setText(self.tr("dashboard_no_results", "No matching images."))
+        elif key == "projects":
+            empty_label.setText(self.tr("dashboard_empty", "Recently opened images will appear here."))
+        else:
+            empty_label.setText(self.tr("dashboard_gallery_empty", "No ready images found."))
+        empty_label.setVisible(visible_count == 0)
+
+    def _apply_dashboard_settings(self):
+        self.apply_preferences(
+            theme_name=self.dashboard_theme_combo.currentText(),
+            accent_name=self.dashboard_accent_combo.currentText(),
+            language=str(self.dashboard_language_combo.currentData() or "pl"),
+            processor_cores=self.dashboard_cpu_cores.value(),
+            onnx_provider=self.dashboard_onnx_provider.currentText(),
+            openrouter_api_key=self.dashboard_api_key.text(),
+        )
+        self.dashboard_settings_status.setText(self.tr("dashboard_saved", "Settings saved"))
+
+    def _refresh_dashboard_settings_paths(self):
+        if not hasattr(self, "dashboard_models_info"):
+            return
+        self.dashboard_models_info.setText(
+            "\n".join((
+                f"Denoise model: {getattr(self, 'denoise_model_path', None) or 'Not selected'}",
+                f"Background model: {getattr(self, 'bg_removal_model_path', None) or 'Not selected'}",
+                f"Deconvolution stellar model: {getattr(self, 'deconvolution_stellar_model_path', None) or 'Not selected'}",
+                f"Deconvolution object model: {getattr(self, 'deconvolution_object_model_path', None) or 'Not selected'}",
+            ))
+        )
+        self.dashboard_starnet_info.setText(
+            f"StarNet++: {getattr(self, 'starnet_path', None) or 'Not selected'}"
+        )
+        self.dashboard_deepsnr_info.setText(
+            f"deepSNR: {getattr(self, 'deepsnr_path', None) or 'Auto (PATH)'}\n"
+            f"Default model strength: {normalize_deepsnr_strength(getattr(self, 'deepsnr_strength', DEFAULT_DEEPSNR_STRENGTH))}"
+        )
+        self.dashboard_home_folder_info.setText(
+            f"Home folder: {getattr(self, 'home_folder', '') or os.path.expanduser('~')}"
+        )
+
+    def _refresh_dashboard_joystick(self):
+        if not hasattr(self, "dashboard_joystick_button"):
+            return
+        connected = getattr(self, "arduino_joystick_worker", None) is not None
+        self.dashboard_joystick_button.setText(
+            self.tr("disconnect_joystick", "Disconnect Joystick")
+            if connected else self.tr("connect_joystick", "Connect Joystick")
+        )
+        if not connected:
+            self.dashboard_joystick_status.setText(
+                self.tr("joystick_disconnected", "Arduino joystick: disconnected")
+            )
+
+    def _select_dashboard_onnx_models(self):
+        self.select_onnx_models()
+        self._refresh_dashboard_settings_paths()
+
+    def _select_dashboard_starnet(self):
+        self.select_starnet_path()
+        self._refresh_dashboard_settings_paths()
+
+    def _select_dashboard_deepsnr(self):
+        self.select_deepsnr_path()
+        self._refresh_dashboard_settings_paths()
+
+    def _update_dashboard_language(self):
+        if not hasattr(self, "dashboard_stack"):
+            return
+        self.dashboard_title_label.setText(self.tr("dashboard_title", "Welcome to Astro AI Processor"))
+        self.dashboard_subtitle_label.setText(
+            self.tr("dashboard_subtitle", "Open an image or choose one of your recent files.")
+        )
+        self.dashboard_open_button.setText(self.tr("dashboard_open_image", "Open image"))
+        self.dashboard_search.setPlaceholderText(self.tr("dashboard_search", "Search objects or files…"))
+        for button, key, fallback in zip(
+            self.dashboard_tab_buttons,
+            (
+                "dashboard_projects",
+                "dashboard_gallery",
+                "dashboard_settings",
+                "dashboard_altair",
+                "dashboard_scripts",
+            ),
+            ("Projects", "Gallery", "Settings", "Altair", "Scripts"),
+        ):
+            button.setText(self.tr(key, fallback))
+        self.dashboard_theme_label.setText(self.tr("dashboard_theme", "Theme"))
+        self.dashboard_accent_label.setText(self.tr("dashboard_accent", "Accent"))
+        self.dashboard_language_label.setText(self.tr("dashboard_language", "Language"))
+        self.dashboard_save_settings_button.setText(
+            self.tr("dashboard_apply_settings", "Apply settings")
+        )
+        self.dashboard_empty_label.setText(
+            self.tr("dashboard_empty", "Recently opened images will appear here.")
+        )
+        self.dashboard_gallery_empty_label.setText(
+            self.tr("dashboard_gallery_empty", "No ready images found.")
+        )
+        if self.dashboard_settings_status.text():
+            self.dashboard_settings_status.setText(self.tr("dashboard_saved", "Settings saved"))
+        is_dark = bool(self.dark_mode)
+        foreground = "#f0f3f8" if is_dark else "#20252b"
+        muted = "#9aa8b8" if is_dark else "#596575"
+        self.dashboard_page.setStyleSheet(
+            f"QWidget#imageDashboard {{ background: {'#151a22' if is_dark else '#f4f6f8'}; }}"
+            "QLabel { border: none; background: transparent; }"
+        )
+        self.dashboard_title_label.setStyleSheet(
+            f"font-size: 30px; font-weight: 650; color: {foreground};"
+        )
+        self.dashboard_subtitle_label.setStyleSheet(f"font-size: 14px; color: {muted};")
+        self.dashboard_sidebar.setStyleSheet(
+            "QFrame#dashboardSidebar { "
+            f"background: {'#1b222c' if is_dark else '#ffffff'}; "
+            f"border: 1px solid {'#303a47' if is_dark else '#d8dee6'}; "
+            "border-radius: 12px; }"
+        )
+        for cards in self.dashboard_cards_by_tab.values():
+            for card in cards:
+                card.set_dashboard_theme(is_dark)
+        self._filter_dashboard_cards()
+        self.dashboard_theme_combo.setCurrentText(self.theme_name)
+        self.dashboard_accent_combo.setCurrentText(self.accent_name)
+        self.dashboard_cpu_cores.setValue(int(self.processor_cores))
+        self.dashboard_onnx_provider.setCurrentText(self.onnx_provider)
+        self.dashboard_api_key.setText(self.openrouter_api_key)
+        language_index = self.dashboard_language_combo.findData(self.language)
+        if language_index >= 0:
+            self.dashboard_language_combo.setCurrentIndex(language_index)
+        self._refresh_dashboard_settings_paths()
+        self._refresh_dashboard_joystick()
+
+    def _refresh_dashboard_recent_images(self):
+        layout = getattr(self, "projects_grid", None)
+        if layout is None:
+            return
+        self.dashboard_cards_by_tab["projects"] = []
+        while layout.count():
+            item = layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None and widget is not self.dashboard_empty_label:
+                widget.deleteLater()
+
+        recent_paths = [
+            path for path in getattr(self, "recent_image_paths", [])
+            if isinstance(path, str) and os.path.isfile(path)
+        ][:8]
+        if not recent_paths:
+            self.dashboard_empty_label.setVisible(True)
+            layout.addWidget(self.dashboard_empty_label, 0, 0, 1, 2)
+            self._filter_dashboard_cards()
+            return
+        self.dashboard_empty_label.setVisible(False)
+        for index, path in enumerate(recent_paths):
+            card = self._dashboard_image_card(path)
+            card.set_dashboard_theme(bool(self.dark_mode))
+            self._add_dashboard_card(layout, card, index)
+            self.dashboard_cards_by_tab["projects"].append(card)
+        self._filter_dashboard_cards()
+
+    def _remember_recent_image(self, path: str):
+        normalized_path = os.path.abspath(os.path.expanduser(path))
+        self.recent_image_paths = [
+            normalized_path,
+            *(
+                recent_path for recent_path in self.recent_image_paths
+                if os.path.abspath(os.path.expanduser(str(recent_path))) != normalized_path
+            ),
+        ][:8]
+        APP_PREFERENCES["recent_images"] = list(self.recent_image_paths)
+        save_config(
+            self.denoise_model_path,
+            self.bg_removal_model_path,
+            self.dark_mode,
+            self.starnet_path,
+            self.starnet_stride,
+            theme_name=self.theme_name,
+            language=self.language,
+            processor_cores=self.processor_cores,
+            onnx_provider=self.onnx_provider,
+            workspaces=self.workspaces,
+            home_folder=self.home_folder,
+            topbar_button_order=self.topbar_button_order,
+            deepsnr_path=self.deepsnr_path,
+            deepsnr_args=self.deepsnr_args,
+            deepsnr_strength=self.deepsnr_strength,
+            accent_name=self.accent_name,
+            deconvolution_path=self.deconvolution_model_path,
+            deconvolution_stellar_path=self.deconvolution_stellar_model_path,
+            deconvolution_object_path=self.deconvolution_object_model_path,
+            openrouter_api_key=self.openrouter_api_key,
+        )
+        self._refresh_dashboard_recent_images()
+
     def init_ui(self):
-        main_widget = QWidget(self)
+        root_widget = QWidget(self)
+        root_layout = QVBoxLayout(root_widget)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+
+        main_widget = QWidget(root_widget)
         main_layout = QVBoxLayout(main_widget)
         main_layout.setContentsMargins(0, 0, 0, 0)
 
@@ -22949,6 +24863,7 @@ class AstroApp(QMainWindow):
             self.action_preferences,
         ])
         self.setMenuBar(menu_bar)
+        menu_bar.setVisible(False)
         main_layout.addWidget(command_palette_row)
 
 
@@ -23006,6 +24921,7 @@ class AstroApp(QMainWindow):
         right_layout.setSpacing(6)
 
         self.ai_assistant_panel = AIAssistantPanel(parent=right_panel, app=self)
+        self.ai_assistant_panel.script_generated.connect(self._save_generated_dashboard_script)
         right_layout.addWidget(self.ai_assistant_panel, 1)
 
         # Ustawienie minimalnej szerokoĹ›ci panelu bocznego
@@ -23047,7 +24963,7 @@ class AstroApp(QMainWindow):
 
         self.topbar_splitter = QSplitter(Qt.Vertical)
         self.topbar_splitter.setObjectName("topbarSplitter")
-        self.topbar_splitter.setHandleWidth(9)
+        self.topbar_splitter.setHandleWidth(5)
         self.topbar_splitter.setChildrenCollapsible(False)
         self.topbar_splitter.addWidget(top_actions_bar)
         self.topbar_splitter.addWidget(self.workspace_splitter)
@@ -23059,11 +24975,6 @@ class AstroApp(QMainWindow):
         self.topbar_splitter.setAccessibleName("Top bar splitter")
         self.topbar_splitter.setToolTip(
             "Przeciągnij uchwyt w górę, aby ukryć top bar; w dół, aby go przywrócić."
-        )
-        self.topbar_splitter.setStyleSheet(
-            "QSplitter#topbarSplitter::handle:vertical {"
-            "background-color: #3b4657; height: 9px; margin: 1px 0; }"
-            "QSplitter#topbarSplitter::handle:vertical:hover { background-color: #40d6b4; }"
         )
         main_layout.addWidget(self.topbar_splitter, 1)
 
@@ -23122,7 +25033,13 @@ class AstroApp(QMainWindow):
         bottom_layout.addWidget(self.btn_check_updates)
 
         main_layout.addWidget(bottom_panel)
-        self.setCentralWidget(main_widget)
+        self.editor_page = main_widget
+        self.screen_stack = QStackedWidget(root_widget)
+        self.screen_stack.addWidget(self._build_dashboard_page())
+        self.screen_stack.addWidget(self.editor_page)
+        self.screen_stack.setCurrentWidget(self.dashboard_page)
+        root_layout.addWidget(self.screen_stack, 1)
+        self.setCentralWidget(root_widget)
 
         self._sync_plate_overlay_controls()
         self.update_menu_actions()
@@ -23191,6 +25108,7 @@ class AstroApp(QMainWindow):
             self.starnet_path,
             self.starnet_stride,
         )
+        self._refresh_dashboard_settings_paths()
         self.log(f"Home folder set: {self.home_folder}", "success")
 
     def _request_manual_path_after_cancel(self, title: str, path_kind: str = "file", allow_multiple: bool = False):
@@ -23294,10 +25212,11 @@ class AstroApp(QMainWindow):
         return selected_path, dialog.selectedNameFilter()
 
     def load_image(self):
-        path, _ = self._show_open_file_dialog(
+        path, _ = QFileDialog.getOpenFileName(
+            self,
             "Wybierz obraz",
+            self._get_default_dialog_directory(),
             "Obrazy (*.png *.jpg *.jpeg *.tif *.tiff *.webp *.fits *.fit *.fts);;FITS (*.fits *.fit *.fts);;Wszystkie pliki (*)",
-            "",
         )
         if not path:
             self.log("Open image canceled.")
@@ -24293,7 +26212,7 @@ class AstroApp(QMainWindow):
     def load_image_from_path(self, path):
         if not path:
             self.log("Open skipped: path is empty.", "warning")
-            return
+            return False
 
         loaded_header = None
         try:
@@ -24363,6 +26282,10 @@ class AstroApp(QMainWindow):
             # Dodaj miniaturÄ™ z nazwÄ… pliku
             filename = os.path.basename(path)
             self.add_thumbnail(filename, self.processed_img)
+            self._remember_recent_image(path)
+            self.screen_stack.setCurrentWidget(self.editor_page)
+            if self.menuBar() is not None:
+                self.menuBar().setVisible(True)
             
             self.log(f"Successfully loaded: {filename}", "success")
             QTimer.singleShot(
@@ -24370,6 +26293,7 @@ class AstroApp(QMainWindow):
                 lambda loaded_path=path: self.run_plate_solve(automatic=True)
                 if self.current_image_path == loaded_path else None,
             )
+            return True
 
         except Exception as e:
             self.magic_img = None
@@ -24389,6 +26313,7 @@ class AstroApp(QMainWindow):
                 "Błąd ładowania obrazu", 
                 f"Nie udało się otworzyć pliku.\n\nSzczegóły: {e}\nŚcieżka: {path}"
             )
+            return False
     def _capture_astro_upscale_state(self) -> dict:
         """Keep references to the complete pre-resize document for undo/redo."""
         return {
@@ -24438,10 +26363,10 @@ class AstroApp(QMainWindow):
         self._bge_save_magic_snapshot = snapshot["bge_save_magic_snapshot"]
         self._bge_save_processing_revision = snapshot["bge_save_processing_revision"]
 
-    def run_astro_upscale(self):
+    def run_astro_upscale(self, parameters=None):
         if not isinstance(self.magic_img, np.ndarray):
             self.log("Astro Upscale skipped: no image is loaded.", "warning")
-            return
+            return False
         processing_worker = getattr(self, "_processing_worker", None)
         if (processing_worker is not None and processing_worker.isRunning()) or getattr(
             self, "_pending_processing_job", None
@@ -24451,20 +26376,27 @@ class AstroApp(QMainWindow):
                 "Astro Upscale",
                 "Poczekaj na zakończenie bieżącego przetwarzania obrazu przed uruchomieniem Astro Upscale.",
             )
-            return
+            return False
         running_worker = getattr(self, "astro_upscale_worker", None)
         if running_worker is not None and running_worker.isRunning():
             self.log("Astro Upscale is already running.", "warning")
-            return
+            return False
 
-        dialog = AstroUpscaleDialog(self.magic_img, self.language, self)
-        if dialog.exec_() != QDialog.Accepted:
-            self.log("Astro Upscale canceled.", "warning")
-            return
-        params = dialog.get_parameters()
+        if parameters is None:
+            dialog = AstroUpscaleDialog(self.magic_img, self.language, self)
+            if dialog.exec_() != QDialog.Accepted:
+                self.log("Astro Upscale canceled.", "warning")
+                return False
+            params = dialog.get_parameters()
+        else:
+            params = dict(parameters)
         scale = int(params["scale"])
         method = str(params["method"])
         sharpen = bool(params["sharpen"])
+        if scale not in AstroUpscaler.SCALES:
+            raise ValueError("Astro Upscale amount must be 2 or 4.")
+        if method.strip().lower() not in AstroUpscaler.METHODS:
+            raise ValueError(f"Unsupported Astro Upscale method: {method}.")
 
         height, width = self.magic_img.shape[:2]
         operations = []
@@ -24500,7 +26432,7 @@ class AstroApp(QMainWindow):
             )
         except Exception as exc:
             QMessageBox.warning(self, "Astro Upscale", str(exc))
-            return
+            return False
 
         available_bytes = available_memory_bytes()
         estimated_mib = estimated_bytes / (1024.0 ** 2)
@@ -24514,7 +26446,7 @@ class AstroApp(QMainWindow):
                     available=f"{available_mib:,.0f}",
                 ),
             )
-            return
+            return False
         if (available_bytes is not None and estimated_bytes > available_bytes * 0.65) or (
             available_bytes is None and estimated_bytes > 2 * 1024 ** 3
         ):
@@ -24536,7 +26468,7 @@ class AstroApp(QMainWindow):
                 QMessageBox.No,
             )
             if answer != QMessageBox.Yes:
-                return
+                return False
 
         try:
             for image, is_mask in operations:
@@ -24548,7 +26480,7 @@ class AstroApp(QMainWindow):
                     raise ValueError(f"Nieobsługiwany typ danych: {image.dtype}.")
         except Exception as exc:
             QMessageBox.warning(self, "Astro Upscale", str(exc))
-            return
+            return False
 
         progress_dialog = AstroUpscaleProgressDialog(self.language, self)
         worker = AstroUpscaleWorker(operations, scale, method, sharpen, self.language)
@@ -24563,6 +26495,7 @@ class AstroApp(QMainWindow):
         self.astro_upscale_progress_dialog = progress_dialog
         progress_dialog.show()
         worker.start()
+        return True
 
     def _on_astro_upscale_finished(self, results, error, cancelled):
         worker = self.sender()
@@ -24656,21 +26589,57 @@ class AstroApp(QMainWindow):
 
         self.worker.start()
 
-    def run_background_extraction(self):
+    def run_background_extraction(self, parameters=None, show_dialog=True):
         if self.magic_img is None:
             self.log("Background Extraction skipped: no image loaded.", "warning")
-            return
+            return False
 
-        dialog = self._get_background_extraction_dialog()
-        if dialog.exec_() != QDialog.Accepted:
-            self.log("Background Extraction canceled.", "warning")
-            return
-
-        try:
-            params = dialog.get_parameters()
-        except (TypeError, ValueError) as exc:
-            QMessageBox.warning(self, "Background Extraction", str(exc))
-            return
+        if parameters is None or show_dialog:
+            dialog = self._get_background_extraction_dialog()
+            if parameters is not None:
+                method_value = str(parameters.get("method", "AI"))
+                method_index = dialog.combo_method.findData(method_value)
+                if method_index >= 0:
+                    dialog.combo_method.setCurrentIndex(method_index)
+                correction_value = str(parameters.get("correction_type", "Subtraction"))
+                correction_index = dialog.combo_correction.findText(correction_value)
+                if correction_index >= 0:
+                    dialog.combo_correction.setCurrentIndex(correction_index)
+                dialog.sld_smoothing.setValue(
+                    max(0, min(100, int(round(float(parameters.get("smoothing", 0.2)) * 100))))
+                )
+                dialog.spin_sample_size.setValue(int(parameters.get("sample_size", 25)))
+                kernel_index = dialog.combo_rbf_kernel.findText(
+                    str(parameters.get("rbf_kernel", "thin_plate"))
+                )
+                if kernel_index >= 0:
+                    dialog.combo_rbf_kernel.setCurrentIndex(kernel_index)
+                dialog.spin_spline_order.setValue(int(parameters.get("spline_order", 3)))
+                dialog.spin_grid_points.setValue(int(parameters.get("points_per_row", 15)))
+                points = parameters.get("background_points")
+                if points is not None:
+                    dialog._background_points = [
+                        (int(point[0]), int(point[1])) for point in np.asarray(points).reshape(-1, 2)
+                    ]
+                    dialog._refresh_background_points_label()
+            if dialog.exec_() != QDialog.Accepted:
+                self.log("Background Extraction canceled.", "warning")
+                return False
+            try:
+                params = dialog.get_parameters()
+            except (TypeError, ValueError) as exc:
+                QMessageBox.warning(self, "Background Extraction", str(exc))
+                return False
+        else:
+            params = dict(parameters)
+            params.setdefault("method", "AI")
+            params.setdefault("correction_type", "Subtraction")
+            params.setdefault("smoothing", 0.2)
+            params.setdefault("sample_size", 25)
+            params.setdefault("rbf_kernel", "thin_plate")
+            params.setdefault("spline_order", 3)
+            params.setdefault("points_per_row", 15)
+            params.setdefault("background_points", np.empty((0, 2), dtype=int))
         method = str(params.get("method", "AI"))
         model_path = str(getattr(self, "bg_removal_model_path", "") or "").strip()
         if method == "AI":
@@ -24681,7 +26650,7 @@ class AstroApp(QMainWindow):
                     "Background Extraction",
                     "AI extraction needs onnxruntime. Choose RBF or install the project's ONNX Runtime dependency.",
                 )
-                return
+                return False
             if not model_path or not os.path.exists(model_path):
                 self.log("Background Extraction skipped: select Background Removal ONNX model in Preferences.", "warning")
                 QMessageBox.warning(
@@ -24689,7 +26658,7 @@ class AstroApp(QMainWindow):
                     "Background Extraction",
                     "Choose a Background Extraction ONNX model in Preferences, or select RBF.",
                 )
-                return
+                return False
         else:
             try:
                 from astropy.stats import sigma_clipped_stats  # noqa: F401
@@ -24709,12 +26678,12 @@ class AstroApp(QMainWindow):
                     "Background Extraction",
                     f"{method} extraction requires {dependency}. Install the dependencies listed in requirements.txt.\n\n{exc}",
                 )
-                return
+                return False
 
         source_native = self._get_background_extraction_source_data()
         if source_native is None or source_native.size == 0:
             self.log("Background Extraction skipped: invalid source image.", "warning")
-            return
+            return False
 
         from processing.background_extraction import (
             extract_background,
@@ -24752,7 +26721,7 @@ class AstroApp(QMainWindow):
         except Exception as exc:
             progress_dialog.close()
             self.log(f"Background Extraction failed: {exc}", "error")
-            return
+            return False
 
         progress_dialog.update_progress("Finalizing result…", 99, 99)
         QApplication.processEvents()
@@ -24776,6 +26745,7 @@ class AstroApp(QMainWindow):
         )
         self.update_menu_actions()
         self.log("Background Extraction finished.", "success")
+        return True
 
     def run_deconvolution_onnx(self):
         if self.magic_img is None:
