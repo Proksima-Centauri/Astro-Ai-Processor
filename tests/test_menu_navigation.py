@@ -23,6 +23,7 @@ assert window.menuBar().isVisible()
 assert list(window.top_menus) == [
     "file", "edit", "layers", "image", "filters", "ai", "astro", "view", "tools", "help"
 ]
+assert len(window._top_button_icon_files.values()) == len(set(window._top_button_icon_files.values()))
 for action, shortcut in (
     (window.action_open, "Ctrl+O"),
     (window.action_save, "Ctrl+S"),
