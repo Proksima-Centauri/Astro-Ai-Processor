@@ -29,7 +29,7 @@ Priorytety: **P0** = błędy i atrapy (robić najpierw), **P1** = duży wpływ n
 - [x] Dodać powrót z edytora do dashboardu.
 
 ### Pasek ikon
-- [ ] Unikalne ikony dla każdej funkcji (teraz powtarzają się mosaic, blur, levels, shrink).
+- [x] Unikalne ikony dla każdej funkcji (teraz powtarzają się mosaic, blur, levels, shrink).
 - [ ] Ograniczyć do 8–10 ulubionych i przycisk "więcej".
 - [ ] Przycisk "Przywróć domyślną kolejność" oraz podpowiedź o przeciąganiu.
 - [ ] Obsługa przepełnienia przy wąskim oknie.
