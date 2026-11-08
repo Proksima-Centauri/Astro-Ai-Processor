@@ -39,7 +39,7 @@ Priorytety: **P0** = błędy i atrapy (robić najpierw), **P1** = duży wpływ n
 - [ ] Toasty zamiast części `QMessageBox` dla sukcesów.
 - [ ] Spójna zasada: sukces = toast + log, błąd = okno + log.
 - [ ] Przycisk Anuluj w długich operacjach (Magic, StarNet, Deconvolution, Stack, 3D FLY).
-- [ ] Plate solve: nie pokazywać ostrzeżeń przy każdym pliku, jeśli brak Skyshot (jednorazowa informacja lub opcja wyłączenia auto-solve).
+- [x] Plate solve: nie pokazywać ostrzeżeń przy każdym pliku, jeśli brak Skyshot (jednorazowa informacja lub opcja wyłączenia auto-solve).
 
 ### Viewer
 - [ ] Pan w trybie porównania (środkowy przycisk lub spacja), LPM tylko na uchwycie podziału.

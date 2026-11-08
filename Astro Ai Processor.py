@@ -19463,6 +19463,7 @@ class AstroApp(QMainWindow):
         self._pending_astro_upscale_history_label = None
         self.analysis_worker = None
         self._analysis_request_id = 0
+        self._skyshot_unavailable_notified = False
         self._close_waiting_for_workers = False
         self._close_after_workers_finished = False
         self._close_poll_scheduled = False
@@ -27171,9 +27172,12 @@ class AstroApp(QMainWindow):
         try:
             self.skyshot_binary = resolve_skyshot(self.skyshot_binary)
         except RuntimeError as exc:
-            level = "warning" if automatic else "error"
-            self.log(f"Plate Solving unavailable: {exc}", level)
-            if not automatic:
+            if automatic:
+                if not self._skyshot_unavailable_notified:
+                    self.log(f"Automatic Plate Solving unavailable: {exc}", "info")
+                    self._skyshot_unavailable_notified = True
+            else:
+                self.log(f"Plate Solving unavailable: {exc}", "error")
                 QMessageBox.warning(self, "Skyshot Solver", str(exc))
             return
         APP_PREFERENCES["skyshot_binary"] = self.skyshot_binary
