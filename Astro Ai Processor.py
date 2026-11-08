@@ -241,6 +241,9 @@ I18N = {
     "action_delete_layer": {"pl": "Usuń zaznaczoną warstwę", "en": "Delete Selected Layer"},
     "action_levels": {"pl": "Poziomy", "en": "Levels"},
     "action_curves": {"pl": "Krzywe (LUT)", "en": "Curves (LUT)"},
+    "action_adjustment_levels": {"pl": "Warstwa korekcyjna: Poziomy", "en": "Levels Adjustment Layer"},
+    "action_adjustment_curves": {"pl": "Warstwa korekcyjna: Krzywe", "en": "Curves Adjustment Layer"},
+    "action_dashboard": {"pl": "Powrót do dashboardu", "en": "Back to Dashboard"},
     "action_ghs": {"pl": "GHS Stretch", "en": "GHS Stretch"},
     "action_magic": {"pl": "Inteligentne odszumianie i ostrzenie", "en": "Magic Filter"},
     "action_shrink": {"pl": "Zmniejsz gwiazdy", "en": "Star Shrink"},
@@ -264,6 +267,19 @@ I18N = {
     "action_solar_stack": {"pl": "Stackowanie obiektów US", "en": "Planetary Stack"},
     "action_timelapse": {"pl": "Film poklatkowy", "en": "Time-lapse Movie"},
     "action_svg_brush": {"pl": "SVG PĘDZEL", "en": "SVG Brush"},
+    "menu_file": {"pl": "&Plik", "en": "&File"},
+    "menu_edit": {"pl": "&Edycja", "en": "&Edit"},
+    "menu_layers": {"pl": "&Warstwy", "en": "&Layers"},
+    "menu_image": {"pl": "&Obraz", "en": "&Image"},
+    "menu_filters": {"pl": "&Filtry", "en": "&Filters"},
+    "menu_ai": {"pl": "&AI", "en": "&AI"},
+    "menu_astro": {"pl": "&Astro", "en": "&Astro"},
+    "menu_view": {"pl": "&Widok", "en": "&View"},
+    "menu_tools": {"pl": "&Narzędzia", "en": "&Tools"},
+    "menu_help": {"pl": "Pomo&c", "en": "&Help"},
+    "action_help_3d_fly": {"pl": "Instrukcja 3D FLY", "en": "3D FLY Guide"},
+    "action_help_shortcuts": {"pl": "Skróty klawiszowe", "en": "Keyboard Shortcuts"},
+    "action_about": {"pl": "O programie", "en": "About"},
     "top_open": {"pl": "Otwórz", "en": "Open"},
     "top_save": {"pl": "Zapisz", "en": "Save"},
     "top_save_as": {"pl": "Zapisz jako", "en": "Save As"},
@@ -20881,6 +20897,70 @@ class AstroApp(QMainWindow):
         ]
         self.log("Available commands:\n" + "\n".join(commands), "help")
 
+    def show_3d_fly_help(self):
+        guide_path = Path(get_runtime_base_dir()) / ALTAIR_3D_FLY_GUIDE_FILE
+        try:
+            guide_text = guide_path.read_text(encoding="utf-8")
+        except OSError as exc:
+            self.log(f"Could not open 3D FLY guide: {exc}", "error")
+            QMessageBox.warning(
+                self,
+                self.tr("action_help_3d_fly", "3D FLY Guide"),
+                f"Could not read the guide:\n{guide_path}\n\n{exc}",
+            )
+            return
+
+        dialog = QDialog(self)
+        apply_dialog_window_flags(dialog)
+        dialog.setWindowTitle(self.tr("action_help_3d_fly", "3D FLY Guide"))
+        dialog.resize(820, 620)
+        layout = QVBoxLayout(dialog)
+        apply_standard_layout_margins(layout)
+        guide_view = QPlainTextEdit(dialog)
+        guide_view.setReadOnly(True)
+        guide_view.setPlainText(guide_text)
+        layout.addWidget(guide_view, 1)
+        buttons = QDialogButtonBox(QDialogButtonBox.Close, parent=dialog)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        dialog.exec_()
+
+    def show_keyboard_shortcuts(self):
+        if self.language == "pl":
+            shortcuts = (
+                "Ctrl+O — Otwórz obraz\n"
+                "Ctrl+S — Zapisz obraz\n"
+                "Ctrl+Shift+S — Zapisz jako\n"
+                "Ctrl+V — Wklej do zaznaczonej warstwy\n"
+                "Ctrl+Q — Zamknij program\n"
+                "Ctrl+Z / Ctrl+Y — Cofnij / Ponów\n"
+                "Ctrl+0 — Dopasuj obraz do okna\n"
+                "Ctrl+Shift+P — Paleta poleceń"
+            )
+        else:
+            shortcuts = (
+                "Ctrl+O — Open image\n"
+                "Ctrl+S — Save image\n"
+                "Ctrl+Shift+S — Save as\n"
+                "Ctrl+V — Paste into selected layer\n"
+                "Ctrl+Q — Quit\n"
+                "Ctrl+Z / Ctrl+Y — Undo / Redo\n"
+                "Ctrl+0 — Fit image to window\n"
+                "Ctrl+Shift+P — Command palette"
+            )
+        QMessageBox.information(
+            self,
+            self.tr("action_help_shortcuts", "Keyboard Shortcuts"),
+            shortcuts,
+        )
+
+    def show_about_dialog(self):
+        QMessageBox.about(
+            self,
+            self.tr("action_about", "About"),
+            f"<h3>Astro AI Processor</h3><p>Version {APP_VERSION}</p>",
+        )
+
     def apply_correction_from_dialog(self):
         self.cancel_params_preview()
         self.apply_full_processing()
@@ -20894,6 +20974,10 @@ class AstroApp(QMainWindow):
         self.console_window.raise_()
         self.console_window.activateWindow()
         self.log("Console opened.")
+
+    def show_dashboard(self):
+        if hasattr(self, "screen_stack") and hasattr(self, "dashboard_page"):
+            self.screen_stack.setCurrentWidget(self.dashboard_page)
 
     def show_plate_solving_dialog(self):
         if hasattr(self, "plate_solving_dialog") and self.plate_solving_dialog is not None:
@@ -21884,6 +21968,7 @@ class AstroApp(QMainWindow):
             ("action_redo", "action_redo", "Redo"),
             ("action_new_workspace", "action_new_workspace", "New Workspace..."),
             ("action_set_home_folder", "action_home", "Home Folder"),
+            ("action_dashboard", "action_dashboard", "Back to Dashboard"),
             ("action_preferences", "action_preferences", "Preferences"),
             ("action_histogram", "action_histogram", "Histogram"),
             ("action_console", "action_console", "Console"),
@@ -21891,8 +21976,8 @@ class AstroApp(QMainWindow):
             ("action_ai_assistant", "action_ai", "AI Assistant"),
             ("action_new_layer", "action_new_layer", "New Layer"),
             ("action_delete_layer", "action_delete_layer", "Delete Selected Layer"),
-            ("action_adjustment_levels", "action_levels", "Levels"),
-            ("action_adjustment_curves", "action_curves", "Curves (LUT)"),
+            ("action_adjustment_levels", "action_adjustment_levels", "Levels Adjustment Layer"),
+            ("action_adjustment_curves", "action_adjustment_curves", "Curves Adjustment Layer"),
             ("action_magic_filter", "action_magic", "Magic Filter"),
             ("action_astro_upscale", "action_astro_upscale", "Astro Upscale"),
             ("action_star_shrink", "action_shrink", "Star Shrink"),
@@ -21918,6 +22003,7 @@ class AstroApp(QMainWindow):
             ("action_solar_stack", "action_solar_stack", "Planetary Stack"),
             ("action_timelapse", "action_timelapse", "Time-lapse Movie"),
             ("action_svg_brush", "action_svg_brush", "SVG Brush"),
+            ("action_updates", "check_updates", "Check for updates"),
         ]
         for attr, key, default in action_map:
             action = getattr(self, attr, None)
@@ -21926,6 +22012,28 @@ class AstroApp(QMainWindow):
 
         if hasattr(self, "menu_workspace") and self.menu_workspace is not None:
             self.menu_workspace.setTitle(self.tr("action_workspace", "Workspace"))
+        menu_title_defaults = {
+            "file": "File",
+            "edit": "Edit",
+            "layers": "Layers",
+            "image": "Image",
+            "filters": "Filters",
+            "ai": "AI",
+            "astro": "Astro",
+            "view": "View",
+            "tools": "Tools",
+            "help": "Help",
+        }
+        for key, menu in getattr(self, "top_menus", {}).items():
+            menu.setTitle(self.tr(f"menu_{key}", menu_title_defaults[key]))
+        for attr, key, fallback in (
+            ("action_help_3d_fly", "action_help_3d_fly", "3D FLY Guide"),
+            ("action_help_shortcuts", "action_help_shortcuts", "Keyboard Shortcuts"),
+            ("action_about", "action_about", "About"),
+        ):
+            action = getattr(self, attr, None)
+            if action is not None:
+                action.setText(self.tr(key, fallback))
         if hasattr(self, "btn_check_updates"):
             self.btn_check_updates.setText(self.tr("check_updates", "Check for updates"))
         self._update_command_palette_button_text()
@@ -23706,10 +23814,11 @@ class AstroApp(QMainWindow):
         while self.dashboard_script_blocks_layout.count():
             item = self.dashboard_script_blocks_layout.takeAt(0)
             widget = item.widget()
-            if widget is not None:
+            if widget is not None and widget is not self.dashboard_script_empty_label:
                 widget.deleteLater()
         self.dashboard_script_blocks.clear()
         self.dashboard_script_blocks_layout.addWidget(self.dashboard_script_empty_label)
+        self.dashboard_script_empty_label.show()
         self.dashboard_script_blocks_layout.addStretch(1)
         self._validate_dashboard_script_blocks()
 
@@ -24388,16 +24497,23 @@ class AstroApp(QMainWindow):
 
         # --- Akcje ---
         self.action_open = QAction("Open", self)
+        self.action_open.setShortcut("Ctrl+O")
         self.action_open.triggered.connect(self.load_image)
 
         self.action_save = QAction("Save", self)
+        self.action_save.setShortcut("Ctrl+S")
         self.action_save.triggered.connect(self.save_image)
 
         self.action_save_as = QAction("Save As...", self)
+        self.action_save_as.setShortcut("Ctrl+Shift+S")
         self.action_save_as.triggered.connect(self.save_image_as)
 
         self.action_exit = QAction("Exit", self)
+        self.action_exit.setShortcut("Ctrl+Q")
         self.action_exit.triggered.connect(self.close)
+
+        self.action_dashboard = QAction("Back to Dashboard", self)
+        self.action_dashboard.triggered.connect(self.show_dashboard)
 
         self.action_undo = QAction("Undo", self)
         self.action_undo.setShortcut("Ctrl+Z")
@@ -24408,6 +24524,7 @@ class AstroApp(QMainWindow):
         self.action_redo.triggered.connect(self.redo)
 
         self.action_paste_layer = QAction("Paste Into Selected Layer", self)
+        self.action_paste_layer.setShortcut("Ctrl+V")
         self.action_paste_layer.triggered.connect(self.paste_image_into_selected_layer)
 
         self.menu_workspace = QMenu("Workspace", self)
@@ -24420,6 +24537,17 @@ class AstroApp(QMainWindow):
 
         self.action_preferences = QAction("Preferencje", self)
         self.action_preferences.triggered.connect(self.show_preferences_dialog)
+
+        self.action_help_3d_fly = QAction("3D FLY Guide", self)
+        self.action_help_3d_fly.triggered.connect(self.show_3d_fly_help)
+        self.action_help_shortcuts = QAction("Keyboard Shortcuts", self)
+        self.action_help_shortcuts.triggered.connect(self.show_keyboard_shortcuts)
+        self.action_updates = QAction("Check for updates", self)
+        self.action_updates.triggered.connect(
+            lambda _checked=False: self.check_for_new_version(user_initiated=True)
+        )
+        self.action_about = QAction("About", self)
+        self.action_about.triggered.connect(self.show_about_dialog)
 
         self.action_histogram = QAction("Histogram", self)
         self.action_histogram.triggered.connect(self.show_histogram_window)
@@ -24860,36 +24988,32 @@ class AstroApp(QMainWindow):
         menu_bar.setNativeMenuBar(False)
         self.top_menus = {}
 
-        def _add_top_menu(title, actions):
+        def _add_top_menu(key, title, actions):
             menu = menu_bar.addMenu(title)
             for action in actions:
                 menu.addAction(action)
-            self.top_menus[title.lower()] = menu
+            self.top_menus[key] = menu
 
-        _add_top_menu("File", [
+        _add_top_menu("file", "File", [
             self.action_open,
             self.action_save,
             self.action_save_as,
+            self.action_dashboard,
             self.action_set_home_folder,
             self.action_exit,
         ])
-        _add_top_menu("Edit", [
+        _add_top_menu("edit", "Edit", [
             self.action_undo,
             self.action_redo,
             self.action_paste_layer,
+        ])
+        _add_top_menu("layers", "Layers", [
             self.action_new_layer,
             self.action_delete_layer,
             self.action_adjustment_levels,
             self.action_adjustment_curves,
         ])
-        _add_top_menu("View", [
-            self.action_view_zoom_in,
-            self.action_view_zoom_out,
-            self.action_view_zoom_fit,
-            self.action_histogram,
-            self.action_console,
-        ])
-        _add_top_menu("Image", [
+        _add_top_menu("image", "Image", [
             self.action_crop,
             self.action_rotate,
             self.action_levels,
@@ -24900,32 +25024,49 @@ class AstroApp(QMainWindow):
             self.action_correction,
             self.action_star_correction,
         ])
-        _add_top_menu("AI", [
+        _add_top_menu("filters", "Filters", [
+            self.action_blur,
+            self.action_background_extraction,
+            self.action_deconvolution,
+            self.action_local_contrast,
+        ])
+        _add_top_menu("ai", "AI", [
             self.action_ai_assistant,
             self.action_magic_filter,
             self.action_astro_upscale,
             self.action_star_shrink,
             self.action_starnet,
             self.action_deepsnr,
-            self.action_background_extraction,
-            self.action_deconvolution,
-            self.action_local_contrast,
-            self.action_blur,
         ])
-        _add_top_menu("Tools", [
+        _add_top_menu("astro", "Astro", [
             self.action_plate_solve,
             self.action_mosaic,
             self.action_stack,
             self.action_solar_stack,
             self.action_timelapse,
             self.action_3d_fly,
-            self.action_svg_brush,
+        ])
+        _add_top_menu("view", "View", [
+            self.action_view_zoom_in,
+            self.action_view_zoom_out,
+            self.action_view_zoom_fit,
+            self.action_histogram,
+            self.action_console,
             self.action_photoshop_menu,
+        ])
+        _add_top_menu("tools", "Tools", [
+            self.action_svg_brush,
             self.action_script_editor,
             self.action_preferences,
         ])
+        _add_top_menu("help", "Help", [
+            self.action_help_3d_fly,
+            self.action_help_shortcuts,
+            self.action_updates,
+            self.action_about,
+        ])
         self.setMenuBar(menu_bar)
-        menu_bar.setVisible(False)
+        menu_bar.setVisible(True)
         main_layout.addWidget(command_palette_row)
 
 
