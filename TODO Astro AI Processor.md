@@ -31,7 +31,7 @@ Priorytety: **P0** = błędy i atrapy (robić najpierw), **P1** = duży wpływ n
 ### Pasek ikon
 - [x] Unikalne ikony dla każdej funkcji (teraz powtarzają się mosaic, blur, levels, shrink).
 - [ ] Ograniczyć do 8–10 ulubionych i przycisk "więcej".
-- [ ] Przycisk "Przywróć domyślną kolejność" oraz podpowiedź o przeciąganiu.
+- [x] Przycisk "Przywróć domyślną kolejność" oraz podpowiedź o przeciąganiu.
 - [ ] Obsługa przepełnienia przy wąskim oknie.
 
 ### Feedback
