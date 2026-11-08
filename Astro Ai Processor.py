@@ -1009,7 +1009,7 @@ class BlurDialog(QDialog):
         layout = QVBoxLayout(self)
         apply_standard_layout_margins(layout)
 
-        self.lbl_sigma = QLabel("Sigma (SiĹ‚a): 1.0")
+        self.lbl_sigma = QLabel("Sigma (Siła): 1.0")
         self.sld_sigma = QSlider(Qt.Horizontal)
         self.sld_sigma.setRange(1, 100)
         self.spin_sigma = QDoubleSpinBox()
@@ -1031,7 +1031,7 @@ class BlurDialog(QDialog):
 
         self.sld_sigma.valueChanged.connect(lambda v: self.spin_sigma.setValue(v / 10.0))
         self.spin_sigma.valueChanged.connect(lambda v: self.sld_sigma.setValue(int(round(v * 10))))
-        self.sld_sigma.valueChanged.connect(lambda v: self.lbl_sigma.setText(f"Sigma (SiĹ‚a): {v/10:.1f}"))
+        self.sld_sigma.valueChanged.connect(lambda v: self.lbl_sigma.setText(f"Sigma (Siła): {v/10:.1f}"))
         self.sld_sigma.valueChanged.connect(self._on_value_changed)
         self.spin_sigma.valueChanged.connect(self._on_value_changed)
 
@@ -1227,7 +1227,7 @@ class StarShrinkDialog(QDialog):
         layout = QVBoxLayout(self)
         apply_standard_layout_margins(layout)
 
-        self.lbl_amount = QLabel("Amount (SiĹ‚a): 0.60")
+        self.lbl_amount = QLabel("Amount (Siła): 0.60")
         self.sld_amount = QSlider(Qt.Horizontal)
         self.sld_amount.setRange(0, 100)
         self.spin_amount = QDoubleSpinBox()
@@ -1292,7 +1292,7 @@ class StarShrinkDialog(QDialog):
         self.btn_cancel.clicked.connect(self.reject)
 
     def _update_labels(self):
-        self.lbl_amount.setText(f"Amount (SiĹ‚a): {self.sld_amount.value()/100:.2f}")
+        self.lbl_amount.setText(f"Amount (Siła): {self.sld_amount.value()/100:.2f}")
         self.lbl_selection.setText(f"Selection (Maskowanie): {self.sld_selection.value()/100:.2f}")
 
     def _on_slider_changed(self):
@@ -1316,10 +1316,10 @@ class StarShrinkDialog(QDialog):
         self.spin_amount.blockSignals(True)
         self.sld_selection.blockSignals(True)
         self.spin_selection.blockSignals(True)
-        self.sld_amount.setValue(0)
-        self.spin_amount.setValue(0.0)
-        self.sld_selection.setValue(0)
-        self.spin_selection.setValue(0.0)
+        self.sld_amount.setValue(60)
+        self.spin_amount.setValue(0.60)
+        self.sld_selection.setValue(50)
+        self.spin_selection.setValue(0.50)
         self.sld_amount.blockSignals(False)
         self.spin_amount.blockSignals(False)
         self.sld_selection.blockSignals(False)
@@ -2086,7 +2086,7 @@ class CropPreviewWidget(QWidget):
         self._resize_handle = None
         self._resize_anchor = (0, 0)
         self._handle_radius = 6
-        self._grid_mode = "Brak"
+        self._grid_mode = "none"
         self._aspect_ratio = None
         self._show_handles = True
 
@@ -2105,7 +2105,7 @@ class CropPreviewWidget(QWidget):
         self._aspect_ratio = ratio
 
     def set_grid_mode(self, mode: str):
-        self._grid_mode = mode or "Brak"
+        self._grid_mode = mode or "none"
         self.update()
 
     def set_show_handles(self, visible: bool):
@@ -2370,23 +2370,23 @@ class CropPreviewWidget(QWidget):
         pen = QPen(QColor(255, 255, 255, 155), 1, Qt.DashLine)
         painter.setPen(pen)
         mode = self._grid_mode
-        if mode == "TrĂłjpodziaĹ‚":
+        if mode == "thirds":
             for i in (1, 2):
                 x = rect.left() + rect.width() * (i / 3.0)
                 y = rect.top() + rect.height() * (i / 3.0)
                 painter.drawLine(int(x), int(rect.top()), int(x), int(rect.bottom()))
                 painter.drawLine(int(rect.left()), int(y), int(rect.right()), int(y))
-        elif mode == "ZĹ‚oty podziaĹ‚":
+        elif mode == "golden":
             phi = 0.61803398875
             for r in (phi, 1.0 - phi):
                 x = rect.left() + rect.width() * r
                 y = rect.top() + rect.height() * r
                 painter.drawLine(int(x), int(rect.top()), int(x), int(rect.bottom()))
                 painter.drawLine(int(rect.left()), int(y), int(rect.right()), int(y))
-        elif mode == "KrzyĹĽ":
+        elif mode == "cross":
             painter.drawLine(int(rect.center().x()), int(rect.top()), int(rect.center().x()), int(rect.bottom()))
             painter.drawLine(int(rect.left()), int(rect.center().y()), int(rect.right()), int(rect.center().y()))
-        elif mode == "Diagonale":
+        elif mode == "diagonals":
             painter.drawLine(int(rect.left()), int(rect.top()), int(rect.right()), int(rect.bottom()))
             painter.drawLine(int(rect.right()), int(rect.top()), int(rect.left()), int(rect.bottom()))
 
@@ -2462,7 +2462,7 @@ class CropPreviewWidget(QWidget):
 
 class CropDialog(QDialog):
     previewRectChanged = pyqtSignal(int, int, int, int)
-    gridChanged = pyqtSignal(int)
+    gridChanged = pyqtSignal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -2476,13 +2476,11 @@ class CropDialog(QDialog):
         options_row = QHBoxLayout()
         options_row.addWidget(QLabel("Grid:"))
         self.combo_grid = QComboBox()
-        self.combo_grid.addItems([
-            "Brak",
-            "TrĂłjpodziaĹ‚",
-            "ZĹ‚oty podziaĹ‚",
-            "KrzyĹĽ",
-            "Diagonale",
-        ])
+        self.combo_grid.addItem("Brak", "none")
+        self.combo_grid.addItem("Trójpodział", "thirds")
+        self.combo_grid.addItem("Złoty podział", "golden")
+        self.combo_grid.addItem("Krzyż", "cross")
+        self.combo_grid.addItem("Diagonale", "diagonals")
         options_row.addWidget(self.combo_grid)
         options_row.addSpacing(12)
         options_row.addWidget(QLabel("Proporcje:"))
@@ -2527,7 +2525,7 @@ class CropDialog(QDialog):
         self.spin_y.valueChanged.connect(self._on_spins_changed)
         self.spin_w.valueChanged.connect(self._on_spins_changed)
         self.spin_h.valueChanged.connect(self._on_spins_changed)
-        self.combo_grid.currentIndexChanged.connect(self.gridChanged.emit)
+        self.combo_grid.currentIndexChanged.connect(self._emit_grid_changed)
         self.combo_ratio.currentTextChanged.connect(self._on_ratio_changed)
 
         buttons = QHBoxLayout()
@@ -2545,6 +2543,9 @@ class CropDialog(QDialog):
         self._img_w = 1
         self._img_h = 1
         self._aspect_ratio = None
+
+    def _emit_grid_changed(self, index: int):
+        self.gridChanged.emit(str(self.combo_grid.itemData(index) or "none"))
 
     def set_image(self, img: np.ndarray):
         if img is None:
@@ -4445,7 +4446,7 @@ class Fly3DDialog(QDialog):
         stage1_layout.setContentsMargins(10, 10, 10, 10)
         stage1_layout.setSpacing(8)
         info_select = QLabel(
-            "LPM: malowanie stref. PPM: gumka. Kolo myszy: zoom podgladu. Pedzel bierze pod uwage jasnosc, kontrast i barwe."
+            "LPM: malowanie stref. PPM: gumka. Koło myszy: zoom podglądu. Pędzel bierze pod uwagę jasność, kontrast i barwę."
         )
         info_select.setWordWrap(True)
         stage1_layout.addWidget(info_select)
@@ -4464,7 +4465,7 @@ class Fly3DDialog(QDialog):
         self.btn_zone_zoom_out = QPushButton("Pomniejsz -")
         self.btn_zone_zoom_out.clicked.connect(self._on_zone_zoom_out)
         zoom_row.addWidget(self.btn_zone_zoom_out)
-        self.btn_zone_zoom_in = QPushButton("Powieksz +")
+        self.btn_zone_zoom_in = QPushButton("Powiększ +")
         self.btn_zone_zoom_in.clicked.connect(self._on_zone_zoom_in)
         zoom_row.addWidget(self.btn_zone_zoom_in)
         self.btn_zone_fit = QPushButton("Dopasuj do okna")
@@ -4499,14 +4500,14 @@ class Fly3DDialog(QDialog):
         self.spin_brush.setValue(24)
         self.spin_brush.valueChanged.connect(self._sync_brush)
         brush_row.addWidget(self.spin_brush)
-        brush_row.addWidget(QLabel("Czulosc:"))
+        brush_row.addWidget(QLabel("Czułość:"))
         self.spin_tolerance = QDoubleSpinBox()
         self.spin_tolerance.setRange(0.02, 0.95)
         self.spin_tolerance.setSingleStep(0.01)
         self.spin_tolerance.setValue(0.32)
         self.spin_tolerance.valueChanged.connect(self._sync_brush)
         brush_row.addWidget(self.spin_tolerance)
-        brush_row.addWidget(QLabel("Agresywnosc:"))
+        brush_row.addWidget(QLabel("Agresywność:"))
         self.spin_aggressiveness = QDoubleSpinBox()
         self.spin_aggressiveness.setRange(0.0, 1.0)
         self.spin_aggressiveness.setSingleStep(0.05)
@@ -4601,7 +4602,7 @@ class Fly3DDialog(QDialog):
         stage2_layout.addLayout(clip_nav_row)
 
         brush_row = QHBoxLayout()
-        self.chk_edge_blur_brush = QCheckBox("Pedzel korekty bluru")
+        self.chk_edge_blur_brush = QCheckBox("Pędzel korekty bluru")
         self.chk_edge_blur_brush.toggled.connect(self._on_edge_blur_brush_toggled)
         brush_row.addWidget(self.chk_edge_blur_brush)
         brush_row.addWidget(QLabel("Rozmiar:"))
@@ -4612,7 +4613,7 @@ class Fly3DDialog(QDialog):
         brush_row.addWidget(QLabel("Tryb:"))
         self.combo_edge_blur_brush_mode = QComboBox()
         self.combo_edge_blur_brush_mode.addItem("Dodaj blur", "add")
-        self.combo_edge_blur_brush_mode.addItem("Pedzel usredniajacy", "average")
+        self.combo_edge_blur_brush_mode.addItem("Pędzel uśredniający", "average")
         self.combo_edge_blur_brush_mode.setToolTip("Tryb uśredniający wygładza lokalną siłę maski bluru.")
         brush_row.addWidget(self.combo_edge_blur_brush_mode)
         self.btn_edge_blur_brush_clear = QPushButton("Wyczysc pedzel")
@@ -7363,19 +7364,10 @@ class AIAssistantPanel(QFrame):
         self.btn_send.setProperty("accent", True)
         self.btn_run_python = QPushButton("Uruchom Python")
 
-        self.token_usage_bar = CircularProgressBar()
-        self.token_usage_bar.setRange(0, 100)
-        self.token_usage_bar.setValue(0)
-        self.token_usage_bar.setTextVisible(True)
-        self.token_usage_bar.setFixedSize(40, 40)
-        self.token_usage_bar.setFormat("%p%")
-        self.token_usage_bar.setToolTip("Brak danych o limitach tokenów.")
-
         button_layout.addWidget(self.btn_voice)
         button_layout.addWidget(self.btn_analyze)
         button_layout.addWidget(self.btn_send)
         button_layout.addWidget(self.btn_run_python)
-        button_layout.addWidget(self.token_usage_bar)
         composer_layout.addLayout(button_layout)
 
         self.status_label = QLabel("", self.chat_page)
@@ -7440,13 +7432,6 @@ class AIAssistantPanel(QFrame):
 
     def _refresh_model_label(self):
         self.lbl_local_model.setText("Nemotron 3 Super (OpenRouter)")
-        api_key = str(getattr(self.app, "openrouter_api_key", "") or os.environ.get("OPENROUTER_API_KEY", "")).strip()
-        self.token_usage_bar.setValue(0)
-        self.token_usage_bar.setToolTip(
-            f"OpenRouter\nModel: {OPENROUTER_DEFAULT_MODEL}\n"
-            + ("Klucz API skonfigurowany" if api_key else "Dodaj klucz w Preferencje → AI Chat")
-        )
-
     def _chat_history_file(self, chat_id: str) -> str:
         return os.path.join(self.chat_history_dir, f"{chat_id}.json")
 
@@ -8781,7 +8766,7 @@ class AIAssistantPanel(QFrame):
         if "plate solve" in text or "solve" in text:
             if plate_result:
                 return "Dane plate solve sÄ… dostÄ™pne. Zapytaj o obiekt, wspĂłĹ‚rzÄ™dne lub dalsze kroki."
-            return "Brak wyniku plate solve. UĹĽyj narzÄ™dzia Plate Solving i sprĂłbuj ponownie."
+            return "Brak wyniku plate solve. Użyj narzędzia Plate Solving i spróbuj ponownie."
 
         if any(keyword in text for keyword in ["next", "recommend", "suggest", "advice"]):
             return self.build_recommendation(payload)
@@ -11321,7 +11306,7 @@ class PreferencesDialog(QDialog):
         processor_layout.setHorizontalSpacing(10)
         processor_layout.setVerticalSpacing(10)
 
-        processor_layout.addWidget(QLabel("Liczba uĹĽywanych rdzeni:"), 0, 0)
+        processor_layout.addWidget(QLabel("Liczba używanych rdzeni:"), 0, 0)
         self.spin_cpu_cores = QSpinBox()
         self.spin_cpu_cores.setRange(1, max(1, os.cpu_count() or 1))
         self.spin_cpu_cores.setValue(int(getattr(self.app, "processor_cores", max(1, os.cpu_count() or 1))))
@@ -11339,7 +11324,7 @@ class PreferencesDialog(QDialog):
         processor_layout.addWidget(self.combo_onnx_provider, 1, 1)
 
         processor_layout.addWidget(QLabel("Uwagi:"), 2, 0)
-        self.processor_info = QLabel("WybĂłr wpĹ‚ywa na sesje ONNX i obciÄ…ĹĽenie CPU podczas filtrĂłw AI.")
+        self.processor_info = QLabel("Wybór wpływa na sesje ONNX i obciążenie CPU podczas filtrów AI.")
         self.processor_info.setWordWrap(True)
         processor_layout.addWidget(self.processor_info, 2, 1)
         tabs.addTab(processor_tab, "Processor")
@@ -15757,7 +15742,7 @@ class HistogramWindow(QDialog):
         self.zoom_slider = ZoomRangeSlider()
         layout.addWidget(self.zoom_slider)
 
-        self.check_sync_zoom = QCheckBox("sunchronizuj zoom")
+        self.check_sync_zoom = QCheckBox("synchronizuj zoom")
         self.check_sync_zoom.setChecked(True)
         layout.addWidget(self.check_sync_zoom)
 
@@ -16189,20 +16174,6 @@ class PhotoshopMenuPanel(QFrame):
         layout.setContentsMargins(4, 8, 4, 4)
         layout.setSpacing(6)
 
-        controls = QGridLayout()
-        controls.setHorizontalSpacing(6)
-        controls.addWidget(QLabel("Blend"), 0, 0)
-        self.blend_combo = QComboBox()
-        self.blend_combo.addItems(["Normal", "Screen", "Multiply", "Overlay", "Soft Light"])
-        controls.addWidget(self.blend_combo, 0, 1)
-        controls.addWidget(QLabel("Opacity"), 1, 0)
-        self.opacity_spin = QSpinBox()
-        self.opacity_spin.setRange(0, 100)
-        self.opacity_spin.setValue(100)
-        self.opacity_spin.setSuffix("%")
-        controls.addWidget(self.opacity_spin, 1, 1)
-        layout.addLayout(controls)
-
         self.layers_layout = layout
         for key, title in self.LAYER_DEFS:
             self._ensure_layer_row(key, title)
@@ -16403,7 +16374,7 @@ class PhotoshopMenuPanel(QFrame):
     def _show_layer_context_menu(self, key, source_widget, pos):
         self._select_layer(key)
         menu = QMenu(self)
-        delete_action = menu.addAction("UsuĹ„")
+        delete_action = menu.addAction("Usuń")
         can_delete = True
         if self.host is not None and hasattr(self.host, "can_delete_layer"):
             can_delete = self.host.can_delete_layer(key)
@@ -18056,13 +18027,13 @@ class StarCorrectionDialog(QDialog):
         self.spin_shape.valueChanged.connect(self.sld_shape.setValue)
         self.sld_shape.valueChanged.connect(self._on_shape_changed)
 
-        self.lbl_halo = QLabel("Halo reduction: 0")
+        self.lbl_halo = QLabel("Halo reduction: 35")
         self.sld_halo = QSlider(Qt.Horizontal)
         self.sld_halo.setRange(0, 100)
-        self.sld_halo.setValue(0)
+        self.sld_halo.setValue(35)
         self.spin_halo = QSpinBox()
         self.spin_halo.setRange(0, 100)
-        self.spin_halo.setValue(0)
+        self.spin_halo.setValue(35)
         self.sld_halo.valueChanged.connect(self.spin_halo.setValue)
         self.spin_halo.valueChanged.connect(self.sld_halo.setValue)
         self.sld_halo.valueChanged.connect(self._on_halo_changed)
@@ -18091,7 +18062,7 @@ class StarCorrectionDialog(QDialog):
         buttons.addWidget(self.btn_close)
         layout.addLayout(buttons)
 
-    def set_values(self, aberration: float, shape: float, halo_reduction: float = 0.0, notify: bool = False):
+    def set_values(self, aberration: float, shape: float, halo_reduction: float = 0.35, notify: bool = False):
         a = int(round(float(np.clip(aberration, 0.0, 1.0)) * 100.0))
         s = int(round(float(np.clip(shape, 0.0, 1.0)) * 100.0))
         h = int(round(float(np.clip(halo_reduction, 0.0, 1.0)) * 100.0))
@@ -18140,7 +18111,7 @@ class StarCorrectionDialog(QDialog):
             self._on_apply_callback()
 
     def _reset(self):
-        self.set_values(0.0, 0.0, 0.0, notify=False)
+        self.set_values(0.0, 0.0, 0.35, notify=False)
         if callable(self._on_reset_callback):
             self._on_reset_callback()
 
@@ -18260,7 +18231,7 @@ class ColorCalibrationDialog(QDialog):
             self.bn_callback(self.get_roi())
 
 
-# ---------- GĹ‚Ăłwna aplikacja ----------
+# ---------- Główna aplikacja ----------
 
 class DraggableTopActionButton(QPushButton):
     MIME_TYPE = "application/x-astro-top-action-button"
@@ -19373,30 +19344,11 @@ class AstroApp(QMainWindow):
         self._stop_deepsnr_progress_dialog()
         self.progress_dialog = MagicProgressDialog(self)
         self.progress_dialog.setWindowTitle("Denoising")
-        self.progress_dialog.update_progress("deepSNR: denoising...", 5, 0)
+        self.progress_dialog.set_current_indeterminate(True, "deepSNR: denoising...")
+        self.progress_dialog.progress_overall.setRange(0, 0)
         self.progress_dialog.show()
 
-        self._deepsnr_progress_value = 5
-        self.deepsnr_progress_timer = QTimer(self)
-        self.deepsnr_progress_timer.setInterval(120)
-        self.deepsnr_progress_timer.timeout.connect(self._pulse_deepsnr_progress_dialog)
-        self.deepsnr_progress_timer.start()
-
-    def _pulse_deepsnr_progress_dialog(self):
-        dialog = getattr(self, "progress_dialog", None)
-        if dialog is None:
-            return
-        value = int(getattr(self, "_deepsnr_progress_value", 5))
-        value = min(95, value + 1)
-        self._deepsnr_progress_value = value
-        dialog.update_progress("deepSNR: denoising...", value, value)
-
     def _stop_deepsnr_progress_dialog(self):
-        timer = getattr(self, "deepsnr_progress_timer", None)
-        if timer is not None:
-            timer.stop()
-            timer.deleteLater()
-            self.deepsnr_progress_timer = None
         if hasattr(self, "progress_dialog") and self.progress_dialog is not None:
             self.progress_dialog.close()
             self.progress_dialog = None
@@ -19634,7 +19586,7 @@ class AstroApp(QMainWindow):
         self._restoring_thumbnail = False
         self._crop_overlay_active = False
         self._crop_overlay_rect = (0, 0, 1, 1)
-        self._crop_overlay_grid_index = 0
+        self._crop_overlay_grid = "none"
         self._crop_pick_active = False
         self._crop_pick_anchor = None
         self._crop_pick_operation = None
@@ -19649,14 +19601,14 @@ class AstroApp(QMainWindow):
         self._bn_pick_last_point = None
         self.corrections_timer = QTimer()  # Timer dla finalizacji Camera Raw/HSL
         self.corrections_timer.setSingleShot(True)
-        self.corrections_timer.setInterval(1000)  # 1 sekunda opĂłĹşnienia
+        self.corrections_timer.setInterval(1000)  # 1 sekunda opóźnienia
         self.corrections_timer.timeout.connect(self._finalize_camera_raw_hsl)
         self.last_corrections_snapshot = None  # Snapshot poprzednich wartoĹ›ci
         self.last_color_calibration_method = None
         self.background_calibration_rgb = {"r": 0.0, "g": 0.0, "b": 0.0}
         self.star_aberration_strength = 0.0
         self.star_shape_strength = 0.0
-        self.star_halo_reduction_strength = 0.0
+        self.star_halo_reduction_strength = 0.35
 
         # ---------- modele ----------
         self.denoise_model_path = None
@@ -21510,8 +21462,8 @@ class AstroApp(QMainWindow):
             self.undo_stack.append(source_img)
             self.redo_stack.clear()
             
-            # NaĹ‚ĂłĹĽ filtr
-            # (0, 0) oznacza, ĹĽe ksize zostanie wyliczony z sigmy automatycznie
+            # Nałóż filtr.
+            # (0, 0) oznacza, że ksize zostanie wyliczony z sigmy automatycznie.
             blurred = cv2.GaussianBlur(source_img, (0, 0), sigma)
             blur_mask = self.layer_masks.get("blur")
             self.magic_img = self._apply_mask_blend(source_img, blurred, blur_mask) if blur_mask is not None else blurred
@@ -21523,7 +21475,7 @@ class AstroApp(QMainWindow):
             pix_before = np_to_qpixmap(self.magic_img)
             self.viewer.set_before(pix_before)
             self.apply_full_processing()
-            self.add_thumbnail(f"Gaussian Blur Ď={sigma:.1f}", self.processed_img)
+            self.add_thumbnail(f"Gaussian Blur σ={sigma:.1f}", self.processed_img)
             self.update_menu_actions()
             self.log(f"Gaussian Blur applied. Sigma: {sigma:.1f}")
             dialog.reset_defaults(emit_preview=False)
@@ -21795,7 +21747,7 @@ class AstroApp(QMainWindow):
         self._crop_pick_start_rect = None
         self._crop_pick_last_point = None
         self._set_crop_overlay_state(0, 0, w, h)
-        self._set_crop_overlay_grid(dialog.combo_grid.currentIndex())
+        self._set_crop_overlay_grid(dialog.combo_grid.currentData())
         self._sync_roi_pick_mode()
         self._begin_dialog_compare(dialog)
         dialog.show()
@@ -22363,7 +22315,7 @@ class AstroApp(QMainWindow):
     def reset_star_correction(self):
         self.star_aberration_strength = 0.0
         self.star_shape_strength = 0.0
-        self.star_halo_reduction_strength = 0.0
+        self.star_halo_reduction_strength = 0.35
         dialog = getattr(self, "star_correction_dialog", None)
         if dialog is not None:
             dialog.set_values(0.0, 0.0, 0.0, notify=False)
@@ -23692,6 +23644,9 @@ class AstroApp(QMainWindow):
 
     def _set_dashboard_tab(self, index: int):
         self.dashboard_stack.setCurrentIndex(index)
+        self.dashboard_search.setVisible(index in (0, 1))
+        if index not in (0, 1):
+            self.dashboard_search.clear()
         if index == 3:
             self.dashboard_page.setStyleSheet(
                 "QWidget#imageDashboard { background: #000000; }"
@@ -24484,7 +24439,7 @@ class AstroApp(QMainWindow):
         self.action_new_layer = QAction("New Layer", self)
         self.action_new_layer.triggered.connect(self.create_new_layer)
 
-        self.action_delete_layer = QAction("UsuĹ„ zaznaczonÄ… warstwÄ™", self)
+        self.action_delete_layer = QAction("Usuń zaznaczoną warstwę", self)
         self.action_delete_layer.triggered.connect(self.delete_selected_layer)
 
         self.action_adjustment_levels = QAction("Levels", self)
@@ -25114,8 +25069,8 @@ class AstroApp(QMainWindow):
         self.btn_zoom_out_bottom.setToolTip("Pomniejsz podglad")
         self.btn_zoom_out_bottom.clicked.connect(self.viewer.view.zoom_out)
         bottom_layout.addWidget(self.btn_zoom_out_bottom)
-        self.btn_zoom_in_bottom = QPushButton("Powieksz +")
-        self.btn_zoom_in_bottom.setToolTip("Powieksz podglad")
+        self.btn_zoom_in_bottom = QPushButton("Powiększ +")
+        self.btn_zoom_in_bottom.setToolTip("Powiększ podgląd")
         self.btn_zoom_in_bottom.clicked.connect(self.viewer.view.zoom_in)
         bottom_layout.addWidget(self.btn_zoom_in_bottom)
         self.btn_zoom_fit_bottom = QPushButton("Dopasuj do okna")
@@ -25171,7 +25126,7 @@ class AstroApp(QMainWindow):
                  color_bgr = self.original_img[y, x]
                  b, g, r = color_bgr[0], color_bgr[1], color_bgr[2]
                  self.log(f"Photoshop Picker: R={r}, G={g}, B={b}")
-                 # Tutaj program w przyszĹ‚oĹ›ci moĹĽe postawiÄ‡ punkt na wykresie Curves (Krzywe)
+                 # Tutaj program w przyszłości może postawić punkt na wykresie Curves (Krzywe).
              except IndexError:
                  pass
              return
@@ -26343,7 +26298,7 @@ class AstroApp(QMainWindow):
             else:
                 loaded_raw = safe_imread(path)
                 if loaded_raw is None or getattr(loaded_raw, "size", 0) == 0:
-                    raise ValueError("Nie udaĹ‚o siÄ™ zdekodowaÄ‡ obrazu. Plik moĹĽe byÄ‡ uszkodzony.")
+                    raise ValueError("Nie udało się zdekodować obrazu. Plik może być uszkodzony.")
                 if loaded_raw.ndim == 2:
                     loaded_img = normalize_to_linear_bgr(loaded_raw)
                 elif loaded_raw.ndim == 3:
@@ -27321,9 +27276,9 @@ class AstroApp(QMainWindow):
 
         details = [
             f"Source: {'FITS header' if result.get('source') == 'fits_header' else 'Skyshot Solver'}",
-            f"RA: {ra:.5f}Â°" if ra is not None else "RA: unknown",
-            f"Dec: {dec:.5f}Â°" if dec is not None else "Dec: unknown",
-            f"Rotation: {rotation:.2f}Â°" if rotation is not None else "Rotation: unknown",
+            f"RA: {ra:.5f}°" if ra is not None else "RA: unknown",
+            f"Dec: {dec:.5f}°" if dec is not None else "Dec: unknown",
+            f"Rotation: {rotation:.2f}°" if rotation is not None else "Rotation: unknown",
             f"Scale: {scale:.3f} arcsec/pixel" if scale is not None else "Scale: unknown",
         ]
 
@@ -28004,13 +27959,13 @@ class AstroApp(QMainWindow):
         rotation = result.get("rotation")
         scale = result.get("scale")
         if ra is not None:
-            info.append(f"RA: {ra:.5f}Â°")
+            info.append(f"RA: {ra:.5f}°")
         if dec is not None:
-            info.append(f"Dec: {dec:.5f}Â°")
+            info.append(f"Dec: {dec:.5f}°")
         if rotation is not None:
-            info.append(f"Rot: {rotation:.2f}Â°")
+            info.append(f"Rot: {rotation:.2f}°")
         if scale is not None:
-            info.append(f"Scale: {scale:.3f}â€ł/px")
+            info.append(f"Scale: {scale:.3f}″/px")
         font = QFont()
         font.setPointSize(max(8, min(36, int(12 * label_scale))))
         painter.setFont(font)
@@ -28230,8 +28185,8 @@ class AstroApp(QMainWindow):
         if self._crop_overlay_active:
             self.update_viewer_overlay()
 
-    def _set_crop_overlay_grid(self, grid_index: int):
-        self._crop_overlay_grid_index = int(grid_index)
+    def _set_crop_overlay_grid(self, grid_mode: str):
+        self._crop_overlay_grid = str(grid_mode or "none")
         if self._crop_overlay_active:
             self.update_viewer_overlay()
 
@@ -28282,21 +28237,21 @@ class AstroApp(QMainWindow):
         return overlay
 
     def _draw_crop_grid_overlay(self, painter: QPainter, rect: QRectF):
-        grid_index = int(getattr(self, "_crop_overlay_grid_index", 0))
-        if grid_index <= 0:
+        grid_mode = str(getattr(self, "_crop_overlay_grid", "none"))
+        if grid_mode == "none":
             return
 
         painter.save()
         painter.setPen(QPen(QColor(255, 255, 255, 150), 1, Qt.DashLine))
 
-        if grid_index == 1:
+        if grid_mode == "thirds":
             thirds_x = [rect.left() + rect.width() / 3.0, rect.left() + 2.0 * rect.width() / 3.0]
             thirds_y = [rect.top() + rect.height() / 3.0, rect.top() + 2.0 * rect.height() / 3.0]
             for x_val in thirds_x:
                 painter.drawLine(QPointF(x_val, rect.top()), QPointF(x_val, rect.bottom()))
             for y_val in thirds_y:
                 painter.drawLine(QPointF(rect.left(), y_val), QPointF(rect.right(), y_val))
-        elif grid_index == 2:
+        elif grid_mode == "golden":
             phi = 0.61803398875
             gx = [rect.left() + rect.width() * (1.0 - phi), rect.left() + rect.width() * phi]
             gy = [rect.top() + rect.height() * (1.0 - phi), rect.top() + rect.height() * phi]
@@ -28304,6 +28259,12 @@ class AstroApp(QMainWindow):
                 painter.drawLine(QPointF(x_val, rect.top()), QPointF(x_val, rect.bottom()))
             for y_val in gy:
                 painter.drawLine(QPointF(rect.left(), y_val), QPointF(rect.right(), y_val))
+        elif grid_mode == "cross":
+            painter.drawLine(QPointF(rect.center().x(), rect.top()), QPointF(rect.center().x(), rect.bottom()))
+            painter.drawLine(QPointF(rect.left(), rect.center().y()), QPointF(rect.right(), rect.center().y()))
+        elif grid_mode == "diagonals":
+            painter.drawLine(rect.topLeft(), rect.bottomRight())
+            painter.drawLine(rect.topRight(), rect.bottomLeft())
 
         painter.restore()
 
@@ -28784,6 +28745,7 @@ class AstroApp(QMainWindow):
         item = self.processing_history[index]
         if isinstance(item, dict):
             self.current_history_node_id = item.get("id")
+        self._update_thumbnails_view()
 
         menu = QMenu(self)
         rename_action = menu.addAction("Rename")
@@ -28934,6 +28896,7 @@ class AstroApp(QMainWindow):
                 history_item,
                 selected=(idx == self.selected_thumbnail_index),
             )
+            thumb_widget.thumbnail_clicked.connect(self._on_thumbnail_clicked)
             thumb_widget.thumbnail_action_requested.connect(self._on_thumbnail_action_requested)
             if node_id is not None:
                 widgets_by_id[node_id] = thumb_widget
@@ -29065,6 +29028,10 @@ class ClickableThumbnailWidget(QWidget):
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
+            self.thumbnail_clicked.emit(self.index)
+            event.accept()
+            return
+        if event.button() == Qt.RightButton:
             self.thumbnail_action_requested.emit(self.index, self.mapToGlobal(event.pos()))
             event.accept()
             return
