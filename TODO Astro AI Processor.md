@@ -20,13 +20,13 @@ Priorytety: **P0** = błędy i atrapy (robić najpierw), **P1** = duży wpływ n
 ## P1: Duży wpływ na użytkownika
 
 ### Nawigacja i menu
-- [ ] Przebudować menubar: Plik / Edycja / Warstwy / Obraz / Filtry / AI / Astro / Widok / Narzędzia / Pomoc.
-- [ ] Tłumaczenie tytułów menu w `_update_ui_language` (`setTitle`) i mnemoniki (`&Plik`).
-- [ ] Skróty: Ctrl+O, Ctrl+S, Ctrl+Shift+S, Ctrl+V (wklej do warstwy), Ctrl+Q.
-- [ ] Rozróżnić "Levels/Curves" (okno) od "Warstwa korekcyjna ▸ Levels/Curves".
-- [ ] Dodać menu Pomoc: instrukcja 3D FLY, skróty, aktualizacje, o programie.
-- [ ] Menubar widoczny także na dashboardzie (bez skoku układu).
-- [ ] Dodać powrót z edytora do dashboardu.
+- [x] Przebudować menubar: Plik / Edycja / Warstwy / Obraz / Filtry / AI / Astro / Widok / Narzędzia / Pomoc.
+- [x] Tłumaczenie tytułów menu w `_update_ui_language` (`setTitle`) i mnemoniki (`&Plik`).
+- [x] Skróty: Ctrl+O, Ctrl+S, Ctrl+Shift+S, Ctrl+V (wklej do warstwy), Ctrl+Q.
+- [x] Rozróżnić "Levels/Curves" (okno) od "Warstwa korekcyjna ▸ Levels/Curves".
+- [x] Dodać menu Pomoc: instrukcja 3D FLY, skróty, aktualizacje, o programie.
+- [x] Menubar widoczny także na dashboardzie (bez skoku układu).
+- [x] Dodać powrót z edytora do dashboardu.
 
 ### Pasek ikon
 - [ ] Unikalne ikony dla każdej funkcji (teraz powtarzają się mosaic, blur, levels, shrink).
