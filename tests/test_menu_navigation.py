@@ -20,10 +20,22 @@ window = module.AstroApp()
 window.show()
 app.processEvents()
 assert window.menuBar().isVisible()
+assert window.action_reset_topbar.text() == "Restore Default Toolbar Order"
+assert window.tr("top_drag_hint", "Drag to reorder") in window.btn_open.toolTip(), (
+    window.btn_open.toolTip(),
+    window.tr("top_drag_hint", "Drag to reorder"),
+)
 assert list(window.top_menus) == [
     "file", "edit", "layers", "image", "filters", "ai", "astro", "view", "tools", "help"
 ]
 assert len(window._top_button_icon_files.values()) == len(set(window._top_button_icon_files.values()))
+default_toolbar_order = list(window.default_topbar_button_order)
+window.topbar_button_order = list(reversed(default_toolbar_order))
+window._apply_saved_topbar_button_order()
+assert window._current_topbar_button_order() == list(reversed(default_toolbar_order))
+window._save_topbar_button_order = lambda: None
+window.action_reset_topbar.trigger()
+assert window._current_topbar_button_order() == default_toolbar_order
 for action, shortcut in (
     (window.action_open, "Ctrl+O"),
     (window.action_save, "Ctrl+S"),
@@ -38,6 +50,8 @@ window._update_ui_language()
 assert window.top_menus["file"].title() == "&Plik"
 assert window.top_menus["layers"].title() == "&Warstwy"
 assert window.top_menus["help"].title() == "Pomo&c"
+assert window.action_reset_topbar.text() == "Przywróć domyślną kolejność paska"
+assert "Przeciągnij, aby zmienić kolejność" in window.btn_open.toolTip()
 assert window.action_adjustment_levels.text() == "Warstwa korekcyjna: Poziomy"
 assert window.action_levels.text() == "Poziomy"
 window.language = "en"

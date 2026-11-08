@@ -244,6 +244,8 @@ I18N = {
     "action_adjustment_levels": {"pl": "Warstwa korekcyjna: Poziomy", "en": "Levels Adjustment Layer"},
     "action_adjustment_curves": {"pl": "Warstwa korekcyjna: Krzywe", "en": "Curves Adjustment Layer"},
     "action_dashboard": {"pl": "Powrót do dashboardu", "en": "Back to Dashboard"},
+    "action_reset_topbar": {"pl": "Przywróć domyślną kolejność paska", "en": "Restore Default Toolbar Order"},
+    "top_drag_hint": {"pl": "Przeciągnij, aby zmienić kolejność", "en": "Drag to reorder"},
     "action_ghs": {"pl": "GHS Stretch", "en": "GHS Stretch"},
     "action_magic": {"pl": "Inteligentne odszumianie i ostrzenie", "en": "Magic Filter"},
     "action_shrink": {"pl": "Zmniejsz gwiazdy", "en": "Star Shrink"},
@@ -21969,6 +21971,7 @@ class AstroApp(QMainWindow):
             ("action_new_workspace", "action_new_workspace", "New Workspace..."),
             ("action_set_home_folder", "action_home", "Home Folder"),
             ("action_dashboard", "action_dashboard", "Back to Dashboard"),
+            ("action_reset_topbar", "action_reset_topbar", "Restore Default Toolbar Order"),
             ("action_preferences", "action_preferences", "Preferences"),
             ("action_histogram", "action_histogram", "Histogram"),
             ("action_console", "action_console", "Console"),
@@ -22083,7 +22086,8 @@ class AstroApp(QMainWindow):
             if button is not None:
                 translated = self.tr(key, default)
                 button.setText("")
-                button.setToolTip(translated)
+                drag_hint = self.tr("top_drag_hint", "Drag to reorder")
+                button.setToolTip(f"{translated} — {drag_hint}")
                 button.setStatusTip(translated)
                 button.setAccessibleName(translated)
 
@@ -23160,6 +23164,13 @@ class AstroApp(QMainWindow):
             home_folder=getattr(self, "home_folder", ""),
             topbar_button_order=order,
         )
+
+    def _restore_default_topbar_button_order(self):
+        self.topbar_button_order = list(self.default_topbar_button_order)
+        self._apply_saved_topbar_button_order()
+        self._ensure_topbar_single_trailing_stretch()
+        self._save_topbar_button_order()
+        self.log("Toolbar order restored to default.")
 
     def closeEvent(self, event):
         if not self._close_after_workers_finished:
@@ -24515,6 +24526,9 @@ class AstroApp(QMainWindow):
         self.action_dashboard = QAction("Back to Dashboard", self)
         self.action_dashboard.triggered.connect(self.show_dashboard)
 
+        self.action_reset_topbar = QAction("Restore Default Toolbar Order", self)
+        self.action_reset_topbar.triggered.connect(self._restore_default_topbar_button_order)
+
         self.action_undo = QAction("Undo", self)
         self.action_undo.setShortcut("Ctrl+Z")
         self.action_undo.triggered.connect(self.undo)
@@ -24682,7 +24696,8 @@ class AstroApp(QMainWindow):
         def _add_top_btn(text, action=None, callback=None):
             btn = DraggableTopActionButton("")
             btn.setCursor(Qt.PointingHandCursor)
-            btn.setToolTip(text)
+            drag_hint = self.tr("top_drag_hint", "Drag to reorder")
+            btn.setToolTip(f"{text} — {drag_hint}")
             btn.setStatusTip(text)
             btn.setAccessibleName(text)
             btn.setFixedSize(34, 30)
@@ -24800,6 +24815,7 @@ class AstroApp(QMainWindow):
             "btn_curves_top",
             "btn_ghs_top",
         ]
+        self.default_topbar_button_order = list(top_button_attrs)
         for attr_name in top_button_attrs:
             button = getattr(self, attr_name, None)
             if isinstance(button, DraggableTopActionButton):
@@ -25054,6 +25070,8 @@ class AstroApp(QMainWindow):
             self.action_console,
             self.action_photoshop_menu,
         ])
+        self.top_menus["view"].addSeparator()
+        self.top_menus["view"].addAction(self.action_reset_topbar)
         _add_top_menu("tools", "Tools", [
             self.action_svg_brush,
             self.action_script_editor,
