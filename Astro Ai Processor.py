@@ -2554,14 +2554,13 @@ class CropDialog(QDialog):
         grid.setHorizontalSpacing(10)
         grid.setVerticalSpacing(10)
 
-        self.spin_x = QDoubleSpinBox()
-        self.spin_y = QDoubleSpinBox()
-        self.spin_w = QDoubleSpinBox()
-        self.spin_h = QDoubleSpinBox()
+        self.spin_x = QSpinBox()
+        self.spin_y = QSpinBox()
+        self.spin_w = QSpinBox()
+        self.spin_h = QSpinBox()
         for spin in (self.spin_x, self.spin_y, self.spin_w, self.spin_h):
             spin.setRange(0, 100000)
-            spin.setDecimals(0)
-            spin.setSingleStep(1.0)
+            spin.setSingleStep(1)
 
         grid.addWidget(QLabel("X:"), 0, 0)
         grid.addWidget(self.spin_x, 0, 1)
@@ -2610,10 +2609,10 @@ class CropDialog(QDialog):
         self._updating = True
         self.spin_x.setRange(0, max(0, self._img_w - 1))
         self.spin_y.setRange(0, max(0, self._img_h - 1))
-        self.spin_x.setValue(float(x))
-        self.spin_y.setValue(float(y))
-        self.spin_w.setValue(float(w))
-        self.spin_h.setValue(float(h))
+        self.spin_x.setValue(x)
+        self.spin_y.setValue(y)
+        self.spin_w.setValue(w)
+        self.spin_h.setValue(h)
         self._updating = False
         self._update_limits()
         if emit_signal:
@@ -2646,10 +2645,10 @@ class CropDialog(QDialog):
         return x, y, w, h
 
     def _update_limits(self):
-        max_w = max(1.0, float(self._img_w) - float(self.spin_x.value()))
-        max_h = max(1.0, float(self._img_h) - float(self.spin_y.value()))
-        self.spin_w.setRange(1.0, max_w)
-        self.spin_h.setRange(1.0, max_h)
+        max_w = max(1, self._img_w - self.spin_x.value())
+        max_h = max(1, self._img_h - self.spin_y.value())
+        self.spin_w.setRange(1, max_w)
+        self.spin_h.setRange(1, max_h)
 
     def _ratio_value(self):
         text = self.combo_ratio.currentText().strip()

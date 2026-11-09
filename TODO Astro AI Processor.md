@@ -110,7 +110,7 @@ Priorytety: **P0** = błędy i atrapy (robić najpierw), **P1** = duży wpływ n
 - [ ] Zastąpić wyrównanie skrótu spacjami prawdziwym układem.
 
 ### Niewielkie
-- [ ] Crop i inne: `QSpinBox` zamiast `QDoubleSpinBox` z 0 miejsc.
+- [x] Crop: użyć `QSpinBox` zamiast `QDoubleSpinBox` z 0 miejsc.
 - [ ] Rotate: opcja przycięcia czarnych rogów.
 - [ ] Wyszarzenie "Script Editor", gdy brak pliku `Astro Script Editor.py`.
 - [ ] Znacznik wartości zerowej na suwakach Correction.

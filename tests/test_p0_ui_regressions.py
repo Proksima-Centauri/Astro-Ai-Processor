@@ -31,9 +31,18 @@ for tab_index in (2, 3, 4):
     assert window.dashboard_search.isHidden()
 
 crop_dialog = module.CropDialog()
+assert all(
+    isinstance(spin, module.QSpinBox)
+    for spin in (crop_dialog.spin_x, crop_dialog.spin_y, crop_dialog.spin_w, crop_dialog.spin_h)
+)
 assert [crop_dialog.combo_grid.itemData(i) for i in range(crop_dialog.combo_grid.count())] == [
     "none", "thirds", "golden", "cross", "diagonals"
 ]
+crop_dialog.set_image(np.zeros((40, 60, 3), dtype=np.uint8))
+crop_dialog.spin_x.setValue(58)
+assert crop_dialog.spin_w.maximum() == 2
+crop_dialog.spin_w.setValue(2)
+assert crop_dialog.get_rect() == (58, 0, 2, 40)
 observed_grid_modes = []
 crop_dialog.gridChanged.connect(observed_grid_modes.append)
 crop_dialog.combo_grid.setCurrentIndex(1)
