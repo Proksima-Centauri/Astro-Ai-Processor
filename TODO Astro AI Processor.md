@@ -124,7 +124,8 @@ Priorytety: **P0** = błędy i atrapy (robić najpierw), **P1** = duży wpływ n
 - [ ] Widoczny fokus i logiczna kolejność tabulacji w złożonych dialogach.
 - [ ] Alternatywa klawiaturowa dla przeciągania (kolejność bloków skryptów, ikony, miniatury).
 - [ ] Nie przekazywać informacji wyłącznie kolorem (plakietki, strzałki ruchu).
-- [ ] Onboarding pierwszego uruchomienia i podpowiedzi w pustych stanach.
+- [x] Onboarding pierwszego uruchomienia (wybór języka i motywu oraz oprowadzanie z gradientowym podświetleniem).
+- [ ] Podpowiedzi w pustych stanach.
 
 ### Wydajność
 - [ ] Miniatury dashboardu generować w tle (teraz w wątku GUI przy starcie).

@@ -222,6 +222,38 @@ I18N = {
     "dashboard_language": {"pl": "Język", "en": "Language"},
     "dashboard_apply_settings": {"pl": "Zastosuj ustawienia", "en": "Apply settings"},
     "dashboard_saved": {"pl": "Ustawienia zapisane", "en": "Settings saved"},
+    "dashboard_clear_config": {"pl": "Wyczyść konfigurację", "en": "Clear configuration"},
+    "dashboard_clear_config_confirm_title": {"pl": "Wyczyścić konfigurację?", "en": "Clear configuration?"},
+    "dashboard_clear_config_confirm_body": {"pl": "Spowoduje to przywrócenie domyślnych ustawień aplikacji, w tym języka, motywu, ścieżek modeli, klucza API i listy ostatnich plików. Nie zostaną usunięte pliki użytkownika. Czy kontynuować?", "en": "This restores the application's default settings, including language, theme, model paths, API key, and recent-file list. User files will not be deleted. Continue?"},
+    "dashboard_config_cleared": {"pl": "Przywrócono domyślne ustawienia konfiguracji", "en": "Configuration defaults restored"},
+    "first_run_title": {"pl": "Skonfiguruj Astro AI Processor", "en": "Set up Astro AI Processor"},
+    "first_run_subtitle": {"pl": "Wybierz język i motyw. Te ustawienia możesz później zmienić.", "en": "Choose a language and theme. You can change them later."},
+    "first_run_continue": {"pl": "Dalej", "en": "Continue"},
+    "onboarding_next": {"pl": "Dalej", "en": "Next"},
+    "onboarding_previous": {"pl": "Wstecz", "en": "Back"},
+    "onboarding_skip": {"pl": "Pomiń", "en": "Skip"},
+    "onboarding_finish": {"pl": "Zakończ", "en": "Finish"},
+    "onboarding_step": {"pl": "Krok {current} z {total}", "en": "Step {current} of {total}"},
+    "onboarding_open_title": {"pl": "Otwórz zdjęcie", "en": "Open an image"},
+    "onboarding_open_body": {"pl": "Zacznij pracę, wczytując zdjęcie astronomiczne z dysku.", "en": "Start by loading an astronomical image from your computer."},
+    "onboarding_recent_title": {"pl": "Ostatnio używane", "en": "Recent images"},
+    "onboarding_recent_body": {"pl": "Tutaj znajdziesz szybko dostępne ostatnio otwierane obrazy.", "en": "Your recently opened images are available here for quick access."},
+    "onboarding_gallery_title": {"pl": "Galeria", "en": "Gallery"},
+    "onboarding_gallery_body": {"pl": "Przeglądaj przykładowe zdjęcia i zobacz możliwości aplikacji.", "en": "Browse sample images and explore what the app can do."},
+    "onboarding_settings_title": {"pl": "Ustawienia wyglądu", "en": "Appearance settings"},
+    "onboarding_settings_body": {"pl": "W każdej chwili możesz zmienić motyw, kolor wiodący i język.", "en": "You can change the theme, accent color, and language at any time."},
+    "onboarding_done_title": {"pl": "Gotowe!", "en": "You're all set!"},
+    "onboarding_done_body": {"pl": "Możesz teraz otworzyć zdjęcie i rozpocząć obróbkę. Miłej pracy!", "en": "You can now open an image and start editing. Enjoy!"},
+    "onboarding_editor_title": {"pl": "Główny interfejs", "en": "Main workspace"},
+    "onboarding_editor_body": {"pl": "Tu znajduje się edytor zdjęć. Wczytany obraz pojawi się w centralnym obszarze.", "en": "This is the image editor. Your loaded image appears in the central area."},
+    "onboarding_toolbar_title": {"pl": "Pasek narzędzi", "en": "Toolbar"},
+    "onboarding_toolbar_body": {"pl": "Najważniejsze polecenia, takie jak otwieranie, cofanie i filtry, są dostępne tutaj.", "en": "Quick actions such as opening images, undo, and filters are available here."},
+    "onboarding_viewer_title": {"pl": "Podgląd zdjęcia", "en": "Image viewer"},
+    "onboarding_viewer_body": {"pl": "Tutaj oglądasz obraz i porównujesz wersję przed i po obróbce.", "en": "View your image here and compare its before and after states."},
+    "onboarding_adjustments_title": {"pl": "Podstawowe korekty", "en": "Basic adjustments"},
+    "onboarding_adjustments_body": {"pl": "Dolny panel zawiera podstawowe suwaki obrazu i korekty kolorów.", "en": "The lower panel contains basic image and color adjustment controls."},
+    "onboarding_assistant_title": {"pl": "Asystent Altair", "en": "Altair assistant"},
+    "onboarding_assistant_body": {"pl": "Panel boczny pozwala korzystać z asystenta AI podczas pracy nad obrazem.", "en": "Use the side panel to work with the AI assistant while editing."},
     "action_open": {"pl": "Otwórz", "en": "Open"},
     "action_save": {"pl": "Zapisz", "en": "Save"},
     "action_save_as": {"pl": "Zapisz jako...", "en": "Save As..."},
@@ -13083,11 +13115,8 @@ def get_legacy_config_path() -> str:
     return os.path.join(script_dir, "astro_magic_config.json")
 
 
-def load_config() -> dict:
-    config_path = get_config_path()
-    project_config_path = get_project_config_path()
-    legacy_config_path = get_legacy_config_path()
-    default_config = {
+def get_default_config() -> dict:
+    return {
         "denoise_model_path": None,
         "bg_removal_model_path": None,
         "deconvolution_model_path": None,
@@ -13105,6 +13134,7 @@ def load_config() -> dict:
         "skyshot_index": "",
         "openrouter_api_key": "",
         "language": "pl",
+        "onboarding_completed": False,
         "processor_cores": max(1, (os.cpu_count() or 4) // 2),
         "onnx_provider": "Auto",
         "workspaces": [],
@@ -13112,6 +13142,13 @@ def load_config() -> dict:
         "topbar_button_order": [],
         "recent_images": [],
     }
+
+
+def load_config() -> dict:
+    config_path = get_config_path()
+    project_config_path = get_project_config_path()
+    legacy_config_path = get_legacy_config_path()
+    default_config = get_default_config()
 
     try:
         source_path = None
@@ -13128,6 +13165,9 @@ def load_config() -> dict:
             config = default_config.copy()
             if isinstance(loaded_config, dict):
                 config.update(loaded_config)
+                config["onboarding_completed"] = bool(
+                    loaded_config.get("onboarding_completed", True)
+                )
             legacy_plate_config = any(
                 key in config for key in ("api_key", "pixel_size_um", "focal_length_mm")
             )
@@ -13287,6 +13327,7 @@ def save_config(denoise_path: str = None, bg_removal_path: str = None,
         "skyshot_index": APP_PREFERENCES.get("skyshot_index", ""),
         "openrouter_api_key": str(openrouter_api_key or "").strip(),
         "language": language,
+        "onboarding_completed": bool(APP_PREFERENCES.get("onboarding_completed", False)),
         "processor_cores": int(processor_cores or 1),
         "onnx_provider": onnx_provider,
         "workspaces": workspaces if isinstance(workspaces, list) else [],
@@ -13318,6 +13359,7 @@ APP_PREFERENCES = {
     "theme_name": "Fusion Dark",
     "accent_name": "Ultra Blue",
     "language": "pl",
+    "onboarding_completed": False,
     "processor_cores": max(1, (os.cpu_count() or 4) // 2),
     "onnx_provider": "Auto",
     "workspaces": [],
@@ -18858,6 +18900,248 @@ class CommandPaletteDialog(QDialog):
         super().keyPressEvent(event)
 
 
+class FirstRunSetupDialog(QDialog):
+    def __init__(self, language: str, theme_name: str, parent=None):
+        super().__init__(parent)
+        self.language = "en" if str(language).lower().startswith("en") else "pl"
+        self.setModal(True)
+        self.setMinimumWidth(420)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 22, 24, 22)
+        layout.setSpacing(14)
+        self.title_label = QLabel(self)
+        self.title_label.setStyleSheet("font-size: 21px; font-weight: 650;")
+        self.subtitle_label = QLabel(self)
+        self.subtitle_label.setWordWrap(True)
+        layout.addWidget(self.title_label)
+        layout.addWidget(self.subtitle_label)
+
+        form = QGridLayout()
+        self.language_label = QLabel(self)
+        self.language_combo = QComboBox(self)
+        self.language_combo.addItem("Polski", "pl")
+        self.language_combo.addItem("English", "en")
+        language_index = self.language_combo.findData(self.language)
+        if language_index >= 0:
+            self.language_combo.setCurrentIndex(language_index)
+        self.theme_label = QLabel(self)
+        self.theme_combo = QComboBox(self)
+        self.theme_combo.addItems(["Fusion Dark", "Graphite", "Midnight", "Light"])
+        self.theme_combo.setCurrentText(theme_name if theme_name in (
+            "Fusion Dark", "Graphite", "Midnight", "Light"
+        ) else "Fusion Dark")
+        form.addWidget(self.language_label, 0, 0)
+        form.addWidget(self.language_combo, 0, 1)
+        form.addWidget(self.theme_label, 1, 0)
+        form.addWidget(self.theme_combo, 1, 1)
+        layout.addLayout(form)
+
+        self.continue_button = QPushButton(self)
+        self.continue_button.setDefault(True)
+        self.continue_button.clicked.connect(self.accept)
+        layout.addWidget(self.continue_button, 0, Qt.AlignRight)
+        self.language_combo.currentIndexChanged.connect(self._update_language)
+        self._update_language()
+
+    def _update_language(self):
+        self.language = str(self.language_combo.currentData() or "pl")
+        self.setWindowTitle(tr_text(self.language, "first_run_title", "Set up Astro AI Processor"))
+        self.title_label.setText(tr_text(self.language, "first_run_title", "Set up Astro AI Processor"))
+        self.subtitle_label.setText(
+            tr_text(
+                self.language,
+                "first_run_subtitle",
+                "Choose a language and theme. You can change them later.",
+            )
+        )
+        self.language_label.setText(tr_text(self.language, "dashboard_language", "Language"))
+        self.theme_label.setText(tr_text(self.language, "dashboard_theme", "Theme"))
+        self.continue_button.setText(
+            tr_text(self.language, "first_run_continue", "Continue")
+        )
+
+    def selections(self) -> tuple[str, str]:
+        return str(self.language_combo.currentData() or "pl"), self.theme_combo.currentText()
+
+
+class OnboardingTourOverlay(QWidget):
+    finished = pyqtSignal()
+
+    def __init__(self, parent, language: str, accent_name: str, steps: list[dict]):
+        super().__init__(parent)
+        self.language = "en" if str(language).lower().startswith("en") else "pl"
+        self.steps = steps
+        self.step_index = 0
+        self._highlight_rect = QRect()
+        self._accent = get_accent_colors(accent_name)
+        self.setGeometry(parent.rect())
+        parent.installEventFilter(self)
+        self.setFocusPolicy(Qt.StrongFocus)
+        self.setAttribute(Qt.WA_StyledBackground, False)
+
+        self.card = QFrame(self)
+        self.card.setObjectName("onboardingCard")
+        self.card.setMinimumWidth(280)
+        self.card.setMaximumWidth(420)
+        self.card.setStyleSheet(
+            "QFrame#onboardingCard { background: #171d26; color: #f0f3f8; "
+            f"border: 1px solid {self._accent['border']}; border-radius: 12px; }}"
+            "QLabel { color: #f0f3f8; border: none; background: transparent; }"
+            "QPushButton { min-height: 32px; padding: 4px 12px; border-radius: 6px; "
+            f"border: 1px solid {self._accent['border']}; }}"
+            "QPushButton#onboardingPrimary { "
+            f"background: {self._accent['base']}; color: white; font-weight: 600; }}"
+        )
+        card_layout = QVBoxLayout(self.card)
+        card_layout.setContentsMargins(20, 18, 20, 16)
+        card_layout.setSpacing(10)
+        self.card_title = QLabel(self.card)
+        self.card_title.setStyleSheet("font-size: 18px; font-weight: 650;")
+        self.card_body = QLabel(self.card)
+        self.card_body.setWordWrap(True)
+        self.card_body.setMinimumHeight(44)
+        self.step_label = QLabel(self.card)
+        self.step_label.setStyleSheet("color: #aab6c5;")
+        card_layout.addWidget(self.card_title)
+        card_layout.addWidget(self.card_body)
+        card_layout.addWidget(self.step_label)
+        buttons_layout = QHBoxLayout()
+        self.previous_button = QPushButton(self.card)
+        self.skip_button = QPushButton(self.card)
+        self.next_button = QPushButton(self.card)
+        self.next_button.setObjectName("onboardingPrimary")
+        buttons_layout.addWidget(self.previous_button)
+        buttons_layout.addStretch(1)
+        buttons_layout.addWidget(self.skip_button)
+        buttons_layout.addWidget(self.next_button)
+        card_layout.addLayout(buttons_layout)
+        self.previous_button.clicked.connect(self.previous_step)
+        self.skip_button.clicked.connect(self.finish)
+        self.next_button.clicked.connect(self.next_step)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self.show_step(0)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._position_card()
+
+    def eventFilter(self, watched, event):
+        if watched is self.parent() and event.type() == QEvent.Resize:
+            self.setGeometry(self.parent().rect())
+            QTimer.singleShot(0, lambda: self.show_step(self.step_index) if self.isVisible() else None)
+        return super().eventFilter(watched, event)
+
+    def paintEvent(self, event):
+        if not self._highlight_rect.isValid():
+            return
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        scrim = QPainterPath()
+        scrim.setFillRule(Qt.OddEvenFill)
+        scrim.addRect(QRectF(self.rect()))
+        scrim.addRoundedRect(QRectF(self._highlight_rect), 14, 14)
+        painter.fillPath(scrim, QColor(5, 9, 15, 210))
+
+        for width, alpha in ((12, 45), (7, 85)):
+            glow = QColor(self._accent["base"])
+            glow.setAlpha(alpha)
+            painter.setPen(QPen(glow, width, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+            painter.setBrush(Qt.NoBrush)
+            painter.drawRoundedRect(QRectF(self._highlight_rect), 14, 14)
+
+        gradient = QLinearGradient(self._highlight_rect.topLeft(), self._highlight_rect.bottomRight())
+        gradient.setColorAt(0.0, QColor(self._accent["base"]))
+        gradient.setColorAt(1.0, QColor(self._accent["link"]))
+        painter.setPen(QPen(QBrush(gradient), 3, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        painter.drawRoundedRect(QRectF(self._highlight_rect), 14, 14)
+
+    def show_step(self, index: int):
+        self.step_index = max(0, min(index, len(self.steps) - 1))
+        step = self.steps[self.step_index]
+        stack_index = step.get("dashboard_index")
+        if stack_index is not None:
+            self.parent()._set_dashboard_tab(stack_index)
+        if step.get("editor_screen"):
+            self.parent().screen_stack.setCurrentWidget(self.parent().editor_page)
+
+        target = step["target"]
+        if stack_index == 2:
+            self.parent().dashboard_settings_scroll.ensureWidgetVisible(target, 16, 16)
+        top_left = target.mapTo(self.parent(), QPoint(0, 0))
+        self._highlight_rect = QRect(top_left, target.size()).adjusted(-10, -8, 10, 8)
+        self.card_title.setText(
+            tr_text(self.language, step["title"], step["title"])
+        )
+        self.card_body.setText(
+            tr_text(self.language, step["body"], step["body"])
+        )
+        self.step_label.setText(
+            tr_text(self.language, "onboarding_step", "Step {current} of {total}").format(
+                current=self.step_index + 1,
+                total=len(self.steps),
+            )
+        )
+        self.previous_button.setText(
+            tr_text(self.language, "onboarding_previous", "Back")
+        )
+        self.previous_button.setEnabled(self.step_index > 0)
+        self.skip_button.setText(tr_text(self.language, "onboarding_skip", "Skip"))
+        self.next_button.setText(
+            tr_text(
+                self.language,
+                "onboarding_finish" if self.step_index == len(self.steps) - 1 else "onboarding_next",
+                "Finish" if self.step_index == len(self.steps) - 1 else "Next",
+            )
+        )
+        self.card.adjustSize()
+        self._position_card()
+        self.update()
+
+    def _position_card(self):
+        if not self.card.isVisible() and not self.isVisible():
+            return
+        width = max(280, min(420, self.width() - 40))
+        self.card.setFixedWidth(width)
+        height = self.card.sizeHint().height()
+        margin = 20
+        if self._highlight_rect.center().x() > self.width() // 2:
+            x = margin
+        else:
+            x = self.width() - width - margin
+        below_y = self._highlight_rect.bottom() + 22
+        if below_y + height > self.height() - margin:
+            y = self._highlight_rect.top() - height - 22
+        else:
+            y = below_y
+        y = max(margin, min(y, self.height() - height - margin))
+        self.card.setGeometry(max(margin, x), y, width, height)
+
+    def next_step(self):
+        if self.step_index >= len(self.steps) - 1:
+            self.finish()
+        else:
+            self.show_step(self.step_index + 1)
+
+    def previous_step(self):
+        if self.step_index > 0:
+            self.show_step(self.step_index - 1)
+
+    def finish(self):
+        self.hide()
+        self.finished.emit()
+        self.deleteLater()
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key_Escape:
+            self.finish()
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
+
 class AstroApp(QMainWindow):
     image_analysis_completed = pyqtSignal(object, str)
     update_check_result_ready = pyqtSignal(object, bool)
@@ -19726,6 +20010,8 @@ class AstroApp(QMainWindow):
         self.theme_name = config.get("theme_name") or ("Fusion Dark" if config.get("dark_mode", True) else "Light")
         self.accent_name = normalize_accent_name(config.get("accent_name", "Ultra Blue"))
         self.language = config.get("language", "pl") or "pl"
+        self.onboarding_completed = bool(config.get("onboarding_completed", False))
+        APP_PREFERENCES["onboarding_completed"] = self.onboarding_completed
         self.processor_cores = int(config.get("processor_cores") or self.processor_cores)
         self.onnx_provider = config.get("onnx_provider", "Auto") or "Auto"
         self.dark_mode = self.theme_name.lower() != "light"
@@ -21020,6 +21306,114 @@ class AstroApp(QMainWindow):
     def show_dashboard(self):
         if hasattr(self, "screen_stack") and hasattr(self, "dashboard_page"):
             self.screen_stack.setCurrentWidget(self.dashboard_page)
+
+    def _start_first_run_onboarding(self):
+        if self.onboarding_completed or not hasattr(self, "dashboard_page"):
+            return
+
+        setup = FirstRunSetupDialog(self.language, self.theme_name, self)
+        if setup.exec_() != QDialog.Accepted:
+            return
+
+        language, theme_name = setup.selections()
+        self.apply_preferences(language=language, theme_name=theme_name)
+        self.show_dashboard()
+        self._onboarding_original_dashboard_tab = self.dashboard_stack.currentIndex()
+        steps = [
+            {
+                "target": self.dashboard_title_label,
+                "title": "dashboard_title",
+                "body": "dashboard_subtitle",
+            },
+            {
+                "target": self.dashboard_open_button,
+                "title": "onboarding_open_title",
+                "body": "onboarding_open_body",
+            },
+            {
+                "target": self.projects_scroll,
+                "title": "onboarding_recent_title",
+                "body": "onboarding_recent_body",
+                "dashboard_index": 0,
+            },
+            {
+                "target": self.dashboard_tab_buttons[1],
+                "title": "onboarding_gallery_title",
+                "body": "onboarding_gallery_body",
+            },
+            {
+                "target": self.gallery_scroll,
+                "title": "onboarding_gallery_title",
+                "body": "onboarding_gallery_body",
+                "dashboard_index": 1,
+            },
+            {
+                "target": self.dashboard_tab_buttons[2],
+                "title": "dashboard_settings",
+                "body": "onboarding_settings_body",
+            },
+            {
+                "target": self.dashboard_theme_combo,
+                "title": "onboarding_settings_title",
+                "body": "onboarding_settings_body",
+                "dashboard_index": 2,
+            },
+            {
+                "target": self.dashboard_open_button,
+                "title": "onboarding_done_title",
+                "body": "onboarding_done_body",
+                "dashboard_index": 0,
+            },
+            {
+                "target": self.menuBar(),
+                "title": "onboarding_editor_title",
+                "body": "onboarding_editor_body",
+                "editor_screen": True,
+            },
+            {
+                "target": self.top_actions_bar,
+                "title": "onboarding_toolbar_title",
+                "body": "onboarding_toolbar_body",
+                "editor_screen": True,
+            },
+            {
+                "target": self.viewer,
+                "title": "onboarding_viewer_title",
+                "body": "onboarding_viewer_body",
+                "editor_screen": True,
+            },
+            {
+                "target": self.camera_raw_panel,
+                "title": "onboarding_adjustments_title",
+                "body": "onboarding_adjustments_body",
+                "editor_screen": True,
+            },
+            {
+                "target": self.ai_assistant_panel,
+                "title": "onboarding_assistant_title",
+                "body": "onboarding_assistant_body",
+                "editor_screen": True,
+            },
+        ]
+        self._first_run_tour = OnboardingTourOverlay(
+            self,
+            self.language,
+            self.accent_name,
+            steps,
+        )
+        self._first_run_tour.finished.connect(self._finish_first_run_onboarding)
+        self._first_run_tour.show()
+        self._first_run_tour.raise_()
+        self._first_run_tour.setFocus()
+
+    def _finish_first_run_onboarding(self):
+        self.onboarding_completed = True
+        APP_PREFERENCES["onboarding_completed"] = True
+        if hasattr(self, "dashboard_stack"):
+            self._set_dashboard_tab(
+                getattr(self, "_onboarding_original_dashboard_tab", 0)
+            )
+        self.save_workspace_config()
 
     def show_plate_solving_dialog(self):
         if hasattr(self, "plate_solving_dialog") and self.plate_solving_dialog is not None:
@@ -23620,6 +24014,12 @@ class AstroApp(QMainWindow):
         )
         self.dashboard_save_settings_button.clicked.connect(self._apply_dashboard_settings)
         settings_layout.addWidget(self.dashboard_save_settings_button)
+        self.dashboard_clear_config_button = QPushButton(
+            self.tr("dashboard_clear_config", "Clear configuration"),
+            settings_tab,
+        )
+        self.dashboard_clear_config_button.clicked.connect(self._clear_application_config)
+        settings_layout.addWidget(self.dashboard_clear_config_button)
         self.dashboard_settings_status = QLabel("", settings_tab)
         self.dashboard_settings_status.setStyleSheet("color: #8dbf9a;")
         settings_layout.addWidget(self.dashboard_settings_status)
@@ -24350,6 +24750,74 @@ class AstroApp(QMainWindow):
         )
         self.dashboard_settings_status.setText(self.tr("dashboard_saved", "Settings saved"))
 
+    def _clear_application_config(self):
+        answer = QMessageBox.question(
+            self,
+            self.tr("dashboard_clear_config_confirm_title", "Clear configuration?"),
+            self.tr(
+                "dashboard_clear_config_confirm_body",
+                "This restores the application's default settings. User files will not be deleted. Continue?",
+            ),
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if answer != QMessageBox.Yes:
+            return
+
+        defaults = get_default_config()
+        APP_PREFERENCES.clear()
+        APP_PREFERENCES.update(defaults)
+        APP_PREFERENCES["recent_images"] = []
+
+        self.denoise_model_path = defaults["denoise_model_path"]
+        self.bg_removal_model_path = defaults["bg_removal_model_path"]
+        self.deconvolution_model_path = defaults["deconvolution_model_path"]
+        self.deconvolution_stellar_model_path = defaults["deconvolution_stellar_model_path"]
+        self.deconvolution_object_model_path = defaults["deconvolution_object_model_path"]
+        self.starnet_path = defaults["starnet_path"]
+        self.starnet_stride = defaults["starnet_stride"]
+        self.deepsnr_path = defaults["deepsnr_path"]
+        self.deepsnr_args = defaults["deepsnr_args"]
+        self.deepsnr_strength = defaults["deepsnr_strength"]
+        self.skyshot_binary = defaults["skyshot_binary"]
+        self.skyshot_index = defaults["skyshot_index"]
+        self.openrouter_api_key = defaults["openrouter_api_key"]
+        self.onboarding_completed = False
+        APP_PREFERENCES["onboarding_completed"] = False
+        self.workspaces = list(defaults["workspaces"])
+        self.home_folder = defaults["home_folder"]
+        self.recent_image_paths = list(defaults["recent_images"])
+        self.topbar_button_order = list(self.default_topbar_button_order)
+
+        self.apply_preferences(
+            theme_name=defaults["theme_name"],
+            accent_name=defaults["accent_name"],
+            language=defaults["language"],
+            processor_cores=defaults["processor_cores"],
+            onnx_provider=defaults["onnx_provider"],
+            openrouter_api_key=defaults["openrouter_api_key"],
+        )
+        APP_PREFERENCES["skyshot_binary"] = self.skyshot_binary
+        APP_PREFERENCES["skyshot_index"] = self.skyshot_index
+        APP_PREFERENCES["deepsnr_path"] = self.deepsnr_path
+        APP_PREFERENCES["deepsnr_args"] = self.deepsnr_args
+        APP_PREFERENCES["deepsnr_strength"] = self.deepsnr_strength
+        APP_PREFERENCES["deconvolution_model_path"] = self.deconvolution_model_path
+        APP_PREFERENCES["deconvolution_stellar_model_path"] = self.deconvolution_stellar_model_path
+        APP_PREFERENCES["deconvolution_object_model_path"] = self.deconvolution_object_model_path
+        APP_PREFERENCES["workspaces"] = self.workspaces
+        APP_PREFERENCES["home_folder"] = self.home_folder
+        APP_PREFERENCES["recent_images"] = self.recent_image_paths
+        self._apply_saved_topbar_button_order()
+        self._ensure_topbar_single_trailing_stretch()
+        self._save_topbar_button_order()
+        self._refresh_dashboard_settings_paths()
+        self._refresh_dashboard_recent_images()
+        self.dashboard_api_key.clear()
+        self.dashboard_settings_status.setText(
+            self.tr("dashboard_config_cleared", "Configuration defaults restored")
+        )
+
     def _refresh_dashboard_settings_paths(self):
         if not hasattr(self, "dashboard_models_info"):
             return
@@ -24423,6 +24891,9 @@ class AstroApp(QMainWindow):
         self.dashboard_language_label.setText(self.tr("dashboard_language", "Language"))
         self.dashboard_save_settings_button.setText(
             self.tr("dashboard_apply_settings", "Apply settings")
+        )
+        self.dashboard_clear_config_button.setText(
+            self.tr("dashboard_clear_config", "Clear configuration")
         )
         self.dashboard_empty_label.setText(
             self.tr("dashboard_empty", "Recently opened images will appear here.")
@@ -29281,6 +29752,8 @@ def main():
     window.show()
     if splash is not None:
         splash.finish(window)
+    if not window.onboarding_completed:
+        QTimer.singleShot(0, window._start_first_run_onboarding)
     sys.exit(app.exec_())
 
 
