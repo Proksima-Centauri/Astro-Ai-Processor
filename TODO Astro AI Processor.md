@@ -60,8 +60,8 @@ Priorytety: **P0** = błędy i atrapy (robić najpierw), **P1** = duży wpływ n
 - [ ] Oznaczyć etap 1 jako opcjonalny, wyjaśnić kolejność.
 - [ ] Zapis i odczyt projektu 3D FLY; potwierdzenie przy zamknięciu krzyżykiem.
 - [ ] Anulowanie renderu, po zakończeniu "Otwórz plik / Pokaż w folderze".
-- [ ] Zastąpić numery etapów w kodzie (`5`, `4`, `1`) stałymi/enumem.
-- [ ] Zsynchronizować numerację w dokumentacji `3d_fly_help.md` z UI.
+- [x] Zastąpić numery etapów w kodzie (`5`, `4`, `1`) stałymi/enumem.
+- [x] Zsynchronizować numerację w dokumentacji `3d_fly_help.md` z UI.
 - [ ] Legenda interakcji w podglądzie ruchu.
 
 ## P2: Dopracowanie

@@ -9,8 +9,9 @@ Opisuje, co robi kazdy etap filtra 3D FLY i jak uzyskac poprawny render.
 2. Etap 2 `zaznacz sekcje`: potnij obraz na warstwy (`Wytnij`) albo `Wczytaj warstwy` z dysku.
 3. Etap 3 `wygladzanie krawedzi`: wybierz warstwe, ustaw blur, kliknij `Zastosuj`.
 4. Etap 4 `laczenie w klip`: ustaw czas i FPS.
-5. Etap 5/6 `definiowanie ruchu i pozycji`: ustaw ruch warstw i zoom.
-6. Ostatni etap `dodaj muzyke`: ustaw audio i plik wyjsciowy, potem `Renderuj 3D FLY`.
+5. Etap 5 `dodaj gwiazdy` (opcjonalnie): wybierz plik maski gwiazd lub folder warstw, jesli chcesz dodac gwiazdy do renderu.
+6. Etap 6 `definiowanie ruchu i pozycji`: ustaw ruch warstw i zoom.
+7. Etap 7 `dodaj muzyke`: ustaw audio i plik wyjsciowy, potem `Renderuj 3D FLY`.
 
 ## Etap 1 - usun gwiazdy
 
@@ -44,7 +45,12 @@ Uwaga: panel `Wyciete sekcje (PNG)` jest widoczny tylko w etapie 2.
 - `Czas (s)`: dlugosc finalnego klipu.
 - `FPS`: liczba klatek na sekunde.
 
-## Etap 5/6 - definiowanie ruchu i pozycji
+## Etap 5 - dodaj gwiazdy
+
+- Wlacz `Dodaj gwiazdy`, jesli gwiazdy maja pojawic sie w renderze.
+- Wybierz poprawny plik StarMask lub folder warstw.
+
+## Etap 6 - definiowanie ruchu i pozycji
 
 - `Main zoom speed`: globalny zoom calej sceny.
 - Pod podgladem sa parametry per warstwa:
@@ -63,7 +69,7 @@ Wazne:
 - gdy kierunek = `Do widza (zoom)`, strzalka nie jest rysowana,
 - warstwa wtedy nie idzie w lewo/prawo/gora/dol, tylko zoomuje.
 
-## Ostatni etap - dodaj muzyke i render
+## Etap 7 - dodaj muzyke i render
 
 - Dodaj muzyke z bazy lub importuj z dysku.
 - Ustaw start i glosnosc klipu audio.

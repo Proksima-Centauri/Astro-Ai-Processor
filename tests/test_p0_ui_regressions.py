@@ -20,6 +20,14 @@ sys.modules[spec.name] = module
 spec.loader.exec_module(module)
 app = module.QApplication([])
 window = module.AstroApp()
+fly_dialog = module.Fly3DDialog(np.zeros((24, 32, 3), dtype=np.uint8))
+assert fly_dialog.stage_stack.count() == len(module.Fly3DStage)
+assert fly_dialog.stage_nav.currentRow() == module.Fly3DStage.STAR_REMOVAL
+fly_dialog._update_cut_sections_visibility(module.Fly3DStage.ZONE_SELECTION)
+assert not fly_dialog.cuts_label.isHidden()
+fly_dialog._update_run_button_visibility(module.Fly3DStage.AUDIO)
+assert not fly_dialog.btn_run.isHidden()
+fly_dialog.close()
 assert window.star_halo_reduction_strength == 0.35
 assert not hasattr(window.dashboard_altair_chat, "token_usage_bar")
 assert not hasattr(window.photoshop_menu_dialog.panel, "blend_combo")

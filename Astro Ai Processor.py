@@ -16,6 +16,7 @@ import shlex
 import math
 import unicodedata
 from dataclasses import dataclass
+from enum import IntEnum
 from pathlib import Path
 import socket
 import struct
@@ -4367,6 +4368,16 @@ class SvgBrushSettingsDialog(QDialog):
         }
 
 
+class Fly3DStage(IntEnum):
+    STAR_REMOVAL = 0
+    ZONE_SELECTION = 1
+    EDGE_SMOOTHING = 2
+    CLIP_SETUP = 3
+    STAR_ADDITION = 4
+    MOTION = 5
+    AUDIO = 6
+
+
 class Fly3DDialog(QDialog):
     def __init__(self, image: np.ndarray, default_path: str = "", parent=None):
         super().__init__(parent)
@@ -4978,11 +4989,11 @@ class Fly3DDialog(QDialog):
         self._sync_brush()
         self._refresh_motion_layers(keep_selection=False)
         self._updating_stage_gate = False
-        self.stage_nav.setCurrentRow(0)
-        self.stage_stack.setCurrentIndex(0)
+        self.stage_nav.setCurrentRow(Fly3DStage.STAR_REMOVAL)
+        self.stage_stack.setCurrentIndex(Fly3DStage.STAR_REMOVAL)
         self._update_stage_gate()
-        self._update_run_button_visibility(0)
-        self._update_cut_sections_visibility(0)
+        self._update_run_button_visibility(Fly3DStage.STAR_REMOVAL)
+        self._update_cut_sections_visibility(Fly3DStage.STAR_REMOVAL)
         self._update_starless_preview()
         self._update_edge_preview()
         self._refresh_clip_timeline_layers(keep_index=False)
@@ -4998,7 +5009,7 @@ class Fly3DDialog(QDialog):
 
     def _update_stage_gate(self):
         complete = self._is_stage1_complete()
-        for idx in range(2, self.stage_nav.count()):
+        for idx in range(Fly3DStage.EDGE_SMOOTHING, self.stage_nav.count()):
             item = self.stage_nav.item(idx)
             if item is None:
                 continue
@@ -5007,13 +5018,13 @@ class Fly3DDialog(QDialog):
                 item.setFlags(flags | Qt.ItemIsEnabled | Qt.ItemIsSelectable)
             else:
                 item.setFlags((flags | Qt.ItemIsSelectable) & ~Qt.ItemIsEnabled)
-        if not complete and self.stage_nav.currentRow() > 1:
+        if not complete and self.stage_nav.currentRow() > Fly3DStage.ZONE_SELECTION:
             self._updating_stage_gate = True
-            self.stage_nav.setCurrentRow(1)
-            self.stage_stack.setCurrentIndex(1)
+            self.stage_nav.setCurrentRow(Fly3DStage.ZONE_SELECTION)
+            self.stage_stack.setCurrentIndex(Fly3DStage.ZONE_SELECTION)
             self._updating_stage_gate = False
-            self._update_run_button_visibility(1)
-            self._update_cut_sections_visibility(1)
+            self._update_run_button_visibility(Fly3DStage.ZONE_SELECTION)
+            self._update_cut_sections_visibility(Fly3DStage.ZONE_SELECTION)
         self._update_edge_preview()
 
     def _compute_zone_edge_mask(self) -> np.ndarray:
@@ -5241,20 +5252,20 @@ class Fly3DDialog(QDialog):
             return
         if index < 0:
             return
-        if index != 5:
+        if index != Fly3DStage.MOTION:
             self._stop_motion_clip_preview()
-        if index > 1 and not self._is_stage1_complete():
+        if index > Fly3DStage.ZONE_SELECTION and not self._is_stage1_complete():
             self._updating_stage_gate = True
-            self.stage_nav.setCurrentRow(1)
-            self.stage_stack.setCurrentIndex(1)
+            self.stage_nav.setCurrentRow(Fly3DStage.ZONE_SELECTION)
+            self.stage_stack.setCurrentIndex(Fly3DStage.ZONE_SELECTION)
             self._updating_stage_gate = False
-            self._update_run_button_visibility(1)
-            self._update_cut_sections_visibility(1)
+            self._update_run_button_visibility(Fly3DStage.ZONE_SELECTION)
+            self._update_cut_sections_visibility(Fly3DStage.ZONE_SELECTION)
             QMessageBox.information(self, "Etapy", "Do kolejnych etapow przejdziesz dopiero po podziale calego obrazu na strefy.")
             return
-        if index == 2:
+        if index == Fly3DStage.EDGE_SMOOTHING:
             self._refresh_clip_timeline_layers(keep_index=True)
-        if index == 5:
+        if index == Fly3DStage.MOTION:
             self._refresh_motion_layers(keep_selection=True)
         self.stage_stack.setCurrentIndex(index)
         self._update_run_button_visibility(index)
@@ -5263,18 +5274,17 @@ class Fly3DDialog(QDialog):
     def _update_run_button_visibility(self, index: int):
         if not hasattr(self, "btn_run"):
             return
-        last_stage = max(0, self.stage_stack.count() - 1) if hasattr(self, "stage_stack") else 0
-        self.btn_run.setVisible(int(index) == int(last_stage))
+        self.btn_run.setVisible(int(index) == int(Fly3DStage.AUDIO))
 
     def _update_cut_sections_visibility(self, index: int):
-        visible = int(index) == 1
+        visible = int(index) == int(Fly3DStage.ZONE_SELECTION)
         if hasattr(self, "cuts_label"):
             self.cuts_label.setVisible(visible)
         if hasattr(self, "cut_scroll"):
             self.cut_scroll.setVisible(visible)
 
     def accept(self):
-        last_stage = max(0, self.stage_stack.count() - 1)
+        last_stage = int(Fly3DStage.AUDIO)
         current_stage = int(self.stage_stack.currentIndex())
         if current_stage != last_stage:
             self.stage_nav.setCurrentRow(last_stage)
@@ -5283,11 +5293,11 @@ class Fly3DDialog(QDialog):
             mask_path = str(self.edit_stars_mask_path.text() or "").strip() if hasattr(self, "edit_stars_mask_path") else ""
             if not mask_path or not os.path.exists(mask_path):
                 QMessageBox.warning(self, "Dodaj gwiazdy", "Wybierz poprawny plik StarMask lub folder warstw.")
-                self.stage_nav.setCurrentRow(4)
+                self.stage_nav.setCurrentRow(Fly3DStage.STAR_ADDITION)
                 return
         if len(self._build_motion_behaviors()) == 0:
             QMessageBox.warning(self, "3D FLY", "Brak warstw do ruchu. Najpierw podziel obraz lub wczytaj pocięte warstwy.")
-            self.stage_nav.setCurrentRow(1)
+            self.stage_nav.setCurrentRow(Fly3DStage.ZONE_SELECTION)
             return
         super().accept()
 
@@ -5307,19 +5317,19 @@ class Fly3DDialog(QDialog):
         )
 
     def _on_zone_zoom_in(self):
-        if hasattr(self, "stage_stack") and int(self.stage_stack.currentIndex()) != 1:
+        if hasattr(self, "stage_stack") and self.stage_stack.currentIndex() != Fly3DStage.ZONE_SELECTION:
             return
         if hasattr(self, "zone_widget"):
             self.zone_widget.multiply_zoom(1.15)
 
     def _on_zone_zoom_out(self):
-        if hasattr(self, "stage_stack") and int(self.stage_stack.currentIndex()) != 1:
+        if hasattr(self, "stage_stack") and self.stage_stack.currentIndex() != Fly3DStage.ZONE_SELECTION:
             return
         if hasattr(self, "zone_widget"):
             self.zone_widget.multiply_zoom(1.0 / 1.15)
 
     def _on_zone_zoom_fit(self):
-        if hasattr(self, "stage_stack") and int(self.stage_stack.currentIndex()) != 1:
+        if hasattr(self, "stage_stack") and self.stage_stack.currentIndex() != Fly3DStage.ZONE_SELECTION:
             return
         if not hasattr(self, "zone_widget") or not hasattr(self, "zone_scroll"):
             return
