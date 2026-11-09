@@ -4399,12 +4399,15 @@ class Fly3DDialog(QDialog):
         self._edge_blur_brush_painting = False
         self._edge_blur_brush_action = "add"
         self._updating_stage_gate = False
+        self.language = (
+            "en" if str(getattr(self.parent(), "language", "pl")).lower().startswith("en") else "pl"
+        )
 
         root = QVBoxLayout(self)
         apply_standard_layout_margins(root)
 
         self.stage_names = [
-            "1 usun gwiazdy",
+            "1 usun gwiazdy (opcjonalnie)",
             "2 zaznacz sekcje",
             "3 wygladzanie krawedzi",
             "4 laczenie w klip",
@@ -4467,6 +4470,15 @@ class Fly3DDialog(QDialog):
         self.starless_preview_label.setMinimumHeight(280)
         self.starless_preview_label.setStyleSheet("border: 1px solid #3b4c5d; background: #12171c;")
         stage0_layout.addWidget(self.starless_preview_label, 1)
+        self.stage1_guidance = QLabel(
+            "Optional: remove stars before creating zones. Otherwise, continue to stage 2; "
+            "zone selection is required before later stages."
+            if self.language == "en"
+            else "Etap 1 jest opcjonalny. Usun gwiazdy przed podzialem stref albo przejdz do etapu 2; "
+            "podzial obrazu jest wymagany przed dalszymi etapami."
+        )
+        self.stage1_guidance.setWordWrap(True)
+        stage0_layout.addWidget(self.stage1_guidance)
 
         controls_starless = QHBoxLayout()
         self.btn_remove_stars = QPushButton("Usun gwiazdy")
@@ -4993,12 +5005,12 @@ class Fly3DDialog(QDialog):
         self.stage_progress_bar = QProgressBar()
         self.stage_progress_bar.setTextVisible(True)
         self.stage_progress_bar.setRange(1, len(self.stage_names))
-        language = str(getattr(self.parent(), "language", "pl")).lower()
+        language = self.language
         self.stage_progress_bar.setFormat(
-            "Step %v of %m" if language.startswith("en") else "Etap %v z %m"
+            "Step %v of %m" if language == "en" else "Etap %v z %m"
         )
         navigation.addWidget(self.stage_progress_bar, 1)
-        self.stage_next_button = QPushButton("Next" if language.startswith("en") else "Dalej")
+        self.stage_next_button = QPushButton("Next" if language == "en" else "Dalej")
         self.stage_next_button.clicked.connect(lambda: self._navigate_stage(1))
         navigation.addWidget(self.stage_next_button)
         root.addLayout(navigation)
@@ -5067,7 +5079,9 @@ class Fly3DDialog(QDialog):
         self.stage_next_button.setEnabled(can_advance)
         if next_item is not None and not can_advance:
             self.stage_next_button.setToolTip(
-                "Ukończ podział stref, aby odblokować dalsze etapy."
+                "Complete zone selection to unlock later stages."
+                if self.language == "en"
+                else "Ukończ podział stref, aby odblokować dalsze etapy."
             )
         else:
             self.stage_next_button.setToolTip("")

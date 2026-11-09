@@ -23,6 +23,8 @@ window = module.AstroApp()
 fly_dialog = module.Fly3DDialog(np.zeros((24, 32, 3), dtype=np.uint8))
 assert fly_dialog.stage_stack.count() == len(module.Fly3DStage)
 assert fly_dialog.stage_nav.currentRow() == module.Fly3DStage.STAR_REMOVAL
+assert "(opcjonalnie)" in fly_dialog.stage_nav.item(module.Fly3DStage.STAR_REMOVAL).text()
+assert "etapu 2" in fly_dialog.stage1_guidance.text()
 assert fly_dialog.stage_progress_bar.format() == "Etap %v z %m"
 assert fly_dialog.stage_progress_bar.value() == 1
 assert not fly_dialog.stage_back_button.isEnabled()
