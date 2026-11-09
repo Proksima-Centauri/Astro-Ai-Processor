@@ -62,7 +62,7 @@ Priorytety: **P0** = błędy i atrapy (robić najpierw), **P1** = duży wpływ n
 - [ ] Anulowanie renderu, po zakończeniu "Otwórz plik / Pokaż w folderze".
 - [x] Zastąpić numery etapów w kodzie (`5`, `4`, `1`) stałymi/enumem.
 - [x] Zsynchronizować numerację w dokumentacji `3d_fly_help.md` z UI.
-- [ ] Legenda interakcji w podglądzie ruchu.
+- [x] Legenda interakcji w podglądzie ruchu.
 
 ## P2: Dopracowanie
 

@@ -25,6 +25,7 @@ assert fly_dialog.stage_stack.count() == len(module.Fly3DStage)
 assert fly_dialog.stage_nav.currentRow() == module.Fly3DStage.STAR_REMOVAL
 assert "(opcjonalnie)" in fly_dialog.stage_nav.item(module.Fly3DStage.STAR_REMOVAL).text()
 assert "etapu 2" in fly_dialog.stage1_guidance.text()
+assert "Przeciagnij" in fly_dialog.motion_interaction_legend.text()
 assert fly_dialog.stage_progress_bar.format() == "Etap %v z %m"
 assert fly_dialog.stage_progress_bar.value() == 1
 assert not fly_dialog.stage_back_button.isEnabled()

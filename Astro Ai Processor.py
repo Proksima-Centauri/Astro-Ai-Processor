@@ -4822,6 +4822,13 @@ class Fly3DDialog(QDialog):
         self.motion_preview_label.mouseReleaseEvent = self._on_motion_preview_mouse_release
         self.motion_preview_label.wheelEvent = self._on_motion_preview_wheel
         stage5_layout.addWidget(self.motion_preview_label, 1)
+        self.motion_interaction_legend = QLabel(
+            "Drag the preview to set layer movement; use the mouse wheel over a layer to adjust its speed."
+            if self.language == "en"
+            else "Przeciagnij podglad, aby ustawic ruch warstwy; rolka myszy nad warstwa zmienia jej predkosc."
+        )
+        self.motion_interaction_legend.setWordWrap(True)
+        stage5_layout.addWidget(self.motion_interaction_legend)
 
         motion_props_row = QHBoxLayout()
         motion_props_row.addWidget(QLabel("Warstwa:"))
