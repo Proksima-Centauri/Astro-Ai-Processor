@@ -4986,6 +4986,23 @@ class Fly3DDialog(QDialog):
         left_panel_layout.addWidget(self.side_panel, 0)
         root.addWidget(self.left_splitter, 1)
 
+        navigation = QHBoxLayout()
+        self.stage_back_button = QPushButton("Wstecz")
+        self.stage_back_button.clicked.connect(lambda: self._navigate_stage(-1))
+        navigation.addWidget(self.stage_back_button)
+        self.stage_progress_bar = QProgressBar()
+        self.stage_progress_bar.setTextVisible(True)
+        self.stage_progress_bar.setRange(1, len(self.stage_names))
+        language = str(getattr(self.parent(), "language", "pl")).lower()
+        self.stage_progress_bar.setFormat(
+            "Step %v of %m" if language.startswith("en") else "Etap %v z %m"
+        )
+        navigation.addWidget(self.stage_progress_bar, 1)
+        self.stage_next_button = QPushButton("Next" if language.startswith("en") else "Dalej")
+        self.stage_next_button.clicked.connect(lambda: self._navigate_stage(1))
+        navigation.addWidget(self.stage_next_button)
+        root.addLayout(navigation)
+
         self._sync_brush()
         self._refresh_motion_layers(keep_selection=False)
         self._updating_stage_gate = False
@@ -4994,6 +5011,7 @@ class Fly3DDialog(QDialog):
         self._update_stage_gate()
         self._update_run_button_visibility(Fly3DStage.STAR_REMOVAL)
         self._update_cut_sections_visibility(Fly3DStage.STAR_REMOVAL)
+        self._update_stage_navigation(Fly3DStage.STAR_REMOVAL)
         self._update_starless_preview()
         self._update_edge_preview()
         self._refresh_clip_timeline_layers(keep_index=False)
@@ -5026,6 +5044,33 @@ class Fly3DDialog(QDialog):
             self._update_run_button_visibility(Fly3DStage.ZONE_SELECTION)
             self._update_cut_sections_visibility(Fly3DStage.ZONE_SELECTION)
         self._update_edge_preview()
+        if hasattr(self, "stage_progress_bar"):
+            self._update_stage_navigation(self.stage_nav.currentRow())
+
+    def _navigate_stage(self, direction: int):
+        current = self.stage_nav.currentRow()
+        target = max(0, min(self.stage_nav.count() - 1, current + int(direction)))
+        item = self.stage_nav.item(target)
+        if item is not None and item.flags() & Qt.ItemIsEnabled:
+            self.stage_nav.setCurrentRow(target)
+
+    def _update_stage_navigation(self, index: int):
+        stage_count = self.stage_nav.count()
+        if stage_count < 1:
+            return
+        current = max(0, min(stage_count - 1, int(index)))
+        self.stage_progress_bar.setValue(current + 1)
+        self.stage_back_button.setEnabled(current > 0)
+        next_stage = current + 1
+        next_item = self.stage_nav.item(next_stage) if next_stage < stage_count else None
+        can_advance = next_item is not None and bool(next_item.flags() & Qt.ItemIsEnabled)
+        self.stage_next_button.setEnabled(can_advance)
+        if next_item is not None and not can_advance:
+            self.stage_next_button.setToolTip(
+                "Ukończ podział stref, aby odblokować dalsze etapy."
+            )
+        else:
+            self.stage_next_button.setToolTip("")
 
     def _compute_zone_edge_mask(self) -> np.ndarray:
         zone_map = self.zone_widget.get_zone_map()
@@ -5270,6 +5315,7 @@ class Fly3DDialog(QDialog):
         self.stage_stack.setCurrentIndex(index)
         self._update_run_button_visibility(index)
         self._update_cut_sections_visibility(index)
+        self._update_stage_navigation(index)
 
     def _update_run_button_visibility(self, index: int):
         if not hasattr(self, "btn_run"):

@@ -55,7 +55,7 @@ Priorytety: **P0** = błędy i atrapy (robić najpierw), **P1** = duży wpływ n
 - [ ] Stack: wybór BIAS/DARK/FLAT w zakładce Calibration (listy i liczniki), nie w trzech oknach po Run.
 
 ### 3D FLY
-- [ ] Przyciski **Wstecz / Dalej** i wskaźnik postępu etapów.
+- [x] Przyciski **Wstecz / Dalej** i wskaźnik postępu etapów.
 - [ ] Walidacja na każdym etapie (maska gwiazd, warstwy), a nie dopiero przy renderze.
 - [ ] Oznaczyć etap 1 jako opcjonalny, wyjaśnić kolejność.
 - [ ] Zapis i odczyt projektu 3D FLY; potwierdzenie przy zamknięciu krzyżykiem.

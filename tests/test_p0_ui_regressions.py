@@ -23,6 +23,15 @@ window = module.AstroApp()
 fly_dialog = module.Fly3DDialog(np.zeros((24, 32, 3), dtype=np.uint8))
 assert fly_dialog.stage_stack.count() == len(module.Fly3DStage)
 assert fly_dialog.stage_nav.currentRow() == module.Fly3DStage.STAR_REMOVAL
+assert fly_dialog.stage_progress_bar.format() == "Etap %v z %m"
+assert fly_dialog.stage_progress_bar.value() == 1
+assert not fly_dialog.stage_back_button.isEnabled()
+assert fly_dialog.stage_next_button.isEnabled()
+fly_dialog.stage_next_button.click()
+assert fly_dialog.stage_nav.currentRow() == module.Fly3DStage.ZONE_SELECTION
+assert not fly_dialog.stage_next_button.isEnabled()
+fly_dialog.stage_back_button.click()
+assert fly_dialog.stage_nav.currentRow() == module.Fly3DStage.STAR_REMOVAL
 fly_dialog._update_cut_sections_visibility(module.Fly3DStage.ZONE_SELECTION)
 assert not fly_dialog.cuts_label.isHidden()
 fly_dialog._update_run_button_visibility(module.Fly3DStage.AUDIO)
