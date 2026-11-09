@@ -16542,9 +16542,11 @@ class SingleViewer(QGraphicsView):
         self.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
         self.setResizeAnchor(QGraphicsView.AnchorViewCenter)
         self.scale_factor = 1.0
+        self._fit_to_window_mode = True
         self._pixmap_item = None
         self._overlay_item = None
         self.overlay_pix = None
+        self._image_size_provider = None
         self._pan_margin = 800
         self._centered_once = False
         self.pick_mode = False
@@ -16561,6 +16563,11 @@ class SingleViewer(QGraphicsView):
             self._pixmap_item = None
             self._overlay_item = None
             self.overlay_pix = None
+            self._scene.setSceneRect(QRectF())
+            self.resetTransform()
+            self.scale_factor = 1.0
+            self._centered_once = False
+            self._fit_to_window_mode = True
             return
 
         if self._pixmap_item is not None:
@@ -16589,9 +16596,25 @@ class SingleViewer(QGraphicsView):
         if not self._centered_once:
             self.centerOn(margin + pix.width() / 2, margin + pix.height() / 2)
             self._centered_once = True
+            self.fit_to_window()
             return
 
-        self.centerOn(current_center)
+        if self._fit_to_window_mode:
+            self.fit_to_window()
+        else:
+            self.centerOn(current_center)
+
+    def set_image_size_provider(self, provider):
+        self._image_size_provider = provider
+
+    def _image_coordinate_size(self, pix):
+        if self._image_size_provider is not None:
+            size = self._image_size_provider()
+            if size is not None:
+                width, height = (int(value) for value in size)
+                if width > 0 and height > 0:
+                    return width, height
+        return pix.width(), pix.height()
 
     def set_overlay_pixmap(self, overlay: QPixmap):
         self.overlay_pix = overlay
@@ -16641,11 +16664,12 @@ class SingleViewer(QGraphicsView):
                 self.roiDragStarted.emit(point[0], point[1])
                 event.accept()
                 return
-        if event.button() == Qt.LeftButton:
-            # Reagujemy na klikniÄ™cie tylko wtedy, gdy tryb wyboru jest wĹ‚Ä…czony (tak jak w PS/Pix)
-            if hasattr(self, 'pick_mode') and self.pick_mode:
-                pos = event.pos()
-                self.imageClicked.emit(pos.x(), pos.y())
+        if event.button() == Qt.LeftButton and self.pick_mode:
+            point = self._event_to_image_coords(event, clamp=False)
+            if point is not None:
+                self.imageClicked.emit(point[0], point[1])
+            event.accept()
+            return
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
@@ -16719,7 +16743,7 @@ class SingleViewer(QGraphicsView):
             self.setCursor(Qt.CrossCursor)
             return
         if self.pick_mode:
-            self.setDragMode(QGraphicsView.ScrollHandDrag)
+            self.setDragMode(QGraphicsView.NoDrag)
             self.setCursor(Qt.CrossCursor)
             return
         if self.svg_brush_mode:
@@ -16745,17 +16769,20 @@ class SingleViewer(QGraphicsView):
         scene_pos = self.mapToScene(event.pos())
         local_x = float(scene_pos.x() - self._pixmap_item.pos().x())
         local_y = float(scene_pos.y() - self._pixmap_item.pos().y())
-        width = pix.width()
-        height = pix.height()
+        display_width = pix.width()
+        display_height = pix.height()
+        width, height = self._image_coordinate_size(pix)
 
         if clamp:
-            x = int(round(max(0.0, min(float(width - 1), local_x))))
-            y = int(round(max(0.0, min(float(height - 1), local_y))))
+            x = int(round(max(0.0, min(float(display_width - 1), local_x)) * (width - 1) / max(1, display_width - 1)))
+            y = int(round(max(0.0, min(float(display_height - 1), local_y)) * (height - 1) / max(1, display_height - 1)))
             return (x, y)
 
-        if local_x < 0.0 or local_y < 0.0 or local_x > float(width - 1) or local_y > float(height - 1):
+        if local_x < 0.0 or local_y < 0.0 or local_x > float(display_width - 1) or local_y > float(display_height - 1):
             return None
-        return (int(round(local_x)), int(round(local_y)))
+        x = int(round(local_x * (width - 1) / max(1, display_width - 1)))
+        y = int(round(local_y * (height - 1) / max(1, display_height - 1)))
+        return (x, y)
 
     def _has_pixmap(self) -> bool:
         if self._pixmap_item is None:
@@ -16766,8 +16793,12 @@ class SingleViewer(QGraphicsView):
     def _set_scale_factor_absolute(self, target_scale: float):
         if not self._has_pixmap():
             return
+        self._fit_to_window_mode = False
         target = max(0.02, min(64.0, float(target_scale)))
         current = max(1e-9, float(self.scale_factor))
+        if abs(target - current) < 1e-12:
+            self.scale_factor = target
+            return
         ratio = target / current
         self.scale(ratio, ratio)
         self.scale_factor = target
@@ -16785,6 +16816,7 @@ class SingleViewer(QGraphicsView):
     def fit_to_window(self):
         if not self._has_pixmap():
             return
+        self._fit_to_window_mode = True
         pix = self._pixmap_item.pixmap()
         if pix.width() <= 0 or pix.height() <= 0:
             return
@@ -16793,13 +16825,20 @@ class SingleViewer(QGraphicsView):
         vh = max(1, int(viewport_size.height()))
         fit_scale = min(float(vw) / float(pix.width()), float(vh) / float(pix.height()))
         self._set_scale_factor_absolute(fit_scale)
+        self._fit_to_window_mode = True
         margin = self._pan_margin
         self.centerOn(margin + pix.width() / 2.0, margin + pix.height() / 2.0)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if self._fit_to_window_mode:
+            self.fit_to_window()
               
     def pan_by(self, dx: int, dy: int):
         if self._pixmap_item is None:
             return
 
+        self._fit_to_window_mode = False
         scale_x = self.transform().m11() or 1.0
         scale_y = self.transform().m22() or 1.0
         hbar = self.horizontalScrollBar()
@@ -25151,6 +25190,7 @@ class AstroApp(QMainWindow):
         right_panel.setMaximumWidth(600)
 
         self.viewer = BlendViewer()
+        self.viewer.view.set_image_size_provider(self._viewer_image_size)
         self.viewer.view.zoom_changed_signal.connect(self.update_viewer_overlay)
         self.viewer.view.imageClicked.connect(self.on_viewer_image_clicked)
         self.viewer.view.roiDragStarted.connect(self._on_roi_drag_started)
@@ -25265,6 +25305,14 @@ class AstroApp(QMainWindow):
 
         self._sync_plate_overlay_controls()
         self.update_menu_actions()
+
+    def _viewer_image_size(self):
+        image = self.magic_img
+        if not isinstance(image, np.ndarray):
+            image = self.original_img
+        if isinstance(image, np.ndarray) and image.ndim >= 2:
+            return image.shape[1], image.shape[0]
+        return None
 
     def on_viewer_image_clicked(self, x, y):
      """ObsĹ‚uga klikniÄ™cia na obraz - alternatywa dla PixInsight i Photoshopa"""
@@ -26496,6 +26544,13 @@ class AstroApp(QMainWindow):
             self.selected_thumbnail_index = -1
             self.current_history_node_id = None
 
+            self.display_stretch_mode = "linear"
+            self._bottom_stretch_mode_pending = "linear"
+            set_global_display_stretch("linear", self.display_stretch_linked)
+            stretch_index = self.combo_stretch_bottom.findData("linear")
+            if stretch_index >= 0:
+                self.combo_stretch_bottom.setCurrentIndex(stretch_index)
+
             # Aktualizacja widoku
             self.viewer.set_before(np_to_qpixmap(self.processed_img))
             self.update_menu_actions()
@@ -26506,6 +26561,7 @@ class AstroApp(QMainWindow):
             self.add_thumbnail(filename, self.processed_img)
             self._remember_recent_image(path)
             self.screen_stack.setCurrentWidget(self.editor_page)
+            QTimer.singleShot(0, self.viewer.view.fit_to_window)
             if self.menuBar() is not None:
                 self.menuBar().setVisible(True)
             
