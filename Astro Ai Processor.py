@@ -25762,6 +25762,15 @@ class AstroApp(QMainWindow):
             _palette_entry("Rozwiąż astrometrię", "Plate solving", "Ustal współrzędne nieba obrazu", "Determine the image sky coordinates", "Astronomia", "Astronomy", "plate.svg", self.action_plate_solve),
             _palette_entry("Animacja 3D — FLY", "3D FLY animation", "Utwórz przelot 3D po obrazie", "Create a 3D fly-through of the image", "Narzędzia", "Tools", "fly3d.svg", self.action_3d_fly),
             _palette_entry("Ustawienia", "Settings", "Otwórz preferencje aplikacji", "Open application preferences", "Aplikacja", "App", "prefs.svg", self.action_preferences),
+            _palette_entry("Histogram", "Histogram", "Pokaż histogram obrazu", "Show the image histogram", "Widok", "View", "histogram.svg", self.action_histogram, aliases=("hist",)),
+            _palette_entry("Konsola", "Console", "Otwórz konsolę komunikatów", "Open the message console", "Widok", "View", "console.svg", self.action_console, aliases=("log", "logs")),
+            _palette_entry("GHS Stretch", "GHS Stretch", "Otwórz transformację Generalized Hyperbolic Stretch", "Open the Generalized Hyperbolic Stretch controls", "Ton", "Tone", "ghs.svg", self.action_ghs, aliases=("ghs", "hyperbolic stretch")),
+            _palette_entry("Korekcja", "Correction", "Otwórz narzędzia korekcji obrazu", "Open image correction tools", "Kolor", "Color", "correction.svg", self.action_correction, aliases=("correction",)),
+            _palette_entry("Pędzel SVG", "SVG Brush", "Otwórz ustawienia pędzla wektorowego", "Open vector brush settings", "Narzędzia", "Tools", "svg_brush.svg", self.action_svg_brush, aliases=("svg", "pędzel")),
+            _palette_entry("Film poklatkowy", "Time-lapse Movie", "Utwórz film z sekwencji klatek", "Create a movie from a frame sequence", "Astronomia", "Astronomy", "timelapse.svg", self.action_timelapse, aliases=("timelapse", "time lapse")),
+            _palette_entry("Stack planetarny", "Planetary Stack", "Stackuj klatki z filmu planetarnego", "Stack frames from a planetary video", "Astronomia", "Astronomy", "solar_stack.svg", self.action_solar_stack, aliases=("planetary", "solar stack")),
+            _palette_entry("Motyw", "Theme", "Otwórz preferencje motywu i kolorów", "Open theme and color preferences", "Aplikacja", "App", "prefs.svg", self.action_preferences, aliases=("theme", "dark mode", "light mode", "motyw")),
+            _palette_entry("Język", "Language", "Otwórz preferencje języka", "Open language preferences", "Aplikacja", "App", "prefs.svg", self.action_preferences, aliases=("language", "język")),
         ]
         self.command_palette_dialog = CommandPaletteDialog(
             self.command_palette_entries,

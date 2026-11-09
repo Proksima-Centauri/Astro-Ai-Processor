@@ -105,7 +105,7 @@ Priorytety: **P0** = błędy i atrapy (robić najpierw), **P1** = duży wpływ n
 
 ### Paleta poleceń
 - [x] Ranking i dopasowanie rozmyte zamiast samego podciągu.
-- [ ] Uzupełnić pozycje: Histogram, Konsola, GHS, Correction, SVG Pędzel, Timelapse, Planetary, motyw, język.
+- [x] Uzupełnić pozycje: Histogram, Konsola, GHS, Correction, SVG Pędzel, Timelapse, Planetary, motyw, język.
 - [ ] Ostatnio używane polecenia i skróty przy pozycjach.
 - [ ] Zastąpić wyrównanie skrótu spacjami prawdziwym układem.
 
