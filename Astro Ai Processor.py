@@ -277,6 +277,8 @@ I18N = {
     "action_adjustment_curves": {"pl": "Warstwa korekcyjna: Krzywe", "en": "Curves Adjustment Layer"},
     "action_dashboard": {"pl": "Powrót do dashboardu", "en": "Back to Dashboard"},
     "action_reset_topbar": {"pl": "Przywróć domyślną kolejność paska", "en": "Restore Default Toolbar Order"},
+    "toolbar_more": {"pl": "Więcej", "en": "More"},
+    "toolbar_more_tooltip": {"pl": "Pozostałe akcje paska narzędzi", "en": "Additional toolbar actions"},
     "top_drag_hint": {"pl": "Przeciągnij, aby zmienić kolejność", "en": "Drag to reorder"},
     "action_ghs": {"pl": "GHS Stretch", "en": "GHS Stretch"},
     "action_magic": {"pl": "Inteligentne odszumianie i ostrzenie", "en": "Magic Filter"},
@@ -18430,6 +18432,62 @@ class ReorderableTopActionsBar(QFrame):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.setAcceptDrops(True)
+        self._overflow_buttons = []
+        self._overflow_button = None
+        self._max_visible_buttons = 10
+        self.orderChanged.connect(self._update_overflow)
+
+    def set_overflow_controls(self, buttons, overflow_button, max_visible_buttons=10):
+        self._overflow_buttons = list(buttons)
+        self._overflow_button = overflow_button
+        self._max_visible_buttons = max(1, int(max_visible_buttons))
+        self._update_overflow()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._update_overflow()
+
+    def _update_overflow(self):
+        layout = self.layout()
+        overflow_button = self._overflow_button
+        if layout is None or overflow_button is None or not self._overflow_buttons:
+            return
+
+        margins = layout.contentsMargins()
+        available_width = max(0, self.width() - margins.left() - margins.right())
+        spacing = max(0, layout.spacing())
+        button_width = max(button.sizeHint().width() for button in self._overflow_buttons)
+        stride = button_width + spacing
+        preferred_count = min(self._max_visible_buttons, len(self._overflow_buttons))
+        fits_without_overflow = (
+            preferred_count == len(self._overflow_buttons)
+            and preferred_count * button_width + max(0, preferred_count - 1) * spacing
+            <= available_width
+        )
+        if fits_without_overflow:
+            visible_count = preferred_count
+        else:
+            reserved_width = overflow_button.sizeHint().width() + spacing
+            visible_count = min(
+                preferred_count,
+                max(0, (available_width - reserved_width + spacing) // max(1, stride)),
+            )
+
+        for index, button in enumerate(self._overflow_buttons):
+            button.setVisible(index < visible_count)
+
+        overflow_buttons = self._overflow_buttons[visible_count:]
+        overflow_button.setVisible(bool(overflow_buttons))
+        menu = overflow_button.menu()
+        if menu is None:
+            return
+        menu.clear()
+        for button in overflow_buttons:
+            action = QAction(button.accessibleName() or button.toolTip(), menu)
+            action.setIcon(button.icon())
+            action.setEnabled(button.isEnabled())
+            action.triggered.connect(lambda _checked=False, target=button: target.click())
+            menu.addAction(action)
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasFormat(self.MIME_TYPE) and isinstance(event.source(), DraggableTopActionButton):
@@ -22603,6 +22661,17 @@ class AstroApp(QMainWindow):
                 button.setStatusTip(translated)
                 button.setAccessibleName(translated)
 
+        more_button = getattr(self, "btn_more_top", None)
+        if more_button is not None:
+            more_text = self.tr("toolbar_more", "More")
+            more_button.setText(more_text)
+            more_button.setAccessibleName(more_text)
+            more_button.setToolTip(
+                self.tr("toolbar_more_tooltip", "Additional toolbar actions")
+            )
+            if hasattr(self, "top_actions_bar"):
+                self.top_actions_bar._update_overflow()
+
         if hasattr(self, "combo_stretch_bottom"):
             self.combo_stretch_bottom.setToolTip("Stretch mode")
         if hasattr(self, "btn_stretch_channels"):
@@ -25324,13 +25393,9 @@ class AstroApp(QMainWindow):
         self.btn_home = _add_top_btn("Home", action=self.action_set_home_folder)
         self.btn_prefs = _add_top_btn("Prefs", action=self.action_preferences)
 
-        top_actions_layout.addSpacing(8)
-
         self.btn_console_top = _add_top_btn("Console", action=self.action_console)
         self.btn_menu_top = _add_top_btn("Menu", action=self.action_photoshop_menu)
         self.btn_hist_top = _add_top_btn("Histogram", action=self.action_histogram)
-
-        top_actions_layout.addSpacing(8)
 
         self.btn_magic_top = _add_top_btn("Magic", action=self.action_magic_filter)
         self.btn_astro_upscale_top = _add_top_btn("Astro Upscale", action=self.action_astro_upscale)
@@ -25421,6 +25486,20 @@ class AstroApp(QMainWindow):
             button = getattr(self, attr_name, None)
             if isinstance(button, DraggableTopActionButton):
                 button.setObjectName(attr_name)
+
+        self.btn_more_top = QPushButton(self.tr("toolbar_more", "More"), top_actions_bar)
+        self.btn_more_top.setObjectName("topbarMoreButton")
+        self.btn_more_top.setAccessibleName(self.tr("toolbar_more", "More"))
+        self.btn_more_top.setToolTip(self.tr("toolbar_more_tooltip", "Additional toolbar actions"))
+        self.btn_more_top.setFixedHeight(30)
+        self.topbar_overflow_menu = QMenu(self.btn_more_top)
+        self.btn_more_top.setMenu(self.topbar_overflow_menu)
+        top_actions_layout.addWidget(self.btn_more_top)
+        top_actions_bar.set_overflow_controls(
+            [getattr(self, attr_name) for attr_name in top_button_attrs],
+            self.btn_more_top,
+            max_visible_buttons=10,
+        )
 
         top_actions_layout.addStretch(1)
         self._apply_saved_topbar_button_order()

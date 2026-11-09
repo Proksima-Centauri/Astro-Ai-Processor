@@ -10,16 +10,24 @@ def test_menu_navigation_and_shortcuts():
 import importlib.util
 import os
 import sys
+import tempfile
 
+home = tempfile.TemporaryDirectory()
+os.environ["HOME"] = home.name
+os.environ["XDG_CONFIG_HOME"] = os.path.join(home.name, "config")
+os.environ["XDG_DATA_HOME"] = os.path.join(home.name, "data")
 spec = importlib.util.spec_from_file_location("astro_app_menu_test", "Astro Ai Processor.py")
 module = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = module
 spec.loader.exec_module(module)
 app = module.QApplication([])
 window = module.AstroApp()
+window.language = "en"
+window._update_ui_language()
 window.show()
 app.processEvents()
-assert window.menuBar().isVisible()
+assert not window.menuBar().isVisible()
+assert window.btn_more_top.text() == "More"
 assert window.action_reset_topbar.text() == "Restore Default Toolbar Order"
 assert window.tr("top_drag_hint", "Drag to reorder") in window.btn_open.toolTip(), (
     window.btn_open.toolTip(),
@@ -51,6 +59,7 @@ assert window.top_menus["file"].title() == "&Plik"
 assert window.top_menus["layers"].title() == "&Warstwy"
 assert window.top_menus["help"].title() == "Pomo&c"
 assert window.action_reset_topbar.text() == "Przywróć domyślną kolejność paska"
+assert window.btn_more_top.text() == "Więcej"
 assert "Przeciągnij, aby zmienić kolejność" in window.btn_open.toolTip()
 assert window.action_adjustment_levels.text() == "Warstwa korekcyjna: Poziomy"
 assert window.action_levels.text() == "Poziomy"
@@ -79,6 +88,7 @@ module.QMessageBox.about = lambda *args: messages.append(args[-1])
 window.show_about_dialog()
 assert module.APP_VERSION in messages[-1]
 window.close()
+home.cleanup()
 '''
     env = os.environ.copy()
     env["QT_QPA_PLATFORM"] = "offscreen"
