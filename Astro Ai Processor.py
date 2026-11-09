@@ -11412,7 +11412,7 @@ class PreferencesDialog(QDialog):
         select_layout.addWidget(self.lbl_select_deepsnr_info)
 
         self.btn_run_deepsnr_pref = QPushButton("Run deepSNR")
-        self.btn_run_deepsnr_pref.clicked.connect(self.app.run_deepsnr)
+        self.btn_run_deepsnr_pref.clicked.connect(lambda checked=False: self.app.run_deepsnr())
         select_layout.addWidget(self.btn_run_deepsnr_pref)
 
         self.btn_arduino_joystick_pref = QPushButton("Connect Joystick")
