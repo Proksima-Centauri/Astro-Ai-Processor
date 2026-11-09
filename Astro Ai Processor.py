@@ -11695,6 +11695,67 @@ def _normalize_search_text(text: str) -> str:
     )
 
 
+def _fuzzy_subsequence_score(query: str, candidate: str):
+    if not query or not candidate:
+        return None
+
+    start = candidate.find(query)
+    if start >= 0:
+        word_start = start == 0 or not candidate[start - 1].isalnum()
+        base_score = 900 if word_start else 800
+        return base_score + len(query) * 4 - start * 2 - max(0, len(candidate) - len(query)) * 0.1
+
+    positions = []
+    cursor = 0
+    for character in query:
+        position = candidate.find(character, cursor)
+        if position < 0:
+            return None
+        positions.append(position)
+        cursor = position + 1
+
+    consecutive = sum(
+        positions[index] == positions[index - 1] + 1
+        for index in range(1, len(positions))
+    )
+    word_starts = sum(
+        position == 0 or not candidate[position - 1].isalnum()
+        for position in positions
+    )
+    gaps = positions[-1] - positions[0] + 1 - len(positions)
+    return (
+        300
+        + consecutive * 18
+        + word_starts * 8
+        - gaps * 5
+        - positions[0] * 2
+        - max(0, len(candidate) - len(query)) * 0.1
+    )
+
+
+def _command_palette_match_score(query: str, fields):
+    if not query:
+        return 0
+
+    normalized_fields = [
+        (_normalize_search_text(text), weight)
+        for text, weight in fields
+        if text
+    ]
+    total_score = 0
+    for term in query.split():
+        best_score = None
+        for candidate, weight in normalized_fields:
+            score = _fuzzy_subsequence_score(term, candidate)
+            if score is not None:
+                weighted_score = score + weight
+                best_score = weighted_score if best_score is None else max(best_score, weighted_score)
+        if best_score is None:
+            return None
+        total_score += best_score
+    return total_score
+
+
 def extract_image_open_request(message: str) -> str:
     """Extract an image filename from a direct Polish/English open request."""
     raw = str(message or "").strip()
@@ -18772,15 +18833,32 @@ class CommandPaletteDialog(QDialog):
     def refresh_results(self, *_args):
         query = _normalize_search_text(self.search_edit.text()).strip()
         self.tools_list.clear()
-        first_enabled_row = -1
-        for record in self.entries:
+        results = []
+        for order, record in enumerate(self.entries):
             title = self._localized(record, "title")
             description = self._localized(record, "description")
             category = self._localized(record, "category")
             aliases = " ".join(str(alias) for alias in (record.get("aliases") or []))
-            searchable = _normalize_search_text(f"{title} {description} {category} {aliases}")
-            if query and query not in searchable and not bool(record.get("pinned", False)):
-                continue
+            score = _command_palette_match_score(
+                query,
+                (
+                    (title, 100),
+                    (category, 45),
+                    (aliases, 30),
+                    (description, 0),
+                ),
+            )
+            if query and score is None:
+                if not bool(record.get("pinned", False)):
+                    continue
+                score = -1
+            results.append((score, order, record, title, description, category))
+
+        if query:
+            results.sort(key=lambda result: (-result[0], result[1]))
+
+        first_enabled_row = -1
+        for _score, _order, record, title, description, category in results:
             item = QListWidgetItem(title)
             item.setData(Qt.UserRole, record)
             item.setData(CommandPaletteItemDelegate.DESCRIPTION_ROLE, description)
