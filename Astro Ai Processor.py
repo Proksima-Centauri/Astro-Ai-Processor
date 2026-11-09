@@ -23557,7 +23557,7 @@ class AstroApp(QMainWindow):
         self.dashboard_select_deepsnr_button = QPushButton("Select deepSNR", deepsnr_actions)
         self.dashboard_select_deepsnr_button.clicked.connect(self._select_dashboard_deepsnr)
         self.dashboard_run_deepsnr_button = QPushButton("Run deepSNR", deepsnr_actions)
-        self.dashboard_run_deepsnr_button.clicked.connect(self.run_deepsnr)
+        self.dashboard_run_deepsnr_button.clicked.connect(lambda checked=False: self.run_deepsnr())
         deepsnr_actions_layout.addWidget(self.dashboard_select_deepsnr_button)
         deepsnr_actions_layout.addWidget(self.dashboard_run_deepsnr_button)
         deepsnr_actions_layout.addStretch(1)
@@ -24646,7 +24646,7 @@ class AstroApp(QMainWindow):
         self.action_starnet.triggered.connect(self.run_starnet)
 
         self.action_deepsnr = QAction("Run deepSNR", self)
-        self.action_deepsnr.triggered.connect(self.run_deepsnr)
+        self.action_deepsnr.triggered.connect(lambda checked=False: self.run_deepsnr())
 
         self.action_3d_fly = QAction("3D FLY Filter", self)
         self.action_3d_fly.triggered.connect(self.run_3d_fly_filter)
