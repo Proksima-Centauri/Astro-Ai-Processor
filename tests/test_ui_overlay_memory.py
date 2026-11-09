@@ -168,6 +168,14 @@ assert chat_panel.current_chat_messages[-1]["content"] == "M27 will be located a
 window._set_dashboard_tab(4)
 assert window.dashboard_page.styleSheet().find("background: #151a22") >= 0
 assert window.dashboard_script_view_stack.currentIndex() == 0
+window._clear_dashboard_script_blocks()
+app.processEvents()
+assert window.dashboard_script_empty_label.isVisible()
+recovered_block = window._add_dashboard_script_block("load")
+assert not window.dashboard_script_empty_label.isVisible()
+window._remove_dashboard_script_block(recovered_block)
+app.processEvents()
+assert window.dashboard_script_empty_label.isVisible()
 assert len(window.dashboard_script_cards) == 1
 new_script_card = window.dashboard_script_cards[0]
 assert new_script_card.findChild(module.QLabel, "dashboardCardObject").text() == "New script"

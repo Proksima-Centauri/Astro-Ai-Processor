@@ -24270,10 +24270,16 @@ class AstroApp(QMainWindow):
         self.dashboard_script_blocks.clear()
         self.dashboard_script_blocks_layout.addWidget(self.dashboard_script_empty_label)
         self.dashboard_script_empty_label.show()
+        self.dashboard_script_blocks_container.show()
+        self.dashboard_script_blocks_scroll.show()
         self.dashboard_script_blocks_layout.addStretch(1)
+        if self.dashboard_script_view_stack.count() > 1:
+            self.dashboard_script_view_stack.setCurrentIndex(1)
         self._validate_dashboard_script_blocks()
 
     def _add_dashboard_script_block(self, operation: str, call=None):
+        self.dashboard_script_blocks_container.show()
+        self.dashboard_script_blocks_scroll.show()
         block_frame = DashboardScriptBlockFrame(self.dashboard_script_blocks_container)
         block_frame.setObjectName("dashboardScriptBlock")
         block_frame.setStyleSheet(
@@ -24469,6 +24475,12 @@ class AstroApp(QMainWindow):
         block["frame"].deleteLater()
         if not self.dashboard_script_blocks:
             self.dashboard_script_empty_label.show()
+            self.dashboard_script_blocks_container.show()
+            self.dashboard_script_blocks_scroll.show()
+            self.dashboard_script_blocks_layout.addWidget(self.dashboard_script_empty_label)
+            self.dashboard_script_blocks_layout.addStretch(1)
+            if self.dashboard_script_view_stack.count() > 1:
+                self.dashboard_script_view_stack.setCurrentIndex(1)
         for index, item in enumerate(self.dashboard_script_blocks):
             item["frame"].setProperty("blockIndex", index)
         self._validate_dashboard_script_blocks()
@@ -25595,7 +25607,7 @@ class AstroApp(QMainWindow):
             self.action_about,
         ])
         self.setMenuBar(menu_bar)
-        menu_bar.setVisible(True)
+        menu_bar.setVisible(False)
         main_layout.addWidget(command_palette_row)
 
 
