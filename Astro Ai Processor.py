@@ -16627,6 +16627,8 @@ class PhotoshopMenuDialog(QDialog):
 
 class SingleViewer(QGraphicsView):
     zoom_changed_signal = pyqtSignal(float)
+    image_changed_signal = pyqtSignal()
+    imageHovered = pyqtSignal(object)
     imageClicked = pyqtSignal(int, int)
     imageDropped = pyqtSignal(object)
     roiDragStarted = pyqtSignal(int, int)
@@ -16644,6 +16646,9 @@ class SingleViewer(QGraphicsView):
         self.setAcceptDrops(True)
         self.setRenderHints(QPainter.Antialiasing | QPainter.SmoothPixmapTransform)
         self.setDragMode(QGraphicsView.ScrollHandDrag)
+        self.setFocusPolicy(Qt.StrongFocus)
+        self.setMouseTracking(True)
+        self.viewport().setMouseTracking(True)
         self.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
         self.setResizeAnchor(QGraphicsView.AnchorViewCenter)
         self.scale_factor = 1.0
@@ -16673,6 +16678,7 @@ class SingleViewer(QGraphicsView):
             self.scale_factor = 1.0
             self._centered_once = False
             self._fit_to_window_mode = True
+            self.image_changed_signal.emit()
             return
 
         if self._pixmap_item is not None:
@@ -16683,6 +16689,7 @@ class SingleViewer(QGraphicsView):
                 self._pixmap_item.setPixmap(pix)
                 self._sync_overlay_item()
                 self.viewport().update()
+                self.image_changed_signal.emit()
                 return
 
         current_center = self.mapToScene(self.viewport().rect().center())
@@ -16708,6 +16715,7 @@ class SingleViewer(QGraphicsView):
             self.fit_to_window()
         else:
             self.centerOn(current_center)
+        self.image_changed_signal.emit()
 
     def set_image_size_provider(self, provider):
         self._image_size_provider = provider
@@ -16778,6 +16786,7 @@ class SingleViewer(QGraphicsView):
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
+        self.imageHovered.emit(self._event_to_image_coords(event, clamp=False))
         if self.svg_brush_mode and self._svg_brush_pressed and not self.roi_pick_mode and not self.pick_mode:
             point = self._event_to_image_coords(event, clamp=True)
             if point is not None:
@@ -16795,6 +16804,7 @@ class SingleViewer(QGraphicsView):
         super().mouseMoveEvent(event)
 
     def leaveEvent(self, event):
+        self.imageHovered.emit(None)
         if self.roi_pick_mode and not self._roi_dragging:
             self.roiHoverMoved.emit(None)
         super().leaveEvent(event)
@@ -17001,19 +17011,36 @@ class BlendViewer(QWidget):
         self.slider = QSlider(Qt.Horizontal)
         self.slider.setRange(0, 100)
         self.slider.setValue(50)
-        self.slider.setMinimumWidth(300)
+        self.slider.setMinimumWidth(120)
         slider_size_policy = self.slider.sizePolicy()
         slider_size_policy.setRetainSizeWhenHidden(True)
         self.slider.setSizePolicy(slider_size_policy)
         self.slider.valueChanged.connect(self.update_blend)
-        self.slider.setVisible(False)
-        layout.addWidget(self.slider)
+        self.compare_controls = QWidget(self)
+        compare_layout = QHBoxLayout(self.compare_controls)
+        compare_layout.setContentsMargins(8, 0, 8, 0)
+        compare_layout.setSpacing(8)
+        self.compare_before_label = QLabel("Przed")
+        self.compare_after_label = QLabel("Po")
+        self.compare_position_label = QLabel("50%")
+        self.compare_position_label.setMinimumWidth(42)
+        self.compare_position_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        compare_layout.addWidget(self.compare_before_label)
+        compare_layout.addWidget(self.slider, 1)
+        compare_layout.addWidget(self.compare_after_label)
+        compare_layout.addWidget(self.compare_position_label)
+        self.compare_controls.setVisible(False)
+        layout.addWidget(self.compare_controls)
+        self.slider.valueChanged.connect(self._update_compare_position)
 
         self.pix_before = None
         self.pix_after = None
         self.compare_enabled = False
         self.overlay_pix = None
         self._compare_drag_active = False
+        self._pan_active = False
+        self._space_pan_active = False
+        self._pan_last_pos = None
 
         self.view.installEventFilter(self)
         self.view.viewport().installEventFilter(self)
@@ -17047,23 +17074,101 @@ class BlendViewer(QWidget):
 
     def _refresh_compare_slider_visibility(self):
         has_pair = self.pix_before is not None and self.pix_after is not None
-        self.slider.setVisible(bool(self.compare_enabled and has_pair))
+        can_compare = bool(self.compare_enabled and has_pair)
+        self.compare_controls.setVisible(can_compare)
+        if not can_compare:
+            if self._pan_active or self._compare_drag_active:
+                self._end_pointer_interaction()
+            self._space_pan_active = False
+            self.view.unsetCursor()
+
+    def set_language(self, language: str):
+        english = str(language).lower().startswith("en")
+        self.compare_before_label.setText("Before" if english else "Przed")
+        self.compare_after_label.setText("After" if english else "Po")
+
+    def _event_viewport_position(self, obj, event):
+        if obj is self.view:
+            return self.view.viewport().mapFrom(self.view, event.pos())
+        return event.pos()
+
+    def _compare_handle_x(self):
+        if self.pix_before is None or self.view._pixmap_item is None:
+            return None
+        cut_x = int(round((self.pix_before.width() - 1) * self.slider.value() / 100.0))
+        scene_pos = self.view._pixmap_item.mapToScene(QPointF(cut_x, self.pix_before.height() / 2.0))
+        return self.view.mapFromScene(scene_pos).x()
+
+    def _start_pan(self, viewport_pos):
+        self._pan_active = True
+        self._pan_last_pos = QPoint(viewport_pos)
+        self.view.setCursor(Qt.ClosedHandCursor)
+
+    def _continue_pan(self, viewport_pos):
+        if self._pan_last_pos is None:
+            self._pan_last_pos = QPoint(viewport_pos)
+            return
+        delta = viewport_pos - self._pan_last_pos
+        self._pan_last_pos = QPoint(viewport_pos)
+        self.view.horizontalScrollBar().setValue(
+            self.view.horizontalScrollBar().value() - delta.x()
+        )
+        self.view.verticalScrollBar().setValue(
+            self.view.verticalScrollBar().value() - delta.y()
+        )
+
+    def _end_pointer_interaction(self):
+        self._pan_active = False
+        self._compare_drag_active = False
+        self._pan_last_pos = None
+        if self._space_pan_active:
+            self.view.setCursor(Qt.OpenHandCursor)
+        else:
+            self.view.unsetCursor()
 
     def eventFilter(self, obj, event):
-        if obj in (self.view, self.view.viewport()) and self.compare_enabled and self.pix_before is not None and self.pix_after is not None:
-            if event.type() == QEvent.MouseButtonPress and event.button() == Qt.LeftButton:
-                self._compare_drag_active = True
-                self._set_slider_from_view_event(obj, event)
+        is_view_event = obj in (self.view, self.view.viewport())
+        has_pair = self.pix_before is not None and self.pix_after is not None
+        if is_view_event and self.compare_enabled and has_pair:
+            if event.type() == QEvent.KeyPress and event.key() == Qt.Key_Space:
+                self._space_pan_active = True
+                self.view.setCursor(Qt.OpenHandCursor)
                 return True
-            if event.type() == QEvent.MouseMove and self._compare_drag_active:
-                self._set_slider_from_view_event(obj, event)
+            if event.type() == QEvent.KeyRelease and event.key() == Qt.Key_Space:
+                self._space_pan_active = False
+                if not self._pan_active:
+                    self.view.unsetCursor()
                 return True
-            if event.type() == QEvent.MouseButtonRelease and event.button() == Qt.LeftButton and self._compare_drag_active:
-                self._set_slider_from_view_event(obj, event)
-                self._compare_drag_active = False
+
+            if event.type() == QEvent.MouseButtonPress:
+                viewport_pos = self._event_viewport_position(obj, event)
+                if event.button() == Qt.MiddleButton or (
+                    event.button() == Qt.LeftButton and self._space_pan_active
+                ):
+                    self._start_pan(viewport_pos)
+                    return True
+                if event.button() == Qt.LeftButton:
+                    handle_x = self._compare_handle_x()
+                    if handle_x is not None and abs(viewport_pos.x() - handle_x) <= 12:
+                        self._compare_drag_active = True
+                        self._set_slider_from_view_event(obj, event)
+                    event.accept()
+                    return True
+            if event.type() == QEvent.MouseMove:
+                viewport_pos = self._event_viewport_position(obj, event)
+                if self._pan_active:
+                    self._continue_pan(viewport_pos)
+                    return True
+                if self._compare_drag_active:
+                    self._set_slider_from_view_event(obj, event)
+                    return True
+            if event.type() == QEvent.MouseButtonRelease and (
+                self._pan_active or self._compare_drag_active
+            ):
+                if self._compare_drag_active:
+                    self._set_slider_from_view_event(obj, event)
+                self._end_pointer_interaction()
                 return True
-        if obj in (self.view, self.view.viewport()) and event.type() == QEvent.Leave:
-            self._compare_drag_active = False
         return super().eventFilter(obj, event)
 
     def _set_slider_from_view_event(self, obj, event):
@@ -17081,6 +17186,9 @@ class BlendViewer(QWidget):
         x_pos = int(round(max(0.0, min(float(width), local_x))))
         value = int(round((float(x_pos) / float(width)) * 100.0))
         self.slider.setValue(max(0, min(100, value)))
+
+    def _update_compare_position(self, value):
+        self.compare_position_label.setText(f"{int(value)}%")
 
     def update_blend(self):
         if self.pix_before is None and self.pix_after is None:
@@ -20721,6 +20829,7 @@ class AstroApp(QMainWindow):
             self.history_items = []
         self.history_items.append(message)
         self.history_items = self.history_items[-40:]
+        self._set_status_operation(message)
         if hasattr(self, "console_window") and self.console_window is not None:
             self.console_window.log(message, level)
         self.update_photoshop_panel()
@@ -22029,6 +22138,7 @@ class AstroApp(QMainWindow):
             return
         mode = self.combo_stretch_bottom.itemData(index)
         self._bottom_stretch_mode_pending = str(mode or "linear")
+        self._update_viewer_status()
         if hasattr(self, "_bottom_stretch_preview_timer") and self._bottom_stretch_preview_timer is not None:
             self._bottom_stretch_preview_timer.start()
         else:
@@ -22070,6 +22180,7 @@ class AstroApp(QMainWindow):
             selected_index = self.combo_stretch_bottom.findData(selected_mode)
             if selected_index >= 0 and self.combo_stretch_bottom.currentIndex() != selected_index:
                 self.combo_stretch_bottom.setCurrentIndex(selected_index)
+        self._update_viewer_status()
         mode_label = {"linear": "Linear", "autostretch": "AutoStretch", "histogram": "Histogram"}[selected_mode]
         if bool(commit):
             self.apply_full_processing()
@@ -22693,6 +22804,16 @@ class AstroApp(QMainWindow):
                 self.lbl_plate_solve_details.setText(self.tr("plate_details_none", "Plate solve details: none"))
 
         self._translate_widgets_recursive(self)
+        if hasattr(self, "viewer"):
+            self.viewer.set_language(self.language)
+        if (
+            hasattr(self, "status_operation_label")
+            and self.status_operation_label.text() in {"Gotowy", "Ready"}
+        ):
+            self.status_operation_label.setText(
+                "Ready" if str(self.language).lower().startswith("en") else "Gotowy"
+            )
+        self._update_viewer_status()
         for dialog_name in (
             "correction_dialog",
             "star_correction_dialog",
@@ -25832,6 +25953,9 @@ class AstroApp(QMainWindow):
         self.viewer = BlendViewer()
         self.viewer.view.set_image_size_provider(self._viewer_image_size)
         self.viewer.view.zoom_changed_signal.connect(self.update_viewer_overlay)
+        self.viewer.view.zoom_changed_signal.connect(lambda _zoom: self._update_viewer_status())
+        self.viewer.view.image_changed_signal.connect(self._update_viewer_status)
+        self.viewer.view.imageHovered.connect(self._update_viewer_status)
         self.viewer.view.imageClicked.connect(self.on_viewer_image_clicked)
         self.viewer.view.roiDragStarted.connect(self._on_roi_drag_started)
         self.viewer.view.roiDragUpdated.connect(self._on_roi_drag_updated)
@@ -25943,6 +26067,26 @@ class AstroApp(QMainWindow):
         root_layout.addWidget(self.screen_stack, 1)
         self.setCentralWidget(root_widget)
 
+        self.status_operation_label = QLabel(
+            "Ready" if str(self.language).lower().startswith("en") else "Gotowy"
+        )
+        self.status_coordinates_label = QLabel("X: —  Y: —")
+        self.status_pixel_label = QLabel("ADU/RGB: —")
+        self.status_zoom_label = QLabel("Zoom: 100%")
+        self.status_size_label = QLabel("—")
+        self.status_stretch_label = QLabel("Stretch: linear")
+        self.statusBar().setSizeGripEnabled(False)
+        self.statusBar().addWidget(self.status_operation_label, 1)
+        for status_label in (
+            self.status_coordinates_label,
+            self.status_pixel_label,
+            self.status_zoom_label,
+            self.status_size_label,
+            self.status_stretch_label,
+        ):
+            self.statusBar().addPermanentWidget(status_label)
+        self._update_viewer_status()
+
         self._sync_plate_overlay_controls()
         self.update_menu_actions()
 
@@ -25953,6 +26097,60 @@ class AstroApp(QMainWindow):
         if isinstance(image, np.ndarray) and image.ndim >= 2:
             return image.shape[1], image.shape[0]
         return None
+
+    @staticmethod
+    def _format_status_pixel_value(value):
+        numeric = float(value)
+        if not np.isfinite(numeric):
+            return str(numeric)
+        if numeric.is_integer():
+            return str(int(numeric))
+        return f"{numeric:.5g}"
+
+    def _update_viewer_status(self, coordinates=None):
+        if not hasattr(self, "status_coordinates_label"):
+            return
+        english = str(getattr(self, "language", "pl")).lower().startswith("en")
+        if coordinates is None:
+            self.status_coordinates_label.setText("X: —  Y: —")
+            self.status_pixel_label.setText("ADU/RGB: —")
+        else:
+            x, y = (int(value) for value in coordinates)
+            self.status_coordinates_label.setText(f"X: {x}  Y: {y}")
+            image = self._native_loaded_image
+            if not isinstance(image, np.ndarray):
+                image = self.original_img
+            if not isinstance(image, np.ndarray):
+                image = self.magic_img
+            pixel_text = "ADU/RGB: —"
+            if isinstance(image, np.ndarray) and image.ndim >= 2 and 0 <= y < image.shape[0] and 0 <= x < image.shape[1]:
+                pixel = np.asarray(image[y, x]).reshape(-1)
+                values = [self._format_status_pixel_value(value) for value in pixel]
+                if len(values) >= 3:
+                    pixel_text = f"RGB: {values[2]}, {values[1]}, {values[0]}"
+                    if len(values) >= 4:
+                        pixel_text = f"RGBA: {values[2]}, {values[1]}, {values[0]}, {values[3]}"
+                elif values:
+                    pixel_text = f"ADU: {values[0]}"
+            self.status_pixel_label.setText(pixel_text)
+
+        size = self._viewer_image_size()
+        self.status_size_label.setText(
+            f"{size[0]} × {size[1]}" if size is not None else "—"
+        )
+        zoom = float(getattr(self.viewer.view, "scale_factor", 1.0))
+        self.status_zoom_label.setText(
+            f"{'Zoom' if english else 'Powiększenie'}: {zoom * 100:.0f}%"
+        )
+        mode = str(self.combo_stretch_bottom.currentData() or "linear")
+        self.status_stretch_label.setText(
+            f"{'Stretch' if english else 'Tryb stretch'}: {mode}"
+        )
+
+    def _set_status_operation(self, message):
+        if hasattr(self, "status_operation_label"):
+            self.status_operation_label.setText(str(message))
+            self.status_operation_label.setToolTip(str(message))
 
     def on_viewer_image_clicked(self, x, y):
      """ObsĹ‚uga klikniÄ™cia na obraz - alternatywa dla PixInsight i Photoshopa"""
