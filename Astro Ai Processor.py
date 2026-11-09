@@ -5073,6 +5073,29 @@ class Fly3DDialog(QDialog):
         if item is not None and item.flags() & Qt.ItemIsEnabled:
             self.stage_nav.setCurrentRow(target)
 
+    def _stage_validation_error(self, stage: int) -> str:
+        if stage == Fly3DStage.ZONE_SELECTION and not self._is_stage1_complete():
+            return (
+                "Complete zone selection before continuing."
+                if self.language == "en"
+                else "Podziel caly obraz na strefy przed przejsciem dalej."
+            )
+        if stage == Fly3DStage.STAR_ADDITION and self.chk_add_stars.isChecked():
+            mask_path = str(self.edit_stars_mask_path.text() or "").strip()
+            if not mask_path or not os.path.exists(mask_path):
+                return (
+                    "Choose a valid StarMask file or layer folder."
+                    if self.language == "en"
+                    else "Wybierz poprawny plik StarMask lub folder warstw."
+                )
+        if stage == Fly3DStage.MOTION and not self._build_motion_behaviors():
+            return (
+                "Add layers in stage 2 before configuring motion."
+                if self.language == "en"
+                else "Dodaj warstwy w etapie 2 przed ustawieniem ruchu."
+            )
+        return ""
+
     def _update_stage_navigation(self, index: int):
         stage_count = self.stage_nav.count()
         if stage_count < 1:
@@ -5318,6 +5341,21 @@ class Fly3DDialog(QDialog):
             return
         if index < 0:
             return
+        previous_stage = int(self.stage_stack.currentIndex())
+        if index > previous_stage:
+            for stage in range(previous_stage, index):
+                error = self._stage_validation_error(stage)
+                if not error:
+                    continue
+                self._updating_stage_gate = True
+                self.stage_nav.setCurrentRow(stage)
+                self.stage_stack.setCurrentIndex(stage)
+                self._updating_stage_gate = False
+                self._update_run_button_visibility(stage)
+                self._update_cut_sections_visibility(stage)
+                QMessageBox.warning(self, "3D FLY", error)
+                self._update_stage_navigation(stage)
+                return
         if index != Fly3DStage.MOTION:
             self._stop_motion_clip_preview()
         if index > Fly3DStage.ZONE_SELECTION and not self._is_stage1_complete():
@@ -5356,16 +5394,12 @@ class Fly3DDialog(QDialog):
         if current_stage != last_stage:
             self.stage_nav.setCurrentRow(last_stage)
             return
-        if hasattr(self, "chk_add_stars") and self.chk_add_stars.isChecked():
-            mask_path = str(self.edit_stars_mask_path.text() or "").strip() if hasattr(self, "edit_stars_mask_path") else ""
-            if not mask_path or not os.path.exists(mask_path):
-                QMessageBox.warning(self, "Dodaj gwiazdy", "Wybierz poprawny plik StarMask lub folder warstw.")
-                self.stage_nav.setCurrentRow(Fly3DStage.STAR_ADDITION)
+        for stage in (Fly3DStage.STAR_ADDITION, Fly3DStage.MOTION):
+            error = self._stage_validation_error(stage)
+            if error:
+                QMessageBox.warning(self, "3D FLY", error)
+                self.stage_nav.setCurrentRow(stage)
                 return
-        if len(self._build_motion_behaviors()) == 0:
-            QMessageBox.warning(self, "3D FLY", "Brak warstw do ruchu. Najpierw podziel obraz lub wczytaj pocięte warstwy.")
-            self.stage_nav.setCurrentRow(Fly3DStage.ZONE_SELECTION)
-            return
         super().accept()
 
     def _on_zone_changed(self):

@@ -56,7 +56,7 @@ Priorytety: **P0** = błędy i atrapy (robić najpierw), **P1** = duży wpływ n
 
 ### 3D FLY
 - [x] Przyciski **Wstecz / Dalej** i wskaźnik postępu etapów.
-- [ ] Walidacja na każdym etapie (maska gwiazd, warstwy), a nie dopiero przy renderze.
+- [x] Walidacja na każdym etapie (maska gwiazd, warstwy), a nie dopiero przy renderze.
 - [x] Oznaczyć etap 1 jako opcjonalny, wyjaśnić kolejność.
 - [ ] Zapis i odczyt projektu 3D FLY; potwierdzenie przy zamknięciu krzyżykiem.
 - [ ] Anulowanie renderu, po zakończeniu "Otwórz plik / Pokaż w folderze".
