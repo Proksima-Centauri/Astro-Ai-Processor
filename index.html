@@ -385,6 +385,10 @@
       margin-bottom: 24px;
     }
 
+    .compare-stage[hidden] {
+      display: none;
+    }
+
     .compare-stage {
       width: 100%;
       max-width: 1420px;
@@ -1357,6 +1361,23 @@
       </article>
     </section>
 
+    <section class="compare-stage" data-only-target="ngc281">
+      <article class="compare card">
+        <h3 id="txtCompare5Title">Wyostrzanie obrazu astronomicznego — Sharpen</h3>
+        <p id="txtCompare5Body">Przesuń suwak, aby porównać obraz przed i po wyostrzeniu. Użyj zoomu, aby zobaczyć detale.</p>
+        <div class="compare-box" data-compare>
+          <img class="compare-layer" src="assets/website/sharpen/ngc281/ngc281/ngc_281.png" data-ngc281-src="assets/website/sharpen/ngc281/ngc281/ngc_281.png" data-ngc281-alt="Astro AI Processor astrophotography image before Sharpen, NGC 281" alt="Astro AI Processor astrophotography image before Sharpen, NGC 281">
+          <div class="compare-after-wrap">
+            <img class="compare-layer" src="assets/website/sharpen/ngc281/ngc281/ngc_281_sharpened.png" data-ngc281-src="assets/website/sharpen/ngc281/ngc281/ngc_281_sharpened.png" data-ngc281-alt="Astro AI Processor astrophotography image after Sharpen, NGC 281" alt="Astro AI Processor astrophotography image after Sharpen, NGC 281">
+          </div>
+          <div class="compare-divider" aria-hidden="true"></div>
+          <span class="compare-tag before" data-before-tag>Przed</span>
+          <span class="compare-tag after" id="txtTagSharpened">Po wyostrzeniu</span>
+          <input class="compare-slider" type="range" min="0" max="100" value="50" aria-label="Suwak porownania Sharpen">
+        </div>
+      </article>
+    </section>
+
     <section class="compare-stage">
       <article class="roadmap card">
         <h3 id="txtRoadmapTitle">Roadmapa rozwoju</h3>
@@ -1644,9 +1665,12 @@
         txtCompare3Body: "Porównaj oryginalny obraz astronomiczny z wynikiem korekcji tła.",
         txtCompare4Title: "Astro Upscale — powiększanie obrazu astrofotograficznego",
         txtCompare4Body: "Przesun suwak, aby porownac oryginalny obraz z wersja 4×. Uzyj zoomu, aby zobaczyc piksele.",
+        txtCompare5Title: "Wyostrzanie obrazu astronomicznego — Sharpen",
+        txtCompare5Body: "Przesuń suwak, aby porównać obraz przed i po wyostrzeniu. Użyj zoomu, aby zobaczyć detale.",
         txtTagBefore: "Przed",
         txtTagAfter: "Po AI",
         txtTagCorrected: "Po korekcji",
+        txtTagSharpened: "Po wyostrzeniu",
         txtZoomIn: "Powieksz",
         txtZoomOut: "Pomniejsz",
         txtPanToggle: "Wlacz przesuwanie",
@@ -1746,9 +1770,12 @@
         txtCompare3Body: "Compare the original astronomical image with the background-corrected result.",
         txtCompare4Title: "Astro Upscale — astrophotography image upscaling",
         txtCompare4Body: "Move the slider to compare the original image with the 4× version. Zoom in to inspect pixels.",
+        txtCompare5Title: "Astrophotography sharpening — Sharpen",
+        txtCompare5Body: "Move the slider to compare the image before and after sharpening. Zoom in to inspect detail.",
         txtTagBefore: "Before",
         txtTagAfter: "After AI",
         txtTagCorrected: "Corrected",
+        txtTagSharpened: "Sharpened",
         txtZoomIn: "Zoom in",
         txtZoomOut: "Zoom out",
         txtPanToggle: "Enable panning",
@@ -1848,9 +1875,12 @@
         txtCompare3Body: "Vergleichen Sie das Originalbild mit dem Ergebnis der Hintergrundkorrektur.",
         txtCompare4Title: "Astro Upscale — Astrofotos vergrößern",
         txtCompare4Body: "Vergleichen Sie das Original mit der 4×-Version. Zoomen Sie hinein, um Pixel zu prüfen.",
+        txtCompare5Title: "Astrofotos schärfen — Sharpen",
+        txtCompare5Body: "Verschieben Sie den Regler, um das Bild vor und nach dem Schärfen zu vergleichen. Zoomen Sie hinein, um Details zu prüfen.",
         txtTagBefore: "Vorher",
         txtTagAfter: "Nach KI",
         txtTagCorrected: "Korrigiert",
+        txtTagSharpened: "Geschärft",
         txtZoomIn: "Vergrößern",
         txtZoomOut: "Verkleinern",
         txtPanToggle: "Verschieben aktivieren",
@@ -1950,9 +1980,12 @@
         txtCompare3Body: "Compara la imagen original con el resultado de la corrección del fondo.",
         txtCompare4Title: "Astro Upscale — ampliación de astrofotografías",
         txtCompare4Body: "Compara la imagen original con la versión 4×. Usa el zoom para ver los píxeles.",
+        txtCompare5Title: "Nitidez en astrofotografía — Sharpen",
+        txtCompare5Body: "Mueve el control deslizante para comparar la imagen antes y después de aplicar nitidez. Usa el zoom para ver los detalles.",
         txtTagBefore: "Antes",
         txtTagAfter: "Después de IA",
         txtTagCorrected: "Corregido",
+        txtTagSharpened: "Con nitidez",
         txtZoomIn: "Acercar",
         txtZoomOut: "Alejar",
         txtPanToggle: "Activar desplazamiento",
@@ -2052,9 +2085,12 @@
         txtCompare3Body: "Comparez l’image originale au résultat de la correction du fond.",
         txtCompare4Title: "Astro Upscale — agrandissement d’astrophotographies",
         txtCompare4Body: "Comparez l’image originale à la version 4×. Zoomez pour examiner les pixels.",
+        txtCompare5Title: "Netteté des astrophotographies — Sharpen",
+        txtCompare5Body: "Déplacez le curseur pour comparer l’image avant et après l’accentuation. Zoomez pour examiner les détails.",
         txtTagBefore: "Avant",
         txtTagAfter: "Après l’IA",
         txtTagCorrected: "Corrigé",
+        txtTagSharpened: "Accentuée",
         txtZoomIn: "Zoom avant",
         txtZoomOut: "Zoom arrière",
         txtPanToggle: "Activer le déplacement",
@@ -2336,6 +2372,11 @@
         const alt = image.dataset[`${target}Alt`];
         if (source) image.src = source;
         if (alt) image.alt = alt;
+      });
+
+      // Sections without data for the selected target (e.g. no C11 yet) are hidden.
+      document.querySelectorAll("[data-only-target]").forEach((section) => {
+        section.hidden = section.dataset.onlyTarget !== target;
       });
 
       document.querySelectorAll("button[data-comparison-target]").forEach((button) => {
