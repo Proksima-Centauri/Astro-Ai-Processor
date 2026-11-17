@@ -12,3 +12,6 @@ __pycache__/
 /update_api.db
 /update_api_server.py
 /update_notifier.py
+
+# Local Python runtime used to create the project venv
+/.uv-python/

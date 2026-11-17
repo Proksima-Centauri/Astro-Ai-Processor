@@ -159,7 +159,7 @@ from PyQt5.QtWidgets import (
     QMenuBar, QMenu, QAction, QDialog, QStyle, QSpinBox,
     QDoubleSpinBox, QTextEdit, QLineEdit, QComboBox, QCompleter, QSplitter, QDialogButtonBox,
     QScrollArea, QStackedLayout, QTabBar, QListWidget, QListWidgetItem, QStackedWidget, QPlainTextEdit, QSizeGrip,
-    QSplashScreen, QStyledItemDelegate,
+    QSplashScreen, QStyledItemDelegate, QButtonGroup,
 )
 from PyQt5.QtGui import QImage, QPixmap, QPainter, QIcon, QColor, QFont, QPolygon, QPolygonF, QPen, QPalette, QRegion, QLinearGradient, QDrag, QCursor, QTransform, QImageReader, QTextDocument
 from PyQt5.QtCore import Qt, QPoint, QPointF, QRect, QRectF, QThread, pyqtSignal, QTimer, QSize, QByteArray, QEvent, qInstallMessageHandler, QMimeData
@@ -255,6 +255,33 @@ I18N = {
     "onboarding_adjustments_body": {"pl": "Dolny panel zawiera podstawowe suwaki obrazu i korekty kolorów.", "en": "The lower panel contains basic image and color adjustment controls."},
     "onboarding_assistant_title": {"pl": "Asystent Altair", "en": "Altair assistant"},
     "onboarding_assistant_body": {"pl": "Panel boczny pozwala korzystać z asystenta AI podczas pracy nad obrazem.", "en": "Use the side panel to work with the AI assistant while editing."},
+    "mode_easy": {"pl": "Easy", "en": "Easy"},
+    "mode_pro_label": {"pl": "Pro", "en": "Pro"},
+    "mode_easy_tooltip": {"pl": "Przełącz na tryb łatwy", "en": "Switch to Easy mode"},
+    "mode_easy_active": {"pl": "Aktywny tryb łatwy", "en": "Easy mode is active"},
+    "mode_pro": {"pl": "Przełącz na tryb Pro", "en": "Switch to Pro"},
+    "mode_pro_active": {"pl": "Aktywny tryb Pro", "en": "Pro mode is active"},
+    "easy_title": {"pl": "Prosty proces obróbki", "en": "Easy workflow"},
+    "easy_scale_down": {"pl": "Zmniejsz zawartość", "en": "Scale content down"},
+    "easy_scale_up": {"pl": "Powiększ zawartość", "en": "Scale content up"},
+    "easy_stage_load": {"pl": "1. Wczytaj obraz", "en": "1. Load Image"},
+    "easy_stage_background": {"pl": "2. Usuń tło", "en": "2. Extract background"},
+    "easy_stage_calibration": {"pl": "3. Kalibracja kolorów", "en": "3. Color calibration"},
+    "easy_stage_stretch": {"pl": "4. Rozciągnij histogram", "en": "4. Stretch"},
+    "easy_stage_denoise": {"pl": "5. Odszumianie", "en": "5. Denoise"},
+    "easy_stage_sharpen": {"pl": "6. Wyostrzanie", "en": "6. Sharpen"},
+    "easy_stage_correction": {"pl": "7. Korekta", "en": "7. Correction"},
+    "easy_stage_save": {"pl": "8. Zapisz", "en": "8. Save"},
+    "easy_stage_load_description": {"pl": "Wczytaj zdjęcie astronomiczne, aby rozpocząć.", "en": "Choose an astronomical image to begin."},
+    "easy_stage_background_description": {"pl": "Usuń gradienty i nierówne tło nieba.", "en": "Remove gradients and uneven sky background."},
+    "easy_stage_calibration_description": {"pl": "Ustaw naturalny balans kolorów obrazu.", "en": "Set a natural color balance for the image."},
+    "easy_stage_stretch_description": {"pl": "Rozjaśnij obraz liniowy, aby wydobyć szczegóły.", "en": "Brighten the linear image to reveal its details."},
+    "easy_stage_denoise_description": {"pl": "Ogranicz szum na zdjęciu.", "en": "Reduce noise in the image."},
+    "easy_stage_sharpen_description": {"pl": "Wydobądź drobne szczegóły obrazu.", "en": "Bring out fine image details."},
+    "easy_stage_correction_description": {"pl": "Wprowadź końcowe korekty obrazu i gwiazd.", "en": "Make final image and star corrections."},
+    "easy_stage_save_description": {"pl": "Zapisz gotowy obraz lub jego kopię.", "en": "Save the finished image or a copy."},
+    "easy_previous": {"pl": "Wstecz", "en": "Back"},
+    "easy_next": {"pl": "Dalej", "en": "Next"},
     "action_open": {"pl": "Otwórz", "en": "Open"},
     "action_save": {"pl": "Zapisz", "en": "Save"},
     "action_save_as": {"pl": "Zapisz jako...", "en": "Save As..."},
@@ -3132,6 +3159,61 @@ class BackgroundExtractionDialog(QDialog):
             "spline_order": int(self.spin_spline_order.value()),
             "points_per_row": int(self.spin_grid_points.value()),
             "background_points": np.asarray(self._background_points, dtype=int).reshape(-1, 2),
+        }
+
+
+class EasySharpenPanel(QFrame):
+    """Classic, user-controlled sharpening methods for the Easy workflow."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFrameShape(QFrame.StyledPanel)
+        layout = QVBoxLayout(self)
+        apply_standard_layout_margins(layout)
+        info = QLabel("Wyostrzanie klasyczne: maska nieostrości, high pass, Laplacian lub Richardson–Lucy.")
+        info.setWordWrap(True)
+        layout.addWidget(info)
+
+        method_row = QHBoxLayout()
+        method_row.addWidget(QLabel("Metoda:"))
+        self.combo_method = QComboBox()
+        for label, key in (("Unsharp Mask", "usm"), ("High Pass", "highpass"),
+                           ("Laplacian", "lap"), ("Richardson–Lucy", "rl")):
+            self.combo_method.addItem(label, key)
+        method_row.addWidget(self.combo_method, 1)
+        layout.addLayout(method_row)
+
+        self.sliders = {}
+        for key, title, minimum, maximum, value, divisor, suffix in (
+            ("strength", "Siła", 0, 300, 120, 1, "%"),
+            ("radius", "Promień / sigma", 5, 50, 14, 10, " px"),
+            ("threshold", "Próg szumu", 0, 30, 3, 1, ""),
+            ("iterations", "Iteracje Richardson–Lucy", 1, 25, 10, 1, ""),
+        ):
+            label = QLabel()
+            slider = QSlider(Qt.Horizontal)
+            slider.setRange(minimum, maximum)
+            slider.setValue(value)
+            slider.valueChanged.connect(
+                lambda v, lbl=label, name=title, div=divisor, end=suffix:
+                    lbl.setText(f"{name}: {v / div:g}{end}")
+            )
+            slider.valueChanged.emit(value)
+            layout.addWidget(label)
+            layout.addWidget(slider)
+            self.sliders[key] = slider
+        self.sliders["iterations"].setToolTip("Liczba iteracji dla metody Richardson–Lucy.")
+        self.btn_apply = QPushButton("Zastosuj wyostrzanie")
+        self.btn_apply.setProperty("accent", True)
+        layout.addWidget(self.btn_apply)
+
+    def get_parameters(self):
+        return {
+            "method": self.combo_method.currentData(),
+            "strength": self.sliders["strength"].value(),
+            "radius": self.sliders["radius"].value() / 10.0,
+            "threshold": self.sliders["threshold"].value(),
+            "iterations": self.sliders["iterations"].value(),
         }
 
 
@@ -12392,6 +12474,40 @@ def normalize_to_uint8_bgr(img: np.ndarray) -> np.ndarray:
     return img
 
 
+def apply_classic_sharpen(img: np.ndarray, params: dict) -> np.ndarray:
+    """Apply the four classic sharpening methods used by AstroSharp Lab."""
+    base = normalize_to_uint8_bgr(img).astype(np.float32)
+    method = str(params.get("method", "usm"))
+    amount = float(params.get("strength", 120)) / 100.0
+    sigma = max(0.1, float(params.get("radius", 1.4)))
+    threshold = float(params.get("threshold", 3))
+    if method in ("usm", "highpass"):
+        blurred = cv2.GaussianBlur(base, (0, 0), sigma, borderType=cv2.BORDER_REPLICATE)
+        detail = base - blurred
+        detail[np.abs(detail) < threshold] = 0
+        result = base + amount * detail
+    elif method == "lap":
+        kernel = np.array([[0, -1, 0], [-1, 4, -1], [0, -1, 0]], dtype=np.float32)
+        detail = cv2.filter2D(base, -1, kernel, borderType=cv2.BORDER_REPLICATE)
+        detail[np.abs(detail) < threshold] = 0
+        result = base + amount * detail
+    elif method == "rl":
+        observed = base
+        estimate = base.copy()
+        iterations = max(1, min(25, int(params.get("iterations", 10))))
+        for _ in range(iterations):
+            estimate_blur = cv2.GaussianBlur(estimate, (0, 0), sigma, borderType=cv2.BORDER_REPLICATE)
+            ratio = observed / np.maximum(1.0, estimate_blur)
+            correction = cv2.GaussianBlur(ratio, (0, 0), sigma, borderType=cv2.BORDER_REPLICATE)
+            estimate = np.clip(estimate * correction, 0.0, 255.0)
+        detail = estimate - base
+        detail[np.abs(detail) < threshold] = 0
+        result = base + amount * detail
+    else:
+        raise ValueError(f"Unknown sharpening method: {method}")
+    return np.clip(result, 0, 255).astype(np.uint8)
+
+
 def normalize_to_uint16_bgr(img: np.ndarray) -> np.ndarray:
     """Convert supported source images to a deepSNR-compatible 16-bit BGR image."""
     linear = normalize_to_linear_bgr(img)
@@ -13291,7 +13407,7 @@ def get_legacy_config_path() -> str:
 def get_default_config() -> dict:
     return {
         "denoise_model_path": None,
-        "bg_removal_model_path": None,
+        "bg_removal_model_path": find_default_background_model(),
         "deconvolution_model_path": None,
         "deconvolution_stellar_model_path": None,
         "deconvolution_object_model_path": None,
@@ -13315,6 +13431,42 @@ def get_default_config() -> dict:
         "topbar_button_order": [],
         "recent_images": [],
     }
+
+
+def find_default_background_model() -> str | None:
+    """Find a bundled model or an existing GraXpert user installation."""
+    project_dir = Path(__file__).resolve().parent
+    roots = [
+        project_dir / "models" / "background_extraction",
+        project_dir / "models" / "bge-ai-models",
+    ]
+    if sys.platform == "win32":
+        app_data = os.environ.get("LOCALAPPDATA")
+        if app_data:
+            roots.append(Path(app_data) / "GraXpert" / "bge-ai-models")
+    elif sys.platform == "darwin":
+        roots.append(Path.home() / "Library" / "Application Support" / "GraXpert" / "bge-ai-models")
+    else:
+        roots.append(Path.home() / ".local" / "share" / "GraXpert" / "bge-ai-models")
+
+    candidates = []
+    for root in roots:
+        if not root.is_dir():
+            continue
+        direct = root / "model.onnx"
+        if direct.is_file():
+            candidates.append(direct)
+        try:
+            candidates.extend(path for path in root.glob("*/model.onnx") if path.is_file())
+        except OSError:
+            continue
+    if not candidates:
+        return None
+
+    def version_key(path):
+        return tuple(int(part) for part in re.findall(r"\d+", path.parent.name)) or (0,)
+
+    return str(max(candidates, key=version_key))
 
 
 def load_config() -> dict:
@@ -13351,6 +13503,8 @@ def load_config() -> dict:
                 config["denoise_model_path"] = None
             if config.get("bg_removal_model_path") and not os.path.exists(config["bg_removal_model_path"]):
                 config["bg_removal_model_path"] = None
+            if not config.get("bg_removal_model_path"):
+                config["bg_removal_model_path"] = find_default_background_model()
             legacy_deconvolution_path = config.get("deconvolution_model_path")
             if not config.get("deconvolution_stellar_model_path") and legacy_deconvolution_path:
                 config["deconvolution_stellar_model_path"] = legacy_deconvolution_path
@@ -17963,23 +18117,29 @@ def get_dark_stylesheet() -> str:
 
     QCheckBox {
         color: #f0f0f0;
-        spacing: 0px;
-        background-color: #252526;
-        border: 1px solid #000000;
-        border-radius: 4px;
-        padding: 1px 6px;
+        spacing: 6px;
+        background: transparent;
+        border: none;
+        padding: 0px;
         min-height: 0px;
     }
 
     QCheckBox:checked {
-        background-color: #007acc;
-        border: 1px solid #000000;
-        color: #ffffff;
+        background: transparent;
+        color: #f0f0f0;
     }
 
     QCheckBox::indicator {
-        width: 0px;
-        height: 0px;
+        width: 13px;
+        height: 13px;
+        border: 1px solid #000000;
+        border-radius: 3px;
+        background: #252526;
+    }
+
+    QCheckBox::indicator:checked {
+        background: #007acc;
+        border: 1px solid #000000;
     }
 
     QCheckBox[rgbChannelToggle="true"] {
@@ -18159,23 +18319,29 @@ def get_light_stylesheet() -> str:
 
     QCheckBox {
         color: #1f1f1f;
-        spacing: 0px;
-        background-color: #f4f4f4;
-        border: 1px solid #000000;
-        border-radius: 4px;
-        padding: 1px 6px;
+        spacing: 6px;
+        background: transparent;
+        border: none;
+        padding: 0px;
         min-height: 0px;
     }
 
     QCheckBox:checked {
-        background-color: #007acc;
-        border: 1px solid #000000;
-        color: #ffffff;
+        background: transparent;
+        color: #1f1f1f;
     }
 
     QCheckBox::indicator {
-        width: 0px;
-        height: 0px;
+        width: 13px;
+        height: 13px;
+        border: 1px solid #000000;
+        border-radius: 3px;
+        background: #f4f4f4;
+    }
+
+    QCheckBox::indicator:checked {
+        background: #007acc;
+        border: 1px solid #000000;
     }
 
     QCheckBox[rgbChannelToggle="true"] {
@@ -19698,7 +19864,7 @@ class AstroApp(QMainWindow):
                 base = self.get_effective_magic_img()
             return PreviewCache.resize(base)
         preview_img = cache.stage("source", source_key, prepare_source)
-        before_key = (source_key, parameter_key(self.channel_visibility),
+        before_key = (source_key, parameter_key(self.channel_visibility), self._bottom_preview_channel,
                       self.display_stretch_mode, self.display_stretch_linked)
         before = cache.stage("before", before_key, lambda: np_to_qpixmap(self.apply_channel_visibility(preview_img)))
         # BlendViewer.set_before clears After, so update Before only when needed.
@@ -19714,15 +19880,13 @@ class AstroApp(QMainWindow):
             img = cache.stage("autostretch", result_key, lambda: stretch_image(img, "autostretch"))
         preview_processed = restore_processed_dtype(img, preview_img.dtype)
         display_key = (result_key, levels.get("autostretch", False), self.display_stretch_mode,
-                       self.display_stretch_linked, parameter_key(self.channel_visibility))
+                       self.display_stretch_linked, parameter_key(self.channel_visibility),
+                       self._bottom_preview_channel)
         def prepare_display():
-            if self.display_stretch_mode == "linear":
-                display = preview_processed
-            else:
-                # Only screen rendering may use a smaller statistical sample.
-                small = PreviewCache.resize(preview_processed, 600)
-                display = self._apply_display_stretch(small)
-                display = cv2.resize(display, (preview_processed.shape[1], preview_processed.shape[0]), interpolation=cv2.INTER_LINEAR)
+            # Keep the transformed preview on the same working scale as the
+            # Before image. Stretch statistics computed from a second resize
+            # made the two sides of the comparison visibly disagree.
+            display = self._apply_display_stretch(preview_processed)
             return self.apply_channel_visibility(display)
         display_img = cache.stage("display", display_key, prepare_display)
         if preview_processed is not None:
@@ -19981,6 +20145,7 @@ class AstroApp(QMainWindow):
     def run_deepsnr(self, strength=None):
         if strength is None:
             dialog = self._get_deepsnr_dialog()
+            self._restore_easy_stage_dialogs()
             if dialog.exec_() != QDialog.Accepted:
                 self.log("deepSNR canceled.", "warning")
                 return False
@@ -21074,6 +21239,30 @@ class AstroApp(QMainWindow):
             self.processed_img,
         )
 
+    def _on_bottom_channel_preview_toggled(self, channel, checked):
+        channel = str(channel or "").lower()
+        if checked:
+            for other, check in self.bottom_channel_preview_checks.items():
+                if other != channel and check.isChecked():
+                    check.blockSignals(True)
+                    check.setChecked(False)
+                    check.blockSignals(False)
+            self._bottom_preview_channel = channel
+        elif self._bottom_preview_channel == channel:
+            self._bottom_preview_channel = None
+        if self.magic_img is not None:
+            self.apply_preview_processing()
+
+    def _apply_bottom_channel_preview(self, image):
+        channel = getattr(self, "_bottom_preview_channel", None)
+        if image is None or channel not in {"r", "g", "b"} or image.ndim != 3 or image.shape[2] < 3:
+            return image
+        index = {"b": 0, "g": 1, "r": 2}[channel]
+        gray = image[:, :, index]
+        if image.shape[2] == 4:
+            return np.dstack((gray, gray, gray, image[:, :, 3]))
+        return np.repeat(gray[:, :, None], 3, axis=2)
+
     def _get_image_for_analysis(self):
         if isinstance(self.processed_img, np.ndarray):
             return self.processed_img
@@ -21241,7 +21430,7 @@ class AstroApp(QMainWindow):
             out[:, :, 1] = 0
         if not self.channel_visibility.get("r", True):
             out[:, :, 2] = 0
-        return out
+        return self._apply_bottom_channel_preview(out)
 
     def convert_fits_to_linear_png_batch(self, input_dir: str = "", output_dir: str = "png_linear", recursive: bool = False):
         source_dir = str(input_dir or "").strip()
@@ -22214,6 +22403,10 @@ class AstroApp(QMainWindow):
             self.starnet_generate_starmask = previous_setting
 
     def show_levels_window(self):
+        if getattr(self, "interface_mode", "pro") == "easy":
+            self._set_easy_stage(3)
+            return
+        self._restore_easy_stage_dialogs()
         if self.magic_img is not None:
             self.levels_window.levels_widget.set_image(self.magic_img)
         self._begin_dialog_compare(self.levels_window)
@@ -22235,6 +22428,7 @@ class AstroApp(QMainWindow):
         self.log("Curves window opened.")
 
     def show_ghs_dialog(self):
+        self._restore_easy_stage_dialogs()
         self.ghs_dialog.set_params(self.ghs_params, notify=False)
         self._begin_dialog_compare(self.ghs_dialog)
         self.ghs_dialog.show()
@@ -22914,6 +23108,28 @@ class AstroApp(QMainWindow):
                 self.lbl_plate_solve_details.setText(self.tr("plate_details_none", "Plate solve details: none"))
 
         self._translate_widgets_recursive(self)
+        if hasattr(self, "mode_switch"):
+            self.btn_easy_mode.setText(self.tr("mode_easy", "Easy"))
+            self.btn_pro_mode.setText(self.tr("mode_pro_label", "Pro"))
+            self.btn_easy_mode.setToolTip(
+                self.tr("mode_easy_active", "Easy mode is active")
+                if getattr(self, "interface_mode", "pro") == "easy"
+                else self.tr("mode_easy_tooltip", "Switch to Easy mode")
+            )
+            self.btn_pro_mode.setToolTip(
+                self.tr("mode_pro_active", "Pro mode is active")
+                if getattr(self, "interface_mode", "pro") == "pro"
+                else self.tr("mode_pro", "Switch to Pro")
+            )
+        if hasattr(self, "easy_stage_buttons"):
+            self.easy_title_label.setText(self.tr("easy_title", "Easy workflow"))
+            for index, (key, fallback) in enumerate(self.easy_stage_names):
+                stage_name = self.tr(key, fallback)
+                self.easy_stage_buttons[index].setToolTip(stage_name)
+                self.easy_stage_buttons[index].setAccessibleName(stage_name)
+            self.easy_previous_button.setText(self.tr("easy_previous", "Back"))
+            self.easy_next_button.setText(self.tr("easy_next", "Next"))
+            self._update_easy_stage(self.easy_current_stage)
         if hasattr(self, "viewer"):
             self.viewer.set_language(self.language)
         if (
@@ -23205,6 +23421,10 @@ class AstroApp(QMainWindow):
             dialog.setGeometry(base.x() + margin + offset, base.y() + title_offset + margin + offset, width, height)
 
     def show_correction_panels(self):
+        if getattr(self, "interface_mode", "pro") == "easy":
+            self._set_easy_stage(6)
+            return
+        self._restore_easy_stage_dialogs()
         self._begin_dialog_compare(self.correction_dialog)
         self.correction_dialog.show()
         self.correction_dialog.raise_()
@@ -23212,6 +23432,10 @@ class AstroApp(QMainWindow):
         self.log("Correction window opened.")
 
     def show_star_correction_dialog(self):
+        if getattr(self, "interface_mode", "pro") == "easy":
+            self._set_easy_stage(6)
+            return
+        self._restore_easy_stage_dialogs()
         dialog = self._get_star_correction_dialog()
         self._begin_dialog_compare(dialog)
         dialog.show()
@@ -23247,6 +23471,9 @@ class AstroApp(QMainWindow):
         self.log("Star correction reset.")
 
     def show_color_calibration_dialog(self):
+        if getattr(self, "interface_mode", "pro") == "easy":
+            self._set_easy_stage(2)
+            return
         dialog = self._get_color_calibration_dialog()
         base_img = self._get_bn_source_image()
         if isinstance(base_img, np.ndarray) and base_img.ndim >= 2:
@@ -25542,7 +25769,9 @@ class AstroApp(QMainWindow):
         self.action_background_extraction.setEnabled(False)
 
         self.action_deconvolution = QAction("Deconvolution", self)
-        self.action_deconvolution.triggered.connect(self.run_deconvolution_onnx)
+        self.action_deconvolution.triggered.connect(
+            lambda _checked=False: self.run_deconvolution_onnx()
+        )
         self.action_deconvolution.setEnabled(False)
 
         self.action_local_contrast = QAction("Local Contrast Enhancement", self)
@@ -26004,12 +26233,15 @@ class AstroApp(QMainWindow):
             self.action_about,
         ])
         self.setMenuBar(menu_bar)
+        self.app_menu_bar = menu_bar
         menu_bar.setVisible(False)
+        self.command_palette_row = command_palette_row
         main_layout.addWidget(command_palette_row)
 
 
 
         top_panel = QFrame()
+        self.top_panel = top_panel
         top_panel_layout = QVBoxLayout(top_panel)
         top_panel_layout.setContentsMargins(8, 4, 8, 6)
         top_panel_layout.setSpacing(6)
@@ -26057,6 +26289,7 @@ class AstroApp(QMainWindow):
         top_panel_layout.addWidget(thumbnails_scroll, 1)
 
         right_panel = QFrame()
+        self.right_panel = right_panel
         right_layout = QVBoxLayout(right_panel)
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(6)
@@ -26096,8 +26329,21 @@ class AstroApp(QMainWindow):
         center_splitter.setCollapsible(1, True)
         center_splitter.setSizes([1060, 350])
 
+        # Easy mode keeps the same image workspace but guides the user through
+        # a short sequence of common processing steps in a dedicated sidebar.
+        self.easy_sidebar = self._build_easy_sidebar()
+        self.editor_center_splitter = QSplitter(Qt.Horizontal)
+        self.editor_center_splitter.addWidget(self.easy_sidebar)
+        self.editor_center_splitter.addWidget(center_splitter)
+        self.editor_center_splitter.setChildrenCollapsible(False)
+        self.editor_center_splitter.setCollapsible(0, True)
+        self.editor_center_splitter.setCollapsible(1, False)
+        self.editor_center_splitter.setStretchFactor(0, 0)
+        self.editor_center_splitter.setStretchFactor(1, 1)
+        self.editor_center_splitter.setSizes([300, 1250])
+
         self.workspace_splitter = QSplitter(Qt.Vertical)
-        self.workspace_splitter.addWidget(center_splitter)
+        self.workspace_splitter.addWidget(self.editor_center_splitter)
         self.workspace_splitter.addWidget(top_panel)
         self.workspace_splitter.setChildrenCollapsible(False)
         self.workspace_splitter.setStretchFactor(0, 1)
@@ -26148,11 +26394,11 @@ class AstroApp(QMainWindow):
         self.btn_stretch_channels.setToolTip("Channels currently linked; click to unlink")
         self.btn_stretch_channels.toggled.connect(self._on_stretch_channels_link_toggled)
         bottom_layout.addWidget(self.btn_stretch_channels)
-        self.btn_zoom_out_bottom = QPushButton("Pomniejsz -")
+        self.btn_zoom_out_bottom = QPushButton("−")
         self.btn_zoom_out_bottom.setToolTip("Pomniejsz podglad")
         self.btn_zoom_out_bottom.clicked.connect(self.viewer.view.zoom_out)
         bottom_layout.addWidget(self.btn_zoom_out_bottom)
-        self.btn_zoom_in_bottom = QPushButton("Powiększ +")
+        self.btn_zoom_in_bottom = QPushButton("+")
         self.btn_zoom_in_bottom.setToolTip("Powiększ podgląd")
         self.btn_zoom_in_bottom.clicked.connect(self.viewer.view.zoom_in)
         bottom_layout.addWidget(self.btn_zoom_in_bottom)
@@ -26160,24 +26406,61 @@ class AstroApp(QMainWindow):
         self.btn_zoom_fit_bottom.setToolTip("Dopasuj obraz do rozmiaru okna")
         self.btn_zoom_fit_bottom.clicked.connect(self.viewer.view.fit_to_window)
         bottom_layout.addWidget(self.btn_zoom_fit_bottom)
-        self.btn_grid_overlay_bottom = QPushButton("Siatka")
-        self.btn_grid_overlay_bottom.setCheckable(True)
+        self.btn_grid_overlay_bottom = QCheckBox("Siatka")
         self.btn_grid_overlay_bottom.setEnabled(False)
         self.btn_grid_overlay_bottom.setToolTip("Pokaż lub ukryj siatkę współrzędnych")
         self.btn_grid_overlay_bottom.toggled.connect(self._on_plate_dialog_grid_toggled)
         bottom_layout.addWidget(self.btn_grid_overlay_bottom)
-        self.btn_object_overlay_bottom = QPushButton("Obiekty")
-        self.btn_object_overlay_bottom.setCheckable(True)
+        self.btn_object_overlay_bottom = QCheckBox("Obiekty")
         self.btn_object_overlay_bottom.setEnabled(False)
         self.btn_object_overlay_bottom.setToolTip("Pokaż lub ukryj etykiety obiektów")
         self.btn_object_overlay_bottom.toggled.connect(self._on_plate_dialog_annotate_toggled)
         bottom_layout.addWidget(self.btn_object_overlay_bottom)
+        self.bottom_channel_preview_checks = {}
+        self._bottom_preview_channel = None
+        for channel in ("R", "G", "B"):
+            check = QCheckBox(channel)
+            check.setToolTip(f"Podgląd kanału {channel} w skali szarości")
+            check.toggled.connect(
+                lambda checked, key=channel.lower(): self._on_bottom_channel_preview_toggled(key, checked)
+            )
+            self.bottom_channel_preview_checks[channel.lower()] = check
+            bottom_layout.addWidget(check)
         bottom_layout.addStretch(1)
+        self.mode_switch = QFrame(bottom_panel)
+        self.mode_switch.setObjectName("modeSwitch")
+        self.mode_switch.setFixedSize(190, 38)
+        self.mode_switch.setStyleSheet(
+            "QFrame#modeSwitch { background: #252525; border: 1px solid #363636; border-radius: 20px; }"
+            "QPushButton { min-width: 68px; height: 30px; padding: 0 14px; border: 1px solid transparent; "
+            "border-radius: 16px; background: transparent; color: #d5d5d5; font-weight: 500; }"
+            "QPushButton:hover { color: #ffffff; background: #303030; }"
+            "QPushButton:checked { background: #3a3a3a; border-color: #4a4a4a; color: #ffffff; }"
+        )
+        mode_switch_layout = QHBoxLayout(self.mode_switch)
+        mode_switch_layout.setContentsMargins(3, 3, 3, 3)
+        mode_switch_layout.setSpacing(2)
+        self.mode_switch_group = QButtonGroup(self.mode_switch)
+        self.mode_switch_group.setExclusive(True)
+        self.btn_pro_mode = QPushButton(self.tr("mode_pro_label", "Pro"), self.mode_switch)
+        self.btn_pro_mode.setCheckable(True)
+        self.btn_pro_mode.setToolTip(self.tr("mode_pro", "Switch to Pro"))
+        self.btn_pro_mode.clicked.connect(lambda: self.set_interface_mode("pro"))
+        self.mode_switch_group.addButton(self.btn_pro_mode)
+        self.btn_easy_mode = QPushButton(self.tr("mode_easy", "Easy"), self.mode_switch)
+        self.btn_easy_mode.setCheckable(True)
+        self.btn_easy_mode.setToolTip(self.tr("mode_easy_tooltip", "Switch to Easy mode"))
+        self.btn_easy_mode.clicked.connect(lambda: self.set_interface_mode("easy"))
+        self.mode_switch_group.addButton(self.btn_easy_mode)
+        mode_switch_layout.addWidget(self.btn_pro_mode, 1)
+        mode_switch_layout.addWidget(self.btn_easy_mode, 1)
+        bottom_layout.addWidget(self.mode_switch)
         self.btn_check_updates = QPushButton(self.tr("check_updates", "Check for updates"))
         self.btn_check_updates.clicked.connect(lambda: self.check_for_new_version(user_initiated=True))
         bottom_layout.addWidget(self.btn_check_updates)
 
         main_layout.addWidget(bottom_panel)
+        self.bottom_panel = bottom_panel
         self.editor_page = main_widget
         self.screen_stack = QStackedWidget(root_widget)
         self.screen_stack.addWidget(self._build_dashboard_page())
@@ -26208,6 +26491,302 @@ class AstroApp(QMainWindow):
 
         self._sync_plate_overlay_controls()
         self.update_menu_actions()
+        self.set_interface_mode("easy")
+
+    def _build_easy_sidebar(self):
+        panel = QFrame()
+        panel.setObjectName("easyModeSidebar")
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(8)
+
+        header = QHBoxLayout()
+        self.easy_title_label = QLabel(self.tr("easy_title", "Easy workflow"))
+        self.easy_title_label.setStyleSheet("font-size: 17px; font-weight: 650;")
+        header.addWidget(self.easy_title_label, 1)
+        layout.addLayout(header)
+
+        self.easy_stage_names = [
+            ("easy_stage_load", "1. Load Image"),
+            ("easy_stage_background", "2. Extract background"),
+            ("easy_stage_calibration", "3. Color calibration"),
+            ("easy_stage_stretch", "4. Stretch"),
+            ("easy_stage_denoise", "5. Denoise"),
+            ("easy_stage_sharpen", "6. Sharpen"),
+            ("easy_stage_correction", "7. Correction"),
+            ("easy_stage_save", "8. Save"),
+        ]
+        self.easy_current_stage = 0
+        self.easy_stage_buttons = []
+        self._easy_dialog_originals = {}
+        self._easy_embedded_dialogs = []
+        self._easy_run_dialogs = []
+        self._easy_hidden_dialog_buttons = []
+        self.easy_progress_row = QHBoxLayout()
+        self.easy_progress_row.setContentsMargins(0, 2, 0, 2)
+        self.easy_progress_row.setSpacing(4)
+        for index, (key, fallback) in enumerate(self.easy_stage_names):
+            button = QPushButton(str(index + 1), panel)
+            button.setObjectName("easyStageNumber")
+            button.setFixedSize(34, 34)
+            button.setStyleSheet(
+                "QPushButton#easyStageNumber { border: 1px solid #394352; border-radius: 17px; "
+                "background: #232a32; color: #d3dce8; font-size: 13px; font-weight: 700; }"
+                "QPushButton#easyStageNumber[stageState='active'] { background: #354554; "
+                "border: 1px solid #70c4e7; color: #ffffff; }"
+                "QPushButton#easyStageNumber[stageState='complete'] { background: #293b38; "
+                "border: 1px solid #4c776b; color: #c7e9dd; }"
+                "QPushButton#easyStageNumber:hover { border-color: #70c4e7; }"
+            )
+            button.setCursor(Qt.PointingHandCursor)
+            button.setToolTip(self.tr(key, fallback))
+            button.setAccessibleName(self.tr(key, fallback))
+            button.setProperty("stageState", "upcoming")
+            button.clicked.connect(lambda _checked=False, stage=index: self._set_easy_stage(stage))
+            self.easy_stage_buttons.append(button)
+            self.easy_progress_row.addWidget(button)
+        self.easy_progress_row.addStretch(1)
+        layout.addLayout(self.easy_progress_row)
+
+        self.easy_stage_title = QLabel()
+        self.easy_stage_title.setWordWrap(True)
+        self.easy_stage_title.setStyleSheet("font-size: 15px; font-weight: 600;")
+        layout.addWidget(self.easy_stage_title)
+        self.easy_stage_description = QLabel()
+        self.easy_stage_description.setWordWrap(True)
+        self.easy_stage_description.setStyleSheet("color: #9aa8b8;")
+        layout.addWidget(self.easy_stage_description)
+
+        self.easy_actions_widget = QWidget(panel)
+        self.easy_actions_layout = QVBoxLayout(self.easy_actions_widget)
+        self.easy_actions_layout.setContentsMargins(0, 6, 0, 0)
+        self.easy_actions_layout.setSpacing(7)
+        self.easy_action_buttons = []
+        self.easy_actions_scroll = QScrollArea(panel)
+        self.easy_actions_scroll.setWidgetResizable(True)
+        self.easy_actions_scroll.setFrameShape(QFrame.NoFrame)
+        self.easy_actions_scroll.setWidget(self.easy_actions_widget)
+        layout.addWidget(self.easy_actions_scroll, 1)
+
+        navigation = QHBoxLayout()
+        self.easy_previous_button = QPushButton(self.tr("easy_previous", "Back"))
+        self.easy_previous_button.clicked.connect(lambda: self._set_easy_stage(self.easy_current_stage - 1))
+        self.easy_next_button = QPushButton(self.tr("easy_next", "Next"))
+        self.easy_next_button.clicked.connect(lambda: self._set_easy_stage(self.easy_current_stage + 1))
+        navigation.addWidget(self.easy_previous_button)
+        navigation.addWidget(self.easy_next_button)
+        layout.addLayout(navigation)
+        self._set_easy_stage(0)
+        return panel
+
+    def _set_easy_stage(self, index):
+        if not hasattr(self, "easy_stage_buttons"):
+            return
+        index = max(0, min(len(self.easy_stage_buttons) - 1, int(index)))
+        self.easy_current_stage = index
+        for stage_index, button in enumerate(self.easy_stage_buttons):
+            state = "active" if stage_index == index else "complete" if stage_index < index else "upcoming"
+            button.setProperty("stageState", state)
+            button.style().unpolish(button)
+            button.style().polish(button)
+        self._update_easy_stage(index)
+
+    def _update_easy_stage(self, index):
+        if index < 0 or not hasattr(self, "easy_actions_layout"):
+            return
+        if getattr(self, "interface_mode", "easy") != "easy":
+            return
+        self._restore_easy_stage_dialogs()
+        while self.easy_actions_layout.count():
+            item = self.easy_actions_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+        self.easy_action_buttons = []
+
+        stages = [
+            ("easy_stage_load", "Load Image", "Choose an astronomical image to begin."),
+            ("easy_stage_background", "Extract background", "Remove gradients and uneven sky background."),
+            ("easy_stage_calibration", "Color calibration", "Set a natural color balance for the image."),
+            ("easy_stage_stretch", "Stretch", "Brighten the linear image to reveal its details."),
+            ("easy_stage_denoise", "Denoise", "Reduce noise in the image."),
+            ("easy_stage_sharpen", "Sharpen", "Bring out fine image details."),
+            ("easy_stage_correction", "Correction", "Make final image and star corrections."),
+            ("easy_stage_save", "Save", "Save the finished image or a copy."),
+        ]
+        key, title, description = stages[index]
+        key_by_index = self.easy_stage_names[index][0]
+        title_fallback = self.tr(key_by_index, title)
+        self.easy_stage_title.setText(title_fallback)
+        self.easy_stage_description.setText(self.tr(f"{key}_description", description))
+        if index == 0:
+            self._add_easy_action_button("action_open", "Open image")
+        elif index == 1:
+            dialog = self._get_background_extraction_dialog()
+            dialog.btn_run.setEnabled(self.action_background_extraction.isEnabled())
+            self._hide_easy_dialog_button(dialog.btn_pick_points)
+            self._hide_easy_dialog_button(dialog.btn_cancel)
+            self._wire_easy_dialog_run(
+                dialog,
+                lambda _checked=False, current=dialog: self.run_background_extraction(
+                    parameters=current.get_parameters(), show_dialog=False
+                ),
+            )
+            self._embed_easy_dialog(dialog)
+        elif index == 2:
+            dialog = self._get_color_calibration_dialog()
+            base_img = self._get_bn_source_image()
+            if isinstance(base_img, np.ndarray) and base_img.ndim >= 2:
+                dialog.set_image_shape(*base_img.shape[:2])
+            dialog.set_manual_roi_ready(False)
+            dialog.btn_pick_roi.setEnabled(self.action_color_calibration.isEnabled())
+            self._stop_bn_roi_pick()
+            self._bn_overlay_active = False
+            self.update_viewer_overlay()
+            if not self._color_calibration_compare_suppressed:
+                self._compare_enabled_before_color_calibration = bool(self.viewer.compare_enabled)
+            self._color_calibration_compare_suppressed = True
+            self.viewer.set_compare_enabled(False)
+            self._hide_easy_dialog_button(dialog.btn_close)
+            self._embed_easy_dialog(dialog)
+        elif index == 3:
+            if self.magic_img is not None:
+                self.levels_window.levels_widget.set_image(self.magic_img)
+            self._begin_dialog_compare(self.levels_window)
+            self.apply_preview_processing()
+            self._embed_easy_dialog(self.levels_window)
+        elif index == 4:
+            dialog = self._get_deepsnr_dialog()
+            dialog.btn_run.setEnabled(self.action_deepsnr.isEnabled())
+            self._hide_easy_dialog_button(dialog.btn_cancel)
+            self._wire_easy_dialog_run(
+                dialog,
+                lambda _checked=False, current=dialog: self.run_deepsnr(
+                    strength=current.get_parameters()["strength"]
+                ),
+            )
+            self._embed_easy_dialog(dialog)
+        elif index == 5:
+            panel = EasySharpenPanel(self.easy_actions_widget)
+            panel.btn_apply.setEnabled(isinstance(self.magic_img, np.ndarray))
+            panel.btn_apply.clicked.connect(
+                lambda _checked=False, current=panel: self.apply_easy_sharpen(current.get_parameters())
+            )
+            self.easy_sharpen_panel = panel
+            self.easy_actions_layout.addWidget(panel)
+        elif index == 6:
+            self._hide_easy_dialog_button(self.correction_dialog.btn_close)
+            self._hide_easy_dialog_button(self.correction_dialog.btn_ok)
+            self._embed_easy_dialog(self.correction_dialog)
+            star_dialog = self._get_star_correction_dialog()
+            self._hide_easy_dialog_button(star_dialog.btn_close)
+            self._embed_easy_dialog(star_dialog)
+        elif index == 7:
+            self._add_easy_action_button("action_save", "Save image")
+            self._add_easy_action_button("action_save_as", "Save as…")
+        self.easy_actions_layout.addStretch(1)
+        self.easy_previous_button.setEnabled(index > 0)
+        self.easy_next_button.setEnabled(index < len(self.easy_stage_buttons) - 1)
+
+    def _add_easy_action_button(self, action_name, fallback):
+        action = getattr(self, action_name)
+        button = QPushButton(self.tr(action_name, fallback), self.easy_actions_widget)
+        button.setMinimumHeight(36)
+        button.setEnabled(action.isEnabled())
+        button.clicked.connect(action.trigger)
+        self.easy_actions_layout.addWidget(button)
+        self.easy_action_buttons.append((button, action))
+
+    def _refresh_easy_action_availability(self):
+        for button, action in getattr(self, "easy_action_buttons", []):
+            button.setEnabled(action.isEnabled())
+        panel = getattr(self, "easy_sharpen_panel", None)
+        if panel is not None:
+            panel.btn_apply.setEnabled(isinstance(self.magic_img, np.ndarray))
+
+    def _embed_easy_dialog(self, dialog):
+        if dialog not in self._easy_dialog_originals:
+            self._easy_dialog_originals[dialog] = (dialog.windowFlags(), dialog.minimumSize())
+        dialog.hide()
+        dialog.setParent(self.easy_actions_widget, Qt.Widget)
+        dialog.setMinimumSize(0, 0)
+        dialog.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        self.easy_actions_layout.addWidget(dialog)
+        if dialog not in self._easy_embedded_dialogs:
+            self._easy_embedded_dialogs.append(dialog)
+        dialog.show()
+
+    def _hide_easy_dialog_button(self, button):
+        if button not in self._easy_hidden_dialog_buttons:
+            self._easy_hidden_dialog_buttons.append(button)
+        button.hide()
+
+    def _restore_easy_stage_dialogs(self):
+        for dialog in list(getattr(self, "_easy_embedded_dialogs", [])):
+            self.easy_actions_layout.removeWidget(dialog)
+            dialog.hide()
+            if dialog is self.levels_window:
+                self._end_dialog_compare(dialog)
+            if dialog is getattr(self, "color_calibration_dialog", None):
+                self._on_color_calibration_dialog_closed(QDialog.Rejected)
+            original_flags, original_minimum_size = self._easy_dialog_originals[dialog]
+            dialog.setParent(self, original_flags)
+            dialog.setMinimumSize(original_minimum_size)
+            dialog.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
+            self._easy_embedded_dialogs.remove(dialog)
+        for dialog in self._easy_run_dialogs:
+            button = getattr(dialog, "btn_run", None)
+            if button is not None:
+                try:
+                    button.clicked.disconnect()
+                except (TypeError, RuntimeError):
+                    pass
+                button.clicked.connect(dialog.accept)
+        for button in self._easy_hidden_dialog_buttons:
+            button.show()
+        self._easy_hidden_dialog_buttons.clear()
+
+    def _wire_easy_dialog_run(self, dialog, callback):
+        button = getattr(dialog, "btn_run", None)
+        if button is None:
+            return
+        if dialog not in self._easy_run_dialogs:
+            self._easy_run_dialogs.append(dialog)
+        try:
+            button.clicked.disconnect()
+        except (TypeError, RuntimeError):
+            pass
+        button.clicked.connect(callback)
+
+    def set_interface_mode(self, mode):
+        if not hasattr(self, "topbar_splitter"):
+            return
+        easy = str(mode).lower() == "easy"
+        self.interface_mode = "easy" if easy else "pro"
+        self.easy_sidebar.setVisible(easy)
+        self.right_panel.setVisible(True)
+        self.top_panel.setVisible(not easy)
+        self.bottom_panel.setVisible(True)
+        self.command_palette_row.setVisible(not easy)
+        self.top_actions_bar.setVisible(not easy)
+        self.app_menu_bar.setVisible(not easy)
+        if easy:
+            self.btn_easy_mode.setChecked(True)
+            self.btn_easy_mode.setToolTip(self.tr("mode_easy_active", "Easy mode is active"))
+            self.btn_pro_mode.setToolTip(self.tr("mode_pro", "Switch to Pro"))
+            self._set_easy_stage(self.easy_current_stage)
+            self.editor_center_splitter.setSizes([340, max(800, self.width() - 340)])
+            self.topbar_splitter.setSizes([0, max(500, self.height() - 70)])
+        else:
+            self._restore_easy_stage_dialogs()
+            self.btn_pro_mode.setChecked(True)
+            self.btn_easy_mode.setToolTip(self.tr("mode_easy_tooltip", "Switch to Easy mode"))
+            self.btn_pro_mode.setToolTip(self.tr("mode_pro_active", "Pro mode is active"))
+            self.workspace_splitter.setSizes([650, 190])
+            self.editor_center_splitter.setSizes([0, max(800, self.width() - 340)])
+            self.topbar_splitter.setSizes([44, max(500, self.height() - 110)])
+        if easy:
+            self._set_easy_stage(self.easy_current_stage)
 
     def _viewer_image_size(self):
         image = self.magic_img
@@ -27831,6 +28410,7 @@ class AstroApp(QMainWindow):
 
         if parameters is None or show_dialog:
             dialog = self._get_background_extraction_dialog()
+            self._restore_easy_stage_dialogs()
             if parameters is not None:
                 method_value = str(parameters.get("method", "AI"))
                 method_index = dialog.combo_method.findData(method_value)
@@ -27982,7 +28562,39 @@ class AstroApp(QMainWindow):
         self.log("Background Extraction finished.", "success")
         return True
 
-    def run_deconvolution_onnx(self):
+    def apply_easy_sharpen(self, params):
+        if not isinstance(self.magic_img, np.ndarray) or self.magic_img.size == 0:
+            self.log("Sharpen skipped: no image loaded.", "warning")
+            return False
+        source = self.magic_img.copy()
+        try:
+            result = apply_classic_sharpen(source, params)
+        except Exception as exc:
+            self.log(f"Sharpen failed: {exc}", "error")
+            QMessageBox.warning(self, "Sharpen", f"Nie udało się wyostrzyć obrazu.\n\n{exc}")
+            return False
+
+        method_names = {
+            "usm": "Unsharp Mask", "highpass": "High Pass",
+            "lap": "Laplacian", "rl": "Richardson–Lucy",
+        }
+        method = str(params.get("method", "usm"))
+        self.undo_stack.append(source)
+        self.redo_stack.clear()
+        self.magic_img = result
+        self.levels_window.levels_widget.set_image(result)
+        self.viewer.set_before(np_to_qpixmap(result))
+        self.apply_full_processing_async()
+        self.add_layer("sharpen", result, title="Sharpen")
+        self.add_thumbnail(
+            f"Sharpen ({method_names.get(method, method)}, strength={int(params.get('strength', 120))}%)",
+            result,
+        )
+        self.update_menu_actions()
+        self.log(f"Sharpen applied: {method_names.get(method, method)}.", "success")
+        return True
+
+    def run_deconvolution_onnx(self, dialog_params=None):
         if self.magic_img is None:
             self.log("Deconvolution skipped: no image loaded.", "warning")
             return
@@ -27990,11 +28602,13 @@ class AstroApp(QMainWindow):
             self.log("Deconvolution skipped: onnxruntime is not available.", "warning")
             return
 
-        dialog = self._get_deconvolution_dialog()
-        if dialog.exec_() != QDialog.Accepted:
-            self.log("Deconvolution canceled.", "warning")
-            return
-        dialog_params = dialog.get_parameters()
+        if dialog_params is None:
+            dialog = self._get_deconvolution_dialog()
+            self._restore_easy_stage_dialogs()
+            if dialog.exec_() != QDialog.Accepted:
+                self.log("Deconvolution canceled.", "warning")
+                return
+            dialog_params = dialog.get_parameters()
         deconv_mode = str(dialog_params.get("mode", "stellar") or "stellar").strip().lower()
         stellar_model_path = str(getattr(self, "deconvolution_stellar_model_path", "") or "").strip()
         object_model_path = str(getattr(self, "deconvolution_object_model_path", "") or "").strip()
@@ -30125,6 +30739,8 @@ class AstroApp(QMainWindow):
             self.action_undo.setEnabled(len(self.undo_stack) > 0)
         if hasattr(self, "action_redo"):
             self.action_redo.setEnabled(len(self.redo_stack) > 0)
+        if hasattr(self, "easy_stage_buttons"):
+            self._refresh_easy_action_availability()
 
 
 class ThumbnailTreeContainer(QWidget):
