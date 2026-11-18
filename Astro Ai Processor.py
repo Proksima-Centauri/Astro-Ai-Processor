@@ -174,8 +174,9 @@ from PyQt6.QtWidgets import (
     QDoubleSpinBox, QTextEdit, QLineEdit, QComboBox, QCompleter, QSplitter, QDialogButtonBox,
     QScrollArea, QStackedLayout, QTabBar, QListWidget, QListWidgetItem, QStackedWidget, QPlainTextEdit, QSizeGrip,
     QSplashScreen, QStyledItemDelegate, QButtonGroup,
+    QMdiArea, QMdiSubWindow,
 )
-from PyQt6.QtGui import QAction, QImage, QPixmap, QPainter, QIcon, QColor, QFont, QPolygon, QPolygonF, QPen, QPalette, QRegion, QLinearGradient, QDrag, QCursor, QTransform, QImageReader, QTextDocument
+from PyQt6.QtGui import QAction, QImage, QPixmap, QPainter, QIcon, QColor, QFont, QFontDatabase, QPolygon, QPolygonF, QPen, QPalette, QRegion, QLinearGradient, QDrag, QCursor, QTransform, QImageReader, QTextDocument
 from PyQt6.QtCore import Qt as _Qt, QPoint, QPointF, QRect, QRectF, QThread, pyqtSignal, QTimer, QSize, QByteArray, QEvent, qInstallMessageHandler, QMimeData
 from PyQt6.QtWidgets import QSizePolicy, QCheckBox, QInputDialog, QMessageBox, QGraphicsItem, QProgressBar
 from PyQt6.QtGui import QPainterPath, QBrush
@@ -312,6 +313,8 @@ I18N = {
     "onboarding_editor_title": {"pl": "Główny interfejs", "en": "Main workspace"},
     "onboarding_editor_body": {"pl": "Tu znajduje się edytor zdjęć. Wczytany obraz pojawi się w centralnym obszarze.", "en": "This is the image editor. Your loaded image appears in the central area."},
     "onboarding_toolbar_title": {"pl": "Pasek narzędzi", "en": "Toolbar"},
+    "onboarding_mode_title": {"pl": "Wybierz tryb pracy", "en": "Choose your workspace mode"},
+    "onboarding_mode_body": {"pl": "Easy prowadzi przez podstawowe etapy obróbki. Pro udostępnia pełny zestaw narzędzi i wiele okien obrazów.", "en": "Easy guides you through the main processing steps. Pro gives you the full toolset and multiple image windows."},
     "onboarding_toolbar_body": {"pl": "Najważniejsze polecenia, takie jak otwieranie, cofanie i filtry, są dostępne tutaj.", "en": "Quick actions such as opening images, undo, and filters are available here."},
     "onboarding_viewer_title": {"pl": "Podgląd zdjęcia", "en": "Image viewer"},
     "onboarding_viewer_body": {"pl": "Tutaj oglądasz obraz i porównujesz wersję przed i po obróbce.", "en": "View your image here and compare its before and after states."},
@@ -346,6 +349,35 @@ I18N = {
     "easy_stage_save_description": {"pl": "Zapisz gotowy obraz lub jego kopię.", "en": "Save the finished image or a copy."},
     "easy_previous": {"pl": "Wstecz", "en": "Back"},
     "easy_next": {"pl": "Dalej", "en": "Next"},
+    "action_add_watermark": {"pl": "Dodaj znak wodny", "en": "Add watermark"},
+    "watermark_prompt": {"pl": "Wpisz tekst znaku wodnego:", "en": "Enter watermark text:"},
+    "watermark_text": {"pl": "Tekst", "en": "Text"},
+    "watermark_text_placeholder": {"pl": "Tekst opcjonalny", "en": "Optional text"},
+    "watermark_font": {"pl": "Czcionka", "en": "Font"},
+    "watermark_size": {"pl": "Rozmiar czcionki", "en": "Font size"},
+    "watermark_position": {"pl": "Położenie", "en": "Position"},
+    "watermark_opacity": {"pl": "Krycie", "en": "Opacity"},
+    "watermark_metadata": {"pl": "Dołącz metadane FITS", "en": "Include FITS metadata"},
+    "watermark_no_metadata": {"pl": "Brak obsługiwanych metadanych FITS.", "en": "No supported FITS metadata found."},
+    "watermark_apply": {"pl": "Zastosuj znak wodny", "en": "Apply watermark"},
+    "watermark_empty": {"pl": "Wpisz tekst lub wybierz metadane FITS.", "en": "Enter text or select FITS metadata."},
+    "watermark_exposure": {"pl": "Ekspozycja", "en": "Exposure"},
+    "watermark_camera": {"pl": "Aparat", "en": "Camera"},
+    "watermark_telescope": {"pl": "Teleskop", "en": "Telescope"},
+    "watermark_equipment": {"pl": "Sprzęt", "en": "Equipment"},
+    "watermark_focal_length": {"pl": "Ogniskowa", "en": "Focal length"},
+    "watermark_aperture": {"pl": "Apertura", "en": "Aperture"},
+    "watermark_filter": {"pl": "Filtr", "en": "Filter"},
+    "watermark_target": {"pl": "Cel", "en": "Target"},
+    "watermark_top_left": {"pl": "Lewy górny róg", "en": "Top left"},
+    "watermark_top_center": {"pl": "Góra, środek", "en": "Top center"},
+    "watermark_top_right": {"pl": "Prawy górny róg", "en": "Top right"},
+    "watermark_middle_left": {"pl": "Lewa krawędź, środek", "en": "Middle left"},
+    "watermark_center": {"pl": "Środek", "en": "Center"},
+    "watermark_middle_right": {"pl": "Prawa krawędź, środek", "en": "Middle right"},
+    "watermark_bottom_left": {"pl": "Lewy dolny róg", "en": "Bottom left"},
+    "watermark_bottom_center": {"pl": "Dół, środek", "en": "Bottom center"},
+    "watermark_bottom_right": {"pl": "Prawy dolny róg", "en": "Bottom right"},
     "action_open": {"pl": "Otwórz", "en": "Open"},
     "action_save": {"pl": "Zapisz", "en": "Save"},
     "action_save_as": {"pl": "Zapisz jako...", "en": "Save As..."},
@@ -393,6 +425,7 @@ I18N = {
     "action_correction": {"pl": "Korekcja", "en": "Correction"},
     "action_star_correction": {"pl": "Korekcja gwiazd", "en": "Star Correction"},
     "action_color_calibration": {"pl": "Kalibracja kolorów", "en": "Color Calibration"},
+    "action_aberration_inspector": {"pl": "Inspektor aberracji", "en": "Aberration Inspector"},
     "action_3d_fly": {"pl": "Filtr 3D FLY", "en": "3D FLY Filter"},
     "action_blur": {"pl": "Rozmycie Gaussa", "en": "Gaussian Blur"},
     "action_background_extraction": {"pl": "Ekstrakcja tła", "en": "Background Extraction"},
@@ -650,7 +683,7 @@ def qimage_to_bgr_array(image: QImage) -> np.ndarray | None:
         return None
 
     ptr = converted.bits()
-    ptr.setsize(converted.byteCount())
+    ptr.setsize(converted.sizeInBytes())
     rgba = np.frombuffer(ptr, dtype=np.uint8).reshape((height, width, 4))
     rgb = np.ascontiguousarray(rgba[..., :3])
     bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
@@ -773,11 +806,46 @@ class WhiteSurTitleBar(QWidget):
             controls_layout.addWidget(button)
         layout.addWidget(controls)
 
+        panel_controls = QWidget(self)
+        panel_controls.setFixedWidth(70)
+        panel_controls_layout = QHBoxLayout(panel_controls)
+        panel_controls_layout.setContentsMargins(0, 0, 0, 0)
+        panel_controls_layout.setSpacing(4)
+        self.easy_left_panel_button = QPushButton(panel_controls)
+        self.easy_left_panel_button.setIcon(svg_icon_from_text(
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="#cbd5e1" stroke-width="1.7"/><path d="M9 4v16" stroke="#70c4e7" stroke-width="2.5"/><path d="m6 10 2 2-2 2" fill="none" stroke="#70c4e7" stroke-width="1.5"/></svg>', 16
+        ))
+        self.easy_left_panel_button.setToolTip(self.window.tr("easy_hide_left_panel", "Hide workflow panel"))
+        self.easy_left_panel_button.setAccessibleName(self.window.tr("easy_hide_left_panel", "Hide workflow panel"))
+        self.easy_left_panel_button.clicked.connect(self.window._toggle_easy_left_panel)
+        self.easy_right_panel_button = QPushButton(panel_controls)
+        self.easy_right_panel_button.setIcon(svg_icon_from_text(
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="#cbd5e1" stroke-width="1.7"/><path d="M15 4v16" stroke="#70c4e7" stroke-width="2.5"/><path d="m18 10-2 2 2 2" fill="none" stroke="#70c4e7" stroke-width="1.5"/></svg>', 16
+        ))
+        self.easy_right_panel_button.setToolTip(self.window.tr("easy_hide_right_panel", "Hide assistant panel"))
+        self.easy_right_panel_button.setAccessibleName(self.window.tr("easy_hide_right_panel", "Hide assistant panel"))
+        self.easy_right_panel_button.clicked.connect(self.window._toggle_easy_right_panel)
+        for button in (self.easy_left_panel_button, self.easy_right_panel_button):
+            button.setFixedSize(28, 26)
+            button.setFocusPolicy(Qt.NoFocus)
+            panel_controls_layout.addWidget(button)
         self.title_label = QLabel(self.window.windowTitle(), self)
         self.title_label.setAlignment(Qt.AlignCenter)
         self.title_label.setStyleSheet("color: #eeeeee; background: transparent; font-weight: 600;")
         layout.addWidget(self.title_label, 1)
-        layout.addSpacing(70)
+        layout.addWidget(panel_controls)
+        panel_controls.hide()
+        self.panel_controls = panel_controls
+        self.titlebar_layout = layout
+        layout.addSpacing(0)
+
+    def add_command_palette_button(self, button):
+        button.setParent(self)
+        button.setMinimumWidth(220)
+        button.setMaximumWidth(300)
+        button.setFixedHeight(30)
+        self.titlebar_layout.insertWidget(self.titlebar_layout.indexOf(self.panel_controls), button)
+        self.command_palette_button = button
 
     def _toggle_maximized(self):
         if self.window.isMaximized():
@@ -2035,6 +2103,218 @@ class StackingProcessWidget(QWidget):
             painter.setPen(Qt.NoPen)
             painter.setBrush(accent_qcolor("base", int(40 + 130 * max(0.0, pulse))))
             painter.drawEllipse(QPointF(cx - 38 + i * 19, cy), 4.5, 4.5)
+
+
+def compose_watermark_image(source: np.ndarray, options: dict) -> np.ndarray:
+    lines = [line for line in str(options.get("text", "")).splitlines() if line.strip()]
+    lines.extend(f"{label}: {value}" for label, value in options.get("metadata", []))
+    if not lines:
+        return source.copy()
+
+    height, width = source.shape[:2]
+    watermark_image = QImage(width, height, QImage.Format.Format_ARGB32)
+    watermark_image.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(watermark_image)
+    painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
+    font = options["font"]
+    font.setPixelSize(int(options["font_size"]))
+    painter.setFont(font)
+    metrics = painter.fontMetrics()
+    line_spacing = max(1, metrics.lineSpacing())
+    text_width = max(metrics.horizontalAdvance(line) for line in lines)
+    text_height = line_spacing * len(lines)
+    margin = max(12, int(round(min(width, height) * 0.025)))
+    position = str(options.get("position") or "bottom_right")
+    vertical, _, horizontal = position.partition("_")
+    if position == "center":
+        vertical, horizontal = "middle", "center"
+    x = margin if horizontal == "left" else (width - text_width) // 2 if horizontal == "center" else width - text_width - margin
+    y = margin if vertical == "top" else (height - text_height) // 2 if vertical == "middle" else height - text_height - margin
+    x = max(margin, min(x, max(margin, width - text_width - margin)))
+    y = max(margin, min(y, max(margin, height - text_height - margin)))
+    painter.setPen(QColor(0, 0, 0, 190))
+    for index, line in enumerate(lines):
+        painter.drawText(x + 1, y + metrics.ascent() + index * line_spacing + 1, line)
+    painter.setPen(QColor(255, 255, 255, 255))
+    for index, line in enumerate(lines):
+        painter.drawText(x, y + metrics.ascent() + index * line_spacing, line)
+    painter.end()
+
+    rgba_image = watermark_image.convertToFormat(QImage.Format.Format_RGBA8888)
+    pointer = rgba_image.bits()
+    pointer.setsize(rgba_image.sizeInBytes())
+    rgba = np.frombuffer(pointer, dtype=np.uint8).reshape((height, width, 4)).copy()
+    alpha = rgba[:, :, 3].astype(np.float32) / 255.0 * float(options.get("opacity", 0.45))
+    if source.dtype == np.uint8:
+        max_value = 255.0
+    elif np.issubdtype(source.dtype, np.integer):
+        max_value = float(np.iinfo(source.dtype).max)
+    else:
+        source_max = float(np.nanmax(source)) if source.size else 1.0
+        max_value = 1.0 if source_max <= 1.0 else source_max
+    foreground = cv2.cvtColor(rgba[:, :, :3], cv2.COLOR_RGB2BGR).astype(np.float32) * (max_value / 255.0)
+    source_float = source.astype(np.float32)
+    if source.ndim == 2:
+        blended = source_float * (1.0 - alpha) + foreground[:, :, 0] * alpha
+    else:
+        blended = source_float.copy()
+        channels = min(3, source.shape[2])
+        blended[:, :, :channels] = (
+            source_float[:, :, :channels] * (1.0 - alpha[:, :, None])
+            + foreground[:, :, :channels] * alpha[:, :, None]
+        )
+    if np.issubdtype(source.dtype, np.integer):
+        limits = np.iinfo(source.dtype)
+        return np.clip(np.rint(blended), limits.min, limits.max).astype(source.dtype)
+    return blended.astype(source.dtype)
+
+
+class WatermarkDialog(QDialog):
+    METADATA_FIELDS = (
+        ("watermark_exposure", "Exposure", ("EXPTIME", "EXPOSURE", "EXP_TIME")),
+        ("watermark_camera", "Camera", ("INSTRUME", "CAMERA", "INSTRUMENT")),
+        ("watermark_telescope", "Telescope", ("TELESCOP", "TELESCOPE")),
+        ("watermark_equipment", "Equipment", ("EQUIPMENT",)),
+        ("watermark_focal_length", "Focal length", ("FOCALLEN", "FOCAL_LENGTH", "FOCAL")),
+        ("watermark_aperture", "Aperture", ("APERTURE",)),
+        ("watermark_filter", "Filter", ("FILTER",)),
+        ("watermark_target", "Target", ("OBJECT",)),
+    )
+
+    def __init__(self, parent, header, image_width, translate):
+        super().__init__(parent)
+        apply_dialog_window_flags(self)
+        self._translate = translate
+        self.setWindowTitle(translate("action_add_watermark", "Add watermark"))
+        self.setMinimumWidth(420)
+        layout = QVBoxLayout(self)
+        form = QGridLayout()
+        row = 0
+
+        form.addWidget(QLabel(translate("watermark_text", "Text")), row, 0)
+        self.text_edit = QLineEdit()
+        self.text_edit.setPlaceholderText(translate("watermark_text_placeholder", "Optional text"))
+        form.addWidget(self.text_edit, row, 1)
+        row += 1
+
+        form.addWidget(QLabel(translate("watermark_font", "Font")), row, 0)
+        self.font_combo = QComboBox()
+        self.font_combo.setObjectName("watermarkFontCombo")
+        self.font_combo.addItems(sorted(set(QFontDatabase().families()), key=str.casefold))
+        self.font_combo.setMaxVisibleItems(16)
+        current_family = QFont().family()
+        if current_family:
+            self.font_combo.setCurrentText(current_family)
+        form.addWidget(self.font_combo, row, 1)
+        row += 1
+
+        form.addWidget(QLabel(translate("watermark_size", "Font size")), row, 0)
+        self.font_size = QSpinBox()
+        self.font_size.setRange(8, 256)
+        self.font_size.setValue(max(16, min(72, int(max(8, image_width) * 0.025))))
+        form.addWidget(self.font_size, row, 1)
+        row += 1
+
+        form.addWidget(QLabel(translate("watermark_position", "Position")), row, 0)
+        self.position_combo = QComboBox()
+        for key, fallback in (
+            ("top_left", "Top left"), ("top_center", "Top center"), ("top_right", "Top right"),
+            ("middle_left", "Middle left"), ("center", "Center"), ("middle_right", "Middle right"),
+            ("bottom_left", "Bottom left"), ("bottom_center", "Bottom center"), ("bottom_right", "Bottom right"),
+        ):
+            self.position_combo.addItem(translate(f"watermark_{key}", fallback), key)
+        self.position_combo.setCurrentIndex(self.position_combo.findData("bottom_right"))
+        form.addWidget(self.position_combo, row, 1)
+        row += 1
+
+        form.addWidget(QLabel(translate("watermark_opacity", "Opacity")), row, 0)
+        self.opacity = QSpinBox()
+        self.opacity.setRange(5, 100)
+        self.opacity.setValue(45)
+        self.opacity.setSuffix("%")
+        form.addWidget(self.opacity, row, 1)
+        row += 1
+        layout.addLayout(form)
+
+        self.preview_label = QLabel()
+        self.preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.preview_label.setMinimumSize(360, 200)
+        self.preview_label.setMaximumHeight(300)
+        self.preview_label.setStyleSheet("QLabel { background: #111; border: 1px solid #3a3a3a; border-radius: 6px; }")
+        layout.addWidget(self.preview_label, 1)
+        self._preview_source = self._make_preview_source(parent.magic_img)
+
+        self.metadata_checks = []
+        normalized_header = {str(key).strip().upper(): value for key, value in (header or {}).items()}
+        metadata_group = QVBoxLayout()
+        metadata_group.addWidget(QLabel(translate("watermark_metadata", "Include FITS metadata")))
+        for label_key, label_fallback, keys in self.METADATA_FIELDS:
+            value = next((normalized_header.get(key) for key in keys if normalized_header.get(key) not in (None, "")), None)
+            if value is None:
+                continue
+            label = translate(label_key, label_fallback)
+            checkbox = QCheckBox(f"{label}: {str(value).strip()}")
+            checkbox.setChecked(True)
+            metadata_group.addWidget(checkbox)
+            self.metadata_checks.append((label, str(value).strip(), checkbox))
+            checkbox.toggled.connect(self._refresh_preview)
+        if not self.metadata_checks:
+            metadata_group.addWidget(QLabel(translate("watermark_no_metadata", "No supported FITS metadata found.")))
+        layout.addLayout(metadata_group)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        buttons.button(QDialogButtonBox.StandardButton.Ok).setText(translate("watermark_apply", "Apply watermark"))
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+        self.text_edit.textChanged.connect(self._refresh_preview)
+        self.font_combo.currentTextChanged.connect(self._refresh_preview)
+        self.font_size.valueChanged.connect(self._refresh_preview)
+        self.position_combo.currentIndexChanged.connect(self._refresh_preview)
+        self.opacity.valueChanged.connect(self._refresh_preview)
+        self._refresh_preview()
+        QTimer.singleShot(0, self._refresh_preview)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._refresh_preview()
+
+    @staticmethod
+    def _make_preview_source(image):
+        image = np.asarray(image)
+        height, width = image.shape[:2]
+        factor = min(1.0, 900.0 / max(width, height, 1))
+        if factor < 1.0:
+            return cv2.resize(
+                image, (max(1, int(round(width * factor))), max(1, int(round(height * factor)))),
+                interpolation=cv2.INTER_AREA,
+            )
+        return image.copy()
+
+    def _refresh_preview(self, *_args):
+        options = self.values()
+        if not options["text"].strip() and not options["metadata"]:
+            preview = self._preview_source
+        else:
+            scale = self._preview_source.shape[1] / max(1, self.parent().magic_img.shape[1])
+            options["font_size"] = max(1, int(round(options["font_size"] * scale)))
+            preview = compose_watermark_image(self._preview_source, options)
+        pixmap = np_to_qpixmap(preview, apply_display_stretch=False)
+        self.preview_label.setPixmap(pixmap.scaled(
+            self.preview_label.size(), Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        ))
+
+    def values(self):
+        return {
+            "text": self.text_edit.text().strip(),
+            "font": QFont(self.font_combo.currentText() or QFont().family()),
+            "font_size": self.font_size.value(),
+            "position": self.position_combo.currentData(),
+            "opacity": self.opacity.value() / 100.0,
+            "metadata": [(label, value) for label, value, checkbox in self.metadata_checks if checkbox.isChecked()],
+        }
 
 
 class PlateSolvingDialog(QDialog):
@@ -7705,9 +7985,7 @@ class AIAssistantPanel(QFrame):
         self.welcome_page.setObjectName("altairWelcomePage")
         self.welcome_page.setStyleSheet(
             "QWidget#altairWelcomePage {"
-            "background: qlineargradient(x1:0, y1:0, x2:1, y2:1, "
-            "stop:0 #111b2d, stop:0.52 #10141f, stop:1 #21152b);"
-            "border-radius: 14px;}"
+            "background: #121212; border: 0;}"
         )
         welcome_layout = QVBoxLayout(self.welcome_page)
         welcome_layout.setContentsMargins(22, 22, 22, 22)
@@ -7719,10 +7997,7 @@ class AIAssistantPanel(QFrame):
         self.welcome_card.setObjectName("altairWelcomeCard")
         self.welcome_card.setMaximumWidth(880)
         self.welcome_card.setStyleSheet(
-            "QFrame#altairWelcomeCard {"
-            "background: qlineargradient(x1:0, y1:0, x2:1, y2:0, "
-            "stop:0 #1a2940, stop:0.52 #192131, stop:1 #291b35);"
-            "border: 1px solid #39465f; border-radius: 20px;}"
+            "QFrame#altairWelcomeCard {background: transparent; border: 0;}"
         )
         welcome_card_layout = QVBoxLayout(self.welcome_card)
         welcome_card_layout.setContentsMargins(30, 28, 30, 24)
@@ -7771,7 +8046,7 @@ class AIAssistantPanel(QFrame):
         self.btn_new_chat = QPushButton("New chat", self.content_widget)
         history_layout.addWidget(self.chat_history_combo, 1)
         history_layout.addWidget(self.btn_new_chat)
-        content_layout.insertLayout(0, history_layout)
+        self.chat_page_layout.addLayout(history_layout)
 
         self.chat_scroll = QScrollArea()
         self.chat_scroll.setWidgetResizable(True)
@@ -7789,30 +8064,59 @@ class AIAssistantPanel(QFrame):
         composer_layout = QVBoxLayout(self.composer_widget)
         composer_layout.setContentsMargins(0, 0, 0, 0)
         composer_layout.setSpacing(8)
-        self.input_text = QTextEdit()
-        self.input_text.setFixedHeight(100)
+        self.prompt_box = QFrame(self.composer_widget)
+        self.prompt_box.setObjectName("altairPromptBox")
+        self.prompt_box.setStyleSheet(
+            "QFrame#altairPromptBox { background: #1b1b1b; border: 1px solid #3a3a3a; border-radius: 10px; }"
+        )
+        prompt_box_layout = QVBoxLayout(self.prompt_box)
+        prompt_box_layout.setContentsMargins(8, 6, 8, 6)
+        prompt_box_layout.setSpacing(2)
+        self.input_text = QTextEdit(self.prompt_box)
+        self.input_text.setFixedHeight(66)
+        self.input_text.setStyleSheet("QTextEdit { background: transparent; border: 0; }")
         self.input_text.setPlaceholderText(
             "Ask Altair about your image..." if is_english else "Zapytaj Altaira o swoje zdjęcie..."
         )
         self.input_text.setReadOnly(False)
         self.input_text.setEnabled(True)
         self.input_text.setFocusPolicy(Qt.StrongFocus)
-        composer_layout.addWidget(self.input_text)
+        prompt_box_layout.addWidget(self.input_text)
 
-        button_layout = QHBoxLayout()
+        prompt_action_layout = QHBoxLayout()
+        prompt_action_layout.setContentsMargins(0, 0, 0, 0)
+        prompt_action_layout.addStretch(1)
         self.btn_voice = QPushButton("")
         self.btn_voice.setToolTip("Voice to Text")
         self.btn_voice.setFixedSize(34, 30)
         self.btn_voice.setIcon(svg_icon_from_text(self._microphone_svg(), 18))
         self.btn_voice.setIconSize(QSize(18, 18))
-        self.btn_analyze = QPushButton("Analizuj")
-        self.btn_send = QPushButton("Send")
-        self.btn_send.setProperty("accent", True)
-        self.btn_run_python = QPushButton("Uruchom Python")
+        self.btn_send = QPushButton()
+        self.btn_send.setObjectName("altairSendButton")
+        self.btn_send.setIcon(svg_icon_from_text(
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"><path d="M12 19V5m0 0L6.5 10.5M12 5l5.5 5.5" stroke="#e8edf6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>', 18
+        ))
+        self.btn_send.setIconSize(QSize(18, 18))
+        self.btn_send.setFixedSize(34, 30)
+        self.btn_send.setToolTip("Send")
+        self.btn_send.setAccessibleName("Send")
+        prompt_action_layout.addWidget(self.btn_voice)
+        prompt_action_layout.addWidget(self.btn_send)
+        prompt_box_layout.addLayout(prompt_action_layout)
+        composer_layout.addWidget(self.prompt_box)
 
-        button_layout.addWidget(self.btn_voice)
+        button_layout = QHBoxLayout()
+        self.btn_analyze = QPushButton("Analizuj")
+        self.btn_run_python = QPushButton()
+        self.btn_run_python.setIcon(svg_icon_from_text(
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M7 4.5a1 1 0 0 1 1.5-.86l11 7a1.6 1.6 0 0 1 0 2.72l-11 7A1 1 0 0 1 7 19.5z" fill="#d8e8f7"/></svg>', 18
+        ))
+        self.btn_run_python.setIconSize(QSize(18, 18))
+        self.btn_run_python.setFixedSize(34, 30)
+        self.btn_run_python.setToolTip("Run Python")
+        self.btn_run_python.setAccessibleName("Run Python")
+
         button_layout.addWidget(self.btn_analyze)
-        button_layout.addWidget(self.btn_send)
         button_layout.addWidget(self.btn_run_python)
         composer_layout.addLayout(button_layout)
 
@@ -11732,6 +12036,72 @@ class NewWorkspaceDialog(QDialog):
         }
 
 
+class AberrationInspectorDialog(QDialog):
+    def __init__(self, parent=None, image_size=None):
+        super().__init__(parent)
+        apply_dialog_window_flags(self)
+        self.setWindowTitle("Aberration Inspector")
+        self.setMinimumWidth(420)
+        layout = QVBoxLayout(self)
+        apply_standard_layout_margins(layout)
+
+        description = QLabel(
+            "Build a grid of matching image crops to compare star shapes across the field."
+        )
+        description.setWordWrap(True)
+        layout.addWidget(description)
+
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(12)
+        grid.setVerticalSpacing(10)
+        grid.addWidget(QLabel("Rows and columns:"), 0, 0)
+        self.spin_grid_size = QSpinBox()
+        self.spin_grid_size.setRange(2, 9)
+        self.spin_grid_size.setValue(3)
+        grid.addWidget(self.spin_grid_size, 0, 1)
+
+        grid.addWidget(QLabel("Panel size (pixels):"), 1, 0)
+        self.spin_panel_size = QSpinBox()
+        self.spin_panel_size.setRange(16, 2048)
+        self.spin_panel_size.setValue(256)
+        grid.addWidget(self.spin_panel_size, 1, 1)
+
+        grid.addWidget(QLabel("Separation (pixels):"), 2, 0)
+        self.spin_separation = QSpinBox()
+        self.spin_separation.setRange(0, 16)
+        self.spin_separation.setValue(4)
+        grid.addWidget(self.spin_separation, 2, 1)
+
+        grid.addWidget(QLabel("Gap brightness:"), 3, 0)
+        self.spin_gap_brightness = QDoubleSpinBox()
+        self.spin_gap_brightness.setRange(0.0, 1.0)
+        self.spin_gap_brightness.setDecimals(2)
+        self.spin_gap_brightness.setSingleStep(0.05)
+        self.spin_gap_brightness.setValue(0.0)
+        grid.addWidget(self.spin_gap_brightness, 3, 1)
+        layout.addLayout(grid)
+
+        self.lbl_source_size = QLabel()
+        if image_size:
+            self.lbl_source_size.setText(f"Source image: {image_size[0]} × {image_size[1]} pixels")
+        self.lbl_source_size.setStyleSheet("color: #9ba8ba;")
+        layout.addWidget(self.lbl_source_size)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel, self)
+        buttons.button(QDialogButtonBox.Ok).setText("Create mosaic")
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def parameters(self):
+        return {
+            "grid_size": int(self.spin_grid_size.value()),
+            "panel_size": int(self.spin_panel_size.value()),
+            "separation": int(self.spin_separation.value()),
+            "gap_brightness": float(self.spin_gap_brightness.value()),
+        }
+
+
 class PreferencesDialog(QDialog):
     def __init__(self, app, parent=None):
         super().__init__(parent or app)
@@ -11805,12 +12175,16 @@ class PreferencesDialog(QDialog):
         self.combo_language.setCurrentText(str(getattr(self.app, "language", "pl")))
         appearance_layout.addWidget(self.combo_language, 2, 1)
 
-        appearance_layout.addWidget(QLabel("PodglÄ…d:"), 3, 0)
+        self.check_mdi_sync_zoom_pan = QCheckBox("Synchronize zoom and pan across MDI image windows")
+        self.check_mdi_sync_zoom_pan.setChecked(bool(getattr(self.app, "mdi_sync_zoom_pan", True)))
+        appearance_layout.addWidget(self.check_mdi_sync_zoom_pan, 3, 0, 1, 2)
+
+        appearance_layout.addWidget(QLabel("PodglÄ…d:"), 4, 0)
         self.appearance_info = QLabel(
             "Styl zastÄ™puje prosty przeĹ‚Ä…cznik dark mode i jest zapamiÄ™tywany miÄ™dzy uruchomieniami."
         )
         self.appearance_info.setWordWrap(True)
-        appearance_layout.addWidget(self.appearance_info, 3, 1)
+        appearance_layout.addWidget(self.appearance_info, 4, 1)
         tabs.addTab(appearance_tab, "WyglÄ…d")
 
 
@@ -11959,6 +12333,7 @@ class PreferencesDialog(QDialog):
         provider = self.combo_onnx_provider.currentText().strip() or "Auto"
         cpu_cores = int(self.spin_cpu_cores.value())
         openrouter_api_key = self.edit_openrouter_api_key.text().strip() if hasattr(self, "edit_openrouter_api_key") else ""
+        mdi_sync_zoom_pan = self.check_mdi_sync_zoom_pan.isChecked()
 
         self.app.apply_preferences(
             theme_name=theme_name,
@@ -11967,6 +12342,7 @@ class PreferencesDialog(QDialog):
             processor_cores=cpu_cores,
             onnx_provider=provider,
             openrouter_api_key=openrouter_api_key,
+            mdi_sync_zoom_pan=mdi_sync_zoom_pan,
         )
         self.app.log("Preferences updated.", "success")
         self.accept()
@@ -13626,12 +14002,14 @@ def get_default_config() -> dict:
         "openrouter_api_key": "",
         "language": "pl",
         "onboarding_completed": False,
+        "mode_selector_tour_completed": False,
         "processor_cores": max(1, (os.cpu_count() or 4) // 2),
         "onnx_provider": "Auto",
         "workspaces": [],
         "home_folder": "",
         "topbar_button_order": [],
         "recent_images": [],
+        "mdi_sync_zoom_pan": True,
     }
 
 
@@ -13857,6 +14235,7 @@ def save_config(denoise_path: str = None, bg_removal_path: str = None,
         "openrouter_api_key": str(openrouter_api_key or "").strip(),
         "language": language,
         "onboarding_completed": bool(APP_PREFERENCES.get("onboarding_completed", False)),
+        "mode_selector_tour_completed": bool(APP_PREFERENCES.get("mode_selector_tour_completed", False)),
         "processor_cores": int(processor_cores or 1),
         "onnx_provider": onnx_provider,
         "workspaces": workspaces if isinstance(workspaces, list) else [],
@@ -13867,6 +14246,7 @@ def save_config(denoise_path: str = None, bg_removal_path: str = None,
             if str(name).strip()
         ],
         "recent_images": list(recent_images)[:8] if isinstance(recent_images, list) else [],
+        "mdi_sync_zoom_pan": bool(APP_PREFERENCES.get("mdi_sync_zoom_pan", True)),
     }
 
     try:
@@ -13889,12 +14269,14 @@ APP_PREFERENCES = {
     "accent_name": "Ultra Blue",
     "language": "pl",
     "onboarding_completed": False,
+    "mode_selector_tour_completed": False,
     "processor_cores": max(1, (os.cpu_count() or 4) // 2),
     "onnx_provider": "Auto",
     "workspaces": [],
     "home_folder": "",
     "topbar_button_order": [],
     "recent_images": [],
+    "mdi_sync_zoom_pan": True,
     "deepsnr_path": None,
     "deepsnr_args": DEFAULT_DEEPSNR_ARGS,
     "deepsnr_strength": DEFAULT_DEEPSNR_STRENGTH,
@@ -17091,8 +17473,123 @@ class PhotoshopMenuDialog(QDialog):
 
 # ---------- Viewer ----------
 
+class PersistentMdiArea(QMdiArea):
+    """Reapply user-placed minimized image icons after Qt's automatic tiling."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._restore_minimized_timer = QTimer(self)
+        self._restore_minimized_timer.setSingleShot(True)
+        self._restore_minimized_timer.timeout.connect(self._restore_minimized_positions)
+
+    def schedule_minimized_position_restore(self, *_args):
+        self._restore_minimized_timer.start(0)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        # QMdiArea finishes its own resize/retiling pass on a short timer.
+        self._restore_minimized_timer.start(250)
+
+    def _restore_minimized_positions(self):
+        for subwindow in self.subWindowList():
+            if isinstance(subwindow, MovableMdiSubWindow) and subwindow.isMinimized():
+                subwindow.restore_minimized_icon_position()
+
+
+class MovableMdiSubWindow(QMdiSubWindow):
+    """Keep minimized image icons directly draggable inside the MDI area."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._mdi_workspace = None
+        self._minimized_drag_origin = None
+        self._minimized_drag_last = None
+        self._minimized_drag_active = False
+        self._saved_minimized_position = None
+
+    def changeEvent(self, event):
+        super().changeEvent(event)
+        if event.type() == QEvent.Type.WindowStateChange:
+            self.setCursor(Qt.OpenHandCursor if self.isMinimized() else Qt.ArrowCursor)
+
+    def mousePressEvent(self, event):
+        if self.isMinimized() and event.button() == Qt.LeftButton:
+            self._minimized_drag_origin = event.globalPosition().toPoint()
+            self._minimized_drag_last = self._minimized_drag_origin
+            self._minimized_drag_active = False
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if (
+            self.isMinimized()
+            and self._minimized_drag_last is not None
+            and event.buttons() & Qt.LeftButton
+        ):
+            current = event.globalPosition().toPoint()
+            if not self._minimized_drag_active:
+                distance = (current - self._minimized_drag_origin).manhattanLength()
+                if distance < QApplication.startDragDistance():
+                    event.accept()
+                    return
+                self._minimized_drag_active = True
+                self.setCursor(Qt.SizeAllCursor)
+            delta = current - self._minimized_drag_last
+            self._minimized_drag_last = current
+            parent = self.parentWidget()
+            if parent is not None:
+                max_x = max(0, parent.width() - self.width())
+                max_y = max(0, parent.height() - self.height())
+                self.move(
+                    max(0, min(max_x, self.x() + delta.x())),
+                    max(0, min(max_y, self.y() + delta.y())),
+                )
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        was_minimized_gesture = self._minimized_drag_origin is not None
+        was_dragging = self._minimized_drag_active
+        self._minimized_drag_origin = None
+        self._minimized_drag_last = None
+        self._minimized_drag_active = False
+        if was_minimized_gesture:
+            if was_dragging and self.isMinimized():
+                self.setCursor(Qt.OpenHandCursor)
+                self._save_minimized_icon_position()
+            elif self.isMinimized():
+                self.showNormal()
+                if self._mdi_workspace is not None:
+                    self._mdi_workspace.setActiveSubWindow(self)
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
+
+    def _save_minimized_icon_position(self):
+        if self._mdi_workspace is None:
+            return
+        viewport = self._mdi_workspace.viewport()
+        max_x = max(1, viewport.width() - self.width())
+        max_y = max(1, viewport.height() - self.height())
+        self._saved_minimized_position = (
+            max(0.0, min(1.0, self.x() / max_x)),
+            max(0.0, min(1.0, self.y() / max_y)),
+        )
+
+    def restore_minimized_icon_position(self):
+        if self._saved_minimized_position is None or self._mdi_workspace is None:
+            return
+        viewport = self._mdi_workspace.viewport()
+        max_x = max(0, viewport.width() - self.width())
+        max_y = max(0, viewport.height() - self.height())
+        ratio_x, ratio_y = self._saved_minimized_position
+        self.move(int(round(ratio_x * max_x)), int(round(ratio_y * max_y)))
+
 class SingleViewer(QGraphicsView):
     zoom_changed_signal = pyqtSignal(float)
+    pan_changed_signal = pyqtSignal(float, float)
     image_changed_signal = pyqtSignal()
     imageHovered = pyqtSignal(object)
     imageClicked = pyqtSignal(int, int)
@@ -17118,6 +17615,7 @@ class SingleViewer(QGraphicsView):
         self.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
         self.setResizeAnchor(QGraphicsView.AnchorViewCenter)
         self.scale_factor = 1.0
+        self._view_sync_blocked = False
         self._fit_to_window_mode = True
         self._pixmap_item = None
         self._overlay_item = None
@@ -17132,6 +17630,8 @@ class SingleViewer(QGraphicsView):
         self._svg_brush_pressed = False
         self._svg_brush_cursor = None
         self._svg_brush_cursor_pressed = None
+        self.horizontalScrollBar().valueChanged.connect(lambda _value: self._emit_pan_changed())
+        self.verticalScrollBar().valueChanged.connect(lambda _value: self._emit_pan_changed())
 
     def set_pixmap(self, pix: QPixmap):
         if pix is None:
@@ -17185,6 +17685,40 @@ class SingleViewer(QGraphicsView):
 
     def set_image_size_provider(self, provider):
         self._image_size_provider = provider
+
+    def normalized_view_center(self):
+        if not self._has_pixmap():
+            return None
+        pix = self._pixmap_item.pixmap()
+        scene_center = self.mapToScene(self.viewport().rect().center())
+        origin = self._pixmap_item.pos()
+        return (
+            (float(scene_center.x()) - float(origin.x())) / max(1, pix.width()),
+            (float(scene_center.y()) - float(origin.y())) / max(1, pix.height()),
+        )
+
+    def set_synchronized_view(self, zoom, center_x, center_y):
+        if not self._has_pixmap():
+            return
+        self._view_sync_blocked = True
+        try:
+            self._set_scale_factor_absolute(float(zoom))
+            pix = self._pixmap_item.pixmap()
+            origin = self._pixmap_item.pos()
+            self.centerOn(
+                float(origin.x()) + float(center_x) * pix.width(),
+                float(origin.y()) + float(center_y) * pix.height(),
+            )
+            self._fit_to_window_mode = False
+        finally:
+            self._view_sync_blocked = False
+
+    def _emit_pan_changed(self):
+        if self._view_sync_blocked:
+            return
+        center = self.normalized_view_center()
+        if center is not None:
+            self.pan_changed_signal.emit(float(center[0]), float(center[1]))
 
     def _image_coordinate_size(self, pix):
         if self._image_size_provider is not None:
@@ -18944,13 +19478,11 @@ class ReorderableTopActionsBar(QFrame):
         self.setAcceptDrops(True)
         self._overflow_buttons = []
         self._overflow_button = None
-        self._max_visible_buttons = 10
         self.orderChanged.connect(self._update_overflow)
 
-    def set_overflow_controls(self, buttons, overflow_button, max_visible_buttons=10):
+    def set_overflow_controls(self, buttons, overflow_button):
         self._overflow_buttons = list(buttons)
         self._overflow_button = overflow_button
-        self._max_visible_buttons = max(1, int(max_visible_buttons))
         self._update_overflow()
 
     def resizeEvent(self, event):
@@ -18966,27 +19498,35 @@ class ReorderableTopActionsBar(QFrame):
         margins = layout.contentsMargins()
         available_width = max(0, self.width() - margins.left() - margins.right())
         spacing = max(0, layout.spacing())
-        button_width = max(button.sizeHint().width() for button in self._overflow_buttons)
-        stride = button_width + spacing
-        preferred_count = min(self._max_visible_buttons, len(self._overflow_buttons))
-        fits_without_overflow = (
-            preferred_count == len(self._overflow_buttons)
-            and preferred_count * button_width + max(0, preferred_count - 1) * spacing
-            <= available_width
+        # Keep actions in their current draggable toolbar order. Use each
+        # button's actual preferred width so More is reserved only when the
+        # complete row cannot fit.
+        ordered_buttons = sorted(
+            self._overflow_buttons,
+            key=lambda button: layout.indexOf(button) if layout.indexOf(button) >= 0 else len(self._overflow_buttons),
         )
-        if fits_without_overflow:
-            visible_count = preferred_count
+        button_widths = [
+            max(button.sizeHint().width(), button.minimumSizeHint().width())
+            for button in ordered_buttons
+        ]
+        full_width = sum(button_widths) + max(0, len(ordered_buttons) - 1) * spacing
+        if full_width <= available_width:
+            visible_count = len(ordered_buttons)
         else:
-            reserved_width = overflow_button.sizeHint().width() + spacing
-            visible_count = min(
-                preferred_count,
-                max(0, (available_width - reserved_width + spacing) // max(1, stride)),
-            )
+            more_width = max(overflow_button.sizeHint().width(), overflow_button.minimumSizeHint().width())
+            visible_count = 0
+            used_width = more_width
+            for button_width in button_widths:
+                candidate_width = used_width + spacing + button_width
+                if candidate_width > available_width:
+                    break
+                used_width = candidate_width
+                visible_count += 1
 
-        for index, button in enumerate(self._overflow_buttons):
+        for index, button in enumerate(ordered_buttons):
             button.setVisible(index < visible_count)
 
-        overflow_buttons = self._overflow_buttons[visible_count:]
+        overflow_buttons = ordered_buttons[visible_count:]
         overflow_button.setVisible(bool(overflow_buttons))
         menu = overflow_button.menu()
         if menu is None:
@@ -19698,7 +20238,10 @@ class OnboardingTourOverlay(QWidget):
             painter.setBrush(Qt.NoBrush)
             painter.drawRoundedRect(QRectF(self._highlight_rect), 14, 14)
 
-        gradient = QLinearGradient(self._highlight_rect.topLeft(), self._highlight_rect.bottomRight())
+        gradient = QLinearGradient(
+            QPointF(self._highlight_rect.topLeft()),
+            QPointF(self._highlight_rect.bottomRight()),
+        )
         gradient.setColorAt(0.0, QColor(self._accent["base"]))
         gradient.setColorAt(1.0, QColor(self._accent["link"]))
         painter.setPen(QPen(QBrush(gradient), 3, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
@@ -20525,6 +21068,7 @@ class AstroApp(QMainWindow):
         # ---------- save ----------
         self.current_save_path = None
         self.current_image_path = None
+        self.image_document_title = None
         self.current_fits_header = None
         self.latest_image_analysis = {}
         self.analysis_dirty = True
@@ -20662,8 +21206,12 @@ class AstroApp(QMainWindow):
         self.language = config.get("language", "pl") or "pl"
         self.onboarding_completed = bool(config.get("onboarding_completed", False))
         APP_PREFERENCES["onboarding_completed"] = self.onboarding_completed
+        self.mode_selector_tour_completed = bool(config.get("mode_selector_tour_completed", False))
+        APP_PREFERENCES["mode_selector_tour_completed"] = self.mode_selector_tour_completed
         self.processor_cores = int(config.get("processor_cores") or self.processor_cores)
         self.onnx_provider = config.get("onnx_provider", "Auto") or "Auto"
+        self.mdi_sync_zoom_pan = bool(config.get("mdi_sync_zoom_pan", True))
+        APP_PREFERENCES["mdi_sync_zoom_pan"] = self.mdi_sync_zoom_pan
         self.dark_mode = self.theme_name.lower() != "light"
 
         self.skyshot_binary = str(config.get("skyshot_binary") or "")
@@ -22305,7 +22853,13 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
                 "dashboard_index": 0,
             },
             {
-                "target": self.menuBar(),
+                "target": self.mode_switch,
+                "title": "onboarding_mode_title",
+                "body": "onboarding_mode_body",
+                "editor_screen": True,
+            },
+            {
+                "target": self.app_menu_bar,
                 "title": "onboarding_editor_title",
                 "body": "onboarding_editor_body",
                 "editor_screen": True,
@@ -22348,11 +22902,37 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
 
     def _finish_first_run_onboarding(self):
         self.onboarding_completed = True
+        self.mode_selector_tour_completed = True
         APP_PREFERENCES["onboarding_completed"] = True
+        APP_PREFERENCES["mode_selector_tour_completed"] = True
         if hasattr(self, "dashboard_stack"):
             self._set_dashboard_tab(
                 getattr(self, "_onboarding_original_dashboard_tab", 0)
             )
+        self.save_workspace_config()
+
+    def _start_mode_selector_onboarding(self):
+        if self.mode_selector_tour_completed or not hasattr(self, "mode_switch"):
+            return
+        self._mode_selector_tour = OnboardingTourOverlay(
+            self,
+            self.language,
+            self.accent_name,
+            [{
+                "target": self.mode_switch,
+                "title": "onboarding_mode_title",
+                "body": "onboarding_mode_body",
+                "editor_screen": True,
+            }],
+        )
+        self._mode_selector_tour.finished.connect(self._finish_mode_selector_onboarding)
+        self._mode_selector_tour.show()
+        self._mode_selector_tour.raise_()
+        self._mode_selector_tour.setFocus()
+
+    def _finish_mode_selector_onboarding(self):
+        self.mode_selector_tour_completed = True
+        APP_PREFERENCES["mode_selector_tour_completed"] = True
         self.save_workspace_config()
 
     def show_plate_solving_dialog(self):
@@ -23369,9 +23949,11 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             ("action_starnet", "action_starnet", "Run StarNet++"),
             ("action_deepsnr", "action_deepsnr", "Run deepSNR"),
             ("action_3d_fly", "action_3d_fly", "3D FLY Filter"),
+            ("action_add_watermark", "action_add_watermark", "Add watermark"),
             ("action_correction", "action_correction", "Correction"),
             ("action_star_correction", "action_star_correction", "Star Correction"),
             ("action_color_calibration", "action_color_calibration", "Color Calibration"),
+            ("action_aberration_inspector", "action_aberration_inspector", "Aberration Inspector"),
             ("action_levels", "action_levels", "Levels"),
             ("action_curves", "action_curves", "Curves (LUT)"),
             ("action_ghs", "action_ghs", "GHS Stretch"),
@@ -23457,6 +24039,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             ("btn_corr_top", "top_correction", "Correction"),
             ("btn_star_corr_top", "top_star_correction", "Stars"),
             ("btn_calib_top", "top_color_calibration", "Calibration"),
+            ("btn_aberration_inspector_top", "action_aberration_inspector", "Aberration Inspector"),
             ("btn_levels_top", "top_levels", "Levels"),
             ("btn_curves_top", "top_curves", "Curves"),
             ("btn_ghs_top", "top_ghs", "GHS"),
@@ -23591,7 +24174,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         self.log(f"Theme switched to {self.theme_name}.")
 
     def apply_preferences(self, theme_name=None, accent_name=None, language=None, processor_cores=None,
-                          onnx_provider=None, openrouter_api_key=None):
+                          onnx_provider=None, openrouter_api_key=None, mdi_sync_zoom_pan=None):
         if theme_name is not None:
             self.theme_name = theme_name
         if accent_name is not None:
@@ -23605,6 +24188,11 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         if openrouter_api_key is not None:
             self.openrouter_api_key = str(openrouter_api_key or "").strip()
             APP_PREFERENCES["openrouter_api_key"] = self.openrouter_api_key
+        if mdi_sync_zoom_pan is not None:
+            self.mdi_sync_zoom_pan = bool(mdi_sync_zoom_pan)
+            APP_PREFERENCES["mdi_sync_zoom_pan"] = self.mdi_sync_zoom_pan
+            if self.mdi_sync_zoom_pan:
+                self._sync_mdi_current_view()
 
         self.dark_mode = (self.theme_name or "").strip().lower() != "light"
         APP_PREFERENCES.update({
@@ -23613,6 +24201,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             "language": self.language,
             "processor_cores": self.processor_cores,
             "onnx_provider": self.onnx_provider,
+            "mdi_sync_zoom_pan": self.mdi_sync_zoom_pan,
         })
 
         app = QApplication.instance()
@@ -25827,7 +26416,9 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         self.skyshot_index = defaults["skyshot_index"]
         self.openrouter_api_key = defaults["openrouter_api_key"]
         self.onboarding_completed = False
+        self.mode_selector_tour_completed = False
         APP_PREFERENCES["onboarding_completed"] = False
+        APP_PREFERENCES["mode_selector_tour_completed"] = False
         self.workspaces = list(defaults["workspaces"])
         self.home_folder = defaults["home_folder"]
         self.recent_image_paths = list(defaults["recent_images"])
@@ -25840,6 +26431,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             processor_cores=defaults["processor_cores"],
             onnx_provider=defaults["onnx_provider"],
             openrouter_api_key=defaults["openrouter_api_key"],
+            mdi_sync_zoom_pan=defaults["mdi_sync_zoom_pan"],
         )
         APP_PREFERENCES["skyshot_binary"] = self.skyshot_binary
         APP_PREFERENCES["skyshot_index"] = self.skyshot_index
@@ -26152,6 +26744,30 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         self.action_console = QAction("Console", self)
         self.action_console.triggered.connect(self.show_console_window)
 
+        self.menu_windows = QMenu("Window", self)
+        self.action_mdi_cascade = QAction("Cascade", self)
+        self.action_mdi_cascade.triggered.connect(lambda: self.mdi_area.cascadeSubWindows())
+        self.action_mdi_tile = QAction("Tile", self)
+        self.action_mdi_tile.triggered.connect(lambda: self.mdi_area.tileSubWindows())
+        self.action_mdi_restore = QAction("Restore Image Window", self)
+        self.action_mdi_restore.triggered.connect(self._restore_image_subwindow)
+        self.action_mdi_maximize = QAction("Maximize Image Window", self)
+        self.action_mdi_maximize.triggered.connect(self._maximize_image_subwindow)
+        for window_action in (
+            self.action_mdi_cascade,
+            self.action_mdi_tile,
+            self.action_mdi_restore,
+            self.action_mdi_maximize,
+        ):
+            self.menu_windows.addAction(window_action)
+        self._mdi_window_layout_actions = (
+            self.action_mdi_cascade,
+            self.action_mdi_tile,
+            self.action_mdi_restore,
+            self.action_mdi_maximize,
+        )
+        self.menu_windows.aboutToShow.connect(self._refresh_image_windows_menu)
+
         self.action_photoshop_menu = QAction("Menu", self)
         self.action_photoshop_menu.triggered.connect(self.show_photoshop_menu)
 
@@ -26196,6 +26812,9 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         self.action_3d_fly = QAction("3D FLY Filter", self)
         self.action_3d_fly.triggered.connect(self.run_3d_fly_filter)
 
+        self.action_add_watermark = QAction("Add watermark", self)
+        self.action_add_watermark.triggered.connect(self.add_text_watermark)
+
         self.action_correction = QAction("Correction", self)
         self.action_correction.triggered.connect(self.show_correction_panels)
 
@@ -26204,6 +26823,12 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
 
         self.action_color_calibration = QAction("Color Calibration", self)
         self.action_color_calibration.triggered.connect(self.show_color_calibration_dialog)
+
+        self.action_aberration_inspector = QAction("Aberration Inspector", self)
+        self.action_aberration_inspector.setToolTip(
+            "Create a crop mosaic to compare stars across the image field"
+        )
+        self.action_aberration_inspector.triggered.connect(self.show_aberration_inspector)
 
         self.action_levels = QAction("Levels", self)
         self.action_levels.triggered.connect(self.show_levels_window)
@@ -26345,6 +26970,14 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         self.btn_corr_top = _add_top_btn("Correction", action=self.action_correction)
         self.btn_star_corr_top = _add_top_btn("Stars", action=self.action_star_correction)
         self.btn_calib_top = _add_top_btn("Calibration", action=self.action_color_calibration)
+        self.btn_aberration_inspector_top = _add_top_btn(
+            "Aberration Inspector", action=self.action_aberration_inspector
+        )
+        self.btn_aberration_inspector_top.setIcon(svg_icon_from_text(
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#dce8f5" stroke-width="1.6">'
+            '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/>'
+            '<circle cx="12" cy="12" r="2" fill="#55c6ed" stroke="none"/></svg>', 18
+        ))
         self.btn_levels_top = _add_top_btn("Levels", action=self.action_levels)
         self.btn_curves_top = _add_top_btn("Curves", action=self.action_curves)
         self.btn_ghs_top = _add_top_btn("GHS", action=self.action_ghs)
@@ -26396,6 +27029,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             "btn_corr_top",
             "btn_star_corr_top",
             "btn_calib_top",
+            "btn_aberration_inspector_top",
             "btn_levels_top",
             "btn_curves_top",
             "btn_ghs_top",
@@ -26417,7 +27051,6 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         top_actions_bar.set_overflow_controls(
             [getattr(self, attr_name) for attr_name in top_button_attrs],
             self.btn_more_top,
-            max_visible_buttons=10,
         )
 
         top_actions_layout.addStretch(1)
@@ -26470,12 +27103,6 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         self._top_button_icons_dir = icons_dir
         self._top_button_icon_files = top_button_icons
         self._refresh_topbar_icons()
-
-        command_palette_row = QFrame()
-        command_palette_row.setObjectName("command_palette_row")
-        command_palette_layout = QHBoxLayout(command_palette_row)
-        command_palette_layout.setContentsMargins(8, 4, 8, 4)
-        command_palette_layout.addStretch(1)
 
         palette_icons_dir = os.path.join(get_runtime_base_dir(), "assets", "icons", "top bar")
 
@@ -26564,6 +27191,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             _palette_entry("Konsola", "Console", "Otwórz konsolę komunikatów", "Open the message console", "Widok", "View", "console.svg", self.action_console, aliases=("log", "logs")),
             _palette_entry("GHS Stretch", "GHS Stretch", "Otwórz transformację Generalized Hyperbolic Stretch", "Open the Generalized Hyperbolic Stretch controls", "Ton", "Tone", "ghs.svg", self.action_ghs, aliases=("ghs", "hyperbolic stretch")),
             _palette_entry("Korekcja", "Correction", "Otwórz narzędzia korekcji obrazu", "Open image correction tools", "Kolor", "Color", "correction.svg", self.action_correction, aliases=("correction",)),
+            _palette_entry("Inspektor aberracji", "Aberration Inspector", "Porównaj gwiazdy w narożnikach, krawędziach i centrum kadru", "Compare stars in the corners, edges, and center of the image", "Analiza obrazu", "Image Analysis", "", self.action_aberration_inspector, aliases=("aberration", "coma", "field curvature")),
             _palette_entry("Pędzel SVG", "SVG Brush", "Otwórz ustawienia pędzla wektorowego", "Open vector brush settings", "Narzędzia", "Tools", "svg_brush.svg", self.action_svg_brush, aliases=("svg", "pędzel")),
             _palette_entry("Film poklatkowy", "Time-lapse Movie", "Utwórz film z sekwencji klatek", "Create a movie from a frame sequence", "Astronomia", "Astronomy", "timelapse.svg", self.action_timelapse, aliases=("timelapse", "time lapse")),
             _palette_entry("Stack planetarny", "Planetary Stack", "Stackuj klatki z filmu planetarnego", "Stack frames from a planetary video", "Astronomia", "Astronomy", "solar_stack.svg", self.action_solar_stack, aliases=("planetary", "solar stack")),
@@ -26580,9 +27208,9 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
 
         self.command_palette_button = QPushButton(self)
         self.command_palette_button.setObjectName("commandPaletteTrigger")
-        self.command_palette_button.setMinimumWidth(520)
-        self.command_palette_button.setMaximumWidth(720)
-        self.command_palette_button.setFixedHeight(42)
+        self.command_palette_button.setMinimumWidth(220)
+        self.command_palette_button.setMaximumWidth(300)
+        self.command_palette_button.setFixedHeight(30)
         self.command_palette_button.setCursor(Qt.PointingHandCursor)
         self.command_palette_button.setIcon(svg_icon_from_text(
             '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">'
@@ -26599,8 +27227,9 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         )
         self.command_palette_button.clicked.connect(lambda _checked=False: self.show_command_palette())
         self._update_command_palette_button_text()
-        command_palette_layout.addWidget(self.command_palette_button)
-        command_palette_layout.addStretch(1)
+        titlebar = getattr(self, "whitesur_titlebar", None)
+        if titlebar is not None:
+            titlebar.add_command_palette_button(self.command_palette_button)
 
         self.action_command_palette = QAction("Command Palette", self)
         self.action_command_palette.setShortcut("Ctrl+Shift+P")
@@ -26647,6 +27276,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             self.action_color_calibration,
             self.action_correction,
             self.action_star_correction,
+            self.action_aberration_inspector,
         ])
         _add_top_menu("filters", "Filters", [
             self.action_blur,
@@ -26678,6 +27308,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             self.action_console,
             self.action_photoshop_menu,
         ])
+        menu_bar.addMenu(self.menu_windows)
         self.top_menus["view"].addSeparator()
         self.top_menus["view"].addAction(self.action_reset_topbar)
         _add_top_menu("tools", "Tools", [
@@ -26691,14 +27322,9 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             self.action_updates,
             self.action_about,
         ])
-        self.setMenuBar(menu_bar)
         self.app_menu_bar = menu_bar
         menu_bar.setVisible(False)
-        self.command_palette_row = command_palette_row
-        main_layout.addWidget(command_palette_row)
-
-
-
+        root_layout.insertWidget(1 if hasattr(self, "whitesur_titlebar") else 0, menu_bar)
         top_panel = QFrame()
         self.top_panel = top_panel
         top_panel_layout = QVBoxLayout(top_panel)
@@ -26779,8 +27405,71 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         self.viewer.view.set_pick_mode(False)
         self.latest_plate_solve_result = None
 
+        # Pro mode uses an MDI image workspace, like PixInsight. Keeping the
+        # existing viewer as the first document preserves all editing tools
+        # while giving the workspace native cascade/tile window controls.
+        self.mdi_area = PersistentMdiArea()
+        self.mdi_area.setObjectName("imageMdiArea")
+        self.mdi_area.setBackground(QColor("#17191d"))
+        self.mdi_area.setViewMode(QMdiArea.ViewMode.SubWindowView)
+        self.mdi_area.setActivationOrder(QMdiArea.WindowOrder.ActivationHistoryOrder)
+        self.image_document_hosts = {}
+        self.image_document_host = QWidget()
+        self.image_document_layout = QVBoxLayout(self.image_document_host)
+        self.image_document_layout.setContentsMargins(0, 0, 0, 0)
+        self.image_document_layout.addWidget(self.viewer)
+        self.image_subwindow = MovableMdiSubWindow()
+        self.image_subwindow.setWidget(self.image_document_host)
+        self.mdi_area.addSubWindow(self.image_subwindow)
+        self.image_subwindow._mdi_workspace = self.mdi_area
+        self.image_subwindow.windowStateChanged.connect(self.mdi_area.schedule_minimized_position_restore)
+        self.image_subwindow.setWindowFlags(
+            Qt.SubWindow | Qt.WindowTitleHint | Qt.WindowSystemMenuHint
+            | Qt.WindowMinimizeButtonHint | Qt.WindowMaximizeButtonHint | Qt.WindowCloseButtonHint
+        )
+        self.image_subwindow.setWindowTitle("Untitled")
+        self.image_subwindow.setOption(QMdiSubWindow.SubWindowOption.RubberBandMove, True)
+        self.image_subwindow.setOption(QMdiSubWindow.SubWindowOption.RubberBandResize, True)
+        self.image_subwindow.showMaximized()
+        self._image_document_state_fields = (
+            "original_img", "_native_loaded_image", "magic_img", "processed_img",
+            "_bge_save_image", "_bge_save_magic_snapshot", "_bge_save_processing_revision",
+            "preview_override_img", "display_stretch_mode", "display_stretch_linked",
+            "last_stretch_diagnostics", "layer_images", "layer_titles", "channel_visibility",
+            "layer_visibility", "layer_order", "overlay_layer_pixmaps", "constellation_lines",
+            "layer_counters", "layer_types", "layer_masks", "selected_layer_key",
+            "mask_pick_target", "mask_pick_tolerance", "current_save_path", "current_image_path",
+            "image_document_title",
+            "current_fits_header", "latest_image_analysis", "analysis_dirty",
+            "plate_solve_object_info", "latest_plate_solve_result", "undo_stack", "redo_stack",
+            "processing_history", "selected_thumbnail_index", "current_history_node_id",
+            "thumbnail_next_id",
+        )
+        self._image_documents = {}
+        self._image_document_states = {}
+        self._mdi_loading_document = False
+        self._active_image_subwindow = self.image_subwindow
+        self._image_documents[self.image_subwindow] = self.viewer
+        self.image_document_hosts[self.image_subwindow] = self.image_document_host
+        self._image_document_states[self.image_subwindow] = self._capture_image_document_state()
+        self._blank_image_document_state = self._empty_image_document_state()
+        self.viewer_workspace_stack = QStackedWidget()
+        self.easy_view_host = QWidget()
+        self.easy_view_layout = QVBoxLayout(self.easy_view_host)
+        self.easy_view_layout.setContentsMargins(0, 0, 0, 0)
+        self.easy_view_layout.addWidget(self.viewer)
+        self.viewer_workspace_stack.addWidget(self.mdi_area)
+        self.viewer_workspace_stack.addWidget(self.easy_view_host)
+        self.viewer.view.zoom_changed_signal.connect(
+            lambda zoom, view=self.viewer.view: self._sync_mdi_zoom(view, zoom)
+        )
+        self.viewer.view.pan_changed_signal.connect(
+            lambda x, y, view=self.viewer.view: self._sync_mdi_pan(view, x, y)
+        )
+        self.mdi_area.subWindowActivated.connect(self._on_image_subwindow_activated)
+
         center_splitter = QSplitter(Qt.Horizontal)
-        center_splitter.addWidget(self.viewer)
+        center_splitter.addWidget(self.viewer_workspace_stack)
         center_splitter.addWidget(right_panel)
         center_splitter.setStretchFactor(0, 1)
         center_splitter.setStretchFactor(1, 0)
@@ -26791,18 +27480,25 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         # Easy mode keeps the same image workspace but guides the user through
         # a short sequence of common processing steps in a dedicated sidebar.
         self.easy_sidebar = self._build_easy_sidebar()
-        self.editor_center_splitter = QSplitter(Qt.Horizontal)
-        self.editor_center_splitter.addWidget(self.easy_sidebar)
-        self.editor_center_splitter.addWidget(center_splitter)
-        self.editor_center_splitter.setChildrenCollapsible(False)
-        self.editor_center_splitter.setCollapsible(0, True)
-        self.editor_center_splitter.setCollapsible(1, False)
-        self.editor_center_splitter.setStretchFactor(0, 0)
-        self.editor_center_splitter.setStretchFactor(1, 1)
-        self.editor_center_splitter.setSizes([300, 1250])
+        self.easy_sidebar.setMinimumWidth(340)
+        self.easy_sidebar.setMaximumWidth(380)
+        self.easy_sidebar.setFixedWidth(360)
+        self.easy_workspace = QWidget()
+        easy_workspace_layout = QVBoxLayout(self.easy_workspace)
+        easy_workspace_layout.setContentsMargins(0, 0, 0, 0)
+        easy_workspace_layout.setSpacing(4)
+        easy_workspace_layout.setSpacing(0)
+        easy_workspace_body = QHBoxLayout()
+        easy_workspace_body.setContentsMargins(0, 0, 0, 0)
+        easy_workspace_body.setSpacing(0)
+        easy_workspace_body.addWidget(self.easy_sidebar, 0)
+        easy_workspace_body.addWidget(center_splitter, 1)
+        easy_workspace_layout.addLayout(easy_workspace_body, 1)
+        self._easy_left_panel_visible = True
+        self._easy_right_panel_visible = True
 
         self.workspace_splitter = QSplitter(Qt.Vertical)
-        self.workspace_splitter.addWidget(self.editor_center_splitter)
+        self.workspace_splitter.addWidget(self.easy_workspace)
         self.workspace_splitter.addWidget(top_panel)
         self.workspace_splitter.setChildrenCollapsible(False)
         self.workspace_splitter.setStretchFactor(0, 1)
@@ -26855,23 +27551,25 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         bottom_layout.addWidget(self.btn_stretch_channels)
         self.btn_zoom_out_bottom = QPushButton("−")
         self.btn_zoom_out_bottom.setToolTip("Pomniejsz podglad")
-        self.btn_zoom_out_bottom.clicked.connect(self.viewer.view.zoom_out)
+        self.btn_zoom_out_bottom.clicked.connect(lambda: self.viewer.view.zoom_out())
         bottom_layout.addWidget(self.btn_zoom_out_bottom)
         self.btn_zoom_in_bottom = QPushButton("+")
         self.btn_zoom_in_bottom.setToolTip("Powiększ podgląd")
-        self.btn_zoom_in_bottom.clicked.connect(self.viewer.view.zoom_in)
+        self.btn_zoom_in_bottom.clicked.connect(lambda: self.viewer.view.zoom_in())
         bottom_layout.addWidget(self.btn_zoom_in_bottom)
         self.btn_zoom_fit_bottom = QPushButton("Dopasuj do okna")
         self.btn_zoom_fit_bottom.setToolTip("Dopasuj obraz do rozmiaru okna")
-        self.btn_zoom_fit_bottom.clicked.connect(self.viewer.view.fit_to_window)
+        self.btn_zoom_fit_bottom.clicked.connect(lambda: self.viewer.view.fit_to_window())
         bottom_layout.addWidget(self.btn_zoom_fit_bottom)
         self.btn_grid_overlay_bottom = QCheckBox("Siatka")
         self.btn_grid_overlay_bottom.setEnabled(False)
+        self.btn_grid_overlay_bottom.setChecked(True)
         self.btn_grid_overlay_bottom.setToolTip("Pokaż lub ukryj siatkę współrzędnych")
         self.btn_grid_overlay_bottom.toggled.connect(self._on_plate_dialog_grid_toggled)
         bottom_layout.addWidget(self.btn_grid_overlay_bottom)
         self.btn_object_overlay_bottom = QCheckBox("Obiekty")
         self.btn_object_overlay_bottom.setEnabled(False)
+        self.btn_object_overlay_bottom.setChecked(True)
         self.btn_object_overlay_bottom.setToolTip("Pokaż lub ukryj etykiety obiektów")
         self.btn_object_overlay_bottom.toggled.connect(self._on_plate_dialog_annotate_toggled)
         bottom_layout.addWidget(self.btn_object_overlay_bottom)
@@ -26925,6 +27623,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         self.screen_stack.addWidget(self._build_dashboard_page())
         self.screen_stack.addWidget(self.editor_page)
         self.screen_stack.setCurrentWidget(self.dashboard_page)
+        self.screen_stack.currentChanged.connect(self._update_titlebar_panel_controls)
         root_layout.addWidget(self.screen_stack, 1)
         self.setCentralWidget(root_widget)
         if getattr(self, "_white_sur_titlebar_enabled", False):
@@ -27162,6 +27861,8 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             self._hide_easy_dialog_button(star_dialog.btn_close)
             self._embed_easy_dialog(star_dialog)
         elif index == 7:
+            self._add_easy_action_button("action_3d_fly", "3D FLY")
+            self._add_easy_action_button("action_add_watermark", "Add watermark")
             self._add_easy_action_button("action_save", "Save image")
             self._add_easy_action_button("action_save_as", "Save as…")
         self.easy_actions_layout.addStretch(1)
@@ -27238,35 +27939,427 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             pass
         button.clicked.connect(callback)
 
+    def _toggle_easy_left_panel(self):
+        self._easy_left_panel_visible = not self._easy_left_panel_visible
+        self.easy_sidebar.setVisible(self._easy_left_panel_visible)
+        label = self.tr("easy_hide_left_panel", "Hide workflow panel") if self._easy_left_panel_visible else self.tr("easy_show_left_panel", "Show workflow panel")
+        titlebar = getattr(self, "whitesur_titlebar", None)
+        button = getattr(titlebar, "easy_left_panel_button", None)
+        if button is not None:
+            button.setToolTip(label)
+            button.setAccessibleName(label)
+
+    def _toggle_easy_right_panel(self):
+        self._easy_right_panel_visible = not self._easy_right_panel_visible
+        self.right_panel.setVisible(self._easy_right_panel_visible)
+        label = self.tr("easy_hide_right_panel", "Hide assistant panel") if self._easy_right_panel_visible else self.tr("easy_show_right_panel", "Show assistant panel")
+        titlebar = getattr(self, "whitesur_titlebar", None)
+        button = getattr(titlebar, "easy_right_panel_button", None)
+        if button is not None:
+            button.setToolTip(label)
+            button.setAccessibleName(label)
+
+    def _update_titlebar_panel_controls(self, *_args):
+        titlebar = getattr(self, "whitesur_titlebar", None)
+        screen_stack = getattr(self, "screen_stack", None)
+        editor_page = getattr(self, "editor_page", None)
+        if titlebar is not None and screen_stack is not None:
+            titlebar.panel_controls.setVisible(
+                screen_stack.currentWidget() is editor_page
+                and getattr(self, "interface_mode", "easy") == "easy"
+            )
+
     def set_interface_mode(self, mode):
         if not hasattr(self, "topbar_splitter"):
             return
         easy = str(mode).lower() == "easy"
         self.interface_mode = "easy" if easy else "pro"
-        self.easy_sidebar.setVisible(easy)
-        self.right_panel.setVisible(True)
+        active_subwindow = (
+            self.mdi_area.activeSubWindow()
+            or getattr(self, "_active_image_subwindow", None)
+            or self.image_subwindow
+        )
+        active_viewer = self._image_documents.get(active_subwindow, self.viewer)
+        self._update_titlebar_panel_controls()
+        self.easy_sidebar.setVisible(easy and self._easy_left_panel_visible)
+        self.right_panel.setVisible(easy and self._easy_right_panel_visible if easy else True)
         self.top_panel.setVisible(not easy)
         self.bottom_panel.setVisible(True)
-        self.command_palette_row.setVisible(not easy)
         self.top_actions_bar.setVisible(not easy)
         self.app_menu_bar.setVisible(not easy)
         if easy:
+            document_host = self.image_document_hosts.get(active_subwindow)
+            if document_host is not None:
+                document_host.layout().removeWidget(active_viewer)
+            if self.easy_view_layout.indexOf(active_viewer) < 0:
+                self.easy_view_layout.addWidget(active_viewer)
+            self.viewer_workspace_stack.setCurrentWidget(self.easy_view_host)
             self.btn_easy_mode.setChecked(True)
             self.btn_easy_mode.setToolTip(self.tr("mode_easy_active", "Easy mode is active"))
             self.btn_pro_mode.setToolTip(self.tr("mode_pro", "Switch to Pro"))
             self._set_easy_stage(self.easy_current_stage)
-            self.editor_center_splitter.setSizes([340, max(800, self.width() - 340)])
             self.topbar_splitter.setSizes([0, max(500, self.height() - 70)])
         else:
+            if self.easy_view_layout.indexOf(active_viewer) >= 0:
+                self.easy_view_layout.removeWidget(active_viewer)
+            document_host = self.image_document_hosts.get(active_subwindow)
+            if document_host is not None:
+                document_host.layout().addWidget(active_viewer)
+            self.viewer_workspace_stack.setCurrentWidget(self.mdi_area)
+            self.mdi_area.setActiveSubWindow(active_subwindow)
             self._restore_easy_stage_dialogs()
             self.btn_pro_mode.setChecked(True)
             self.btn_easy_mode.setToolTip(self.tr("mode_easy_tooltip", "Switch to Easy mode"))
             self.btn_pro_mode.setToolTip(self.tr("mode_pro_active", "Pro mode is active"))
             self.workspace_splitter.setSizes([650, 190])
-            self.editor_center_splitter.setSizes([0, max(800, self.width() - 340)])
             self.topbar_splitter.setSizes([44, max(500, self.height() - 110)])
+            active_subwindow.showNormal()
+            active_subwindow.resize(
+                max(640, int(self.mdi_area.width() * 0.78)),
+                max(420, int(self.mdi_area.height() * 0.78)),
+            )
+            active_subwindow.show()
         if easy:
             self._set_easy_stage(self.easy_current_stage)
+        self.update_menu_actions()
+
+    def _capture_image_document_state(self):
+        fields = getattr(self, "_image_document_state_fields", ())
+        state = {}
+        for name in fields:
+            if not hasattr(self, name):
+                continue
+            value = getattr(self, name)
+            if isinstance(value, dict):
+                value = dict(value)
+            elif isinstance(value, list):
+                value = list(value)
+            state[name] = value
+        return state
+
+    def _refresh_image_windows_menu(self):
+        if not hasattr(self, "_mdi_window_layout_actions"):
+            return
+        self.menu_windows.clear()
+        for action in self._mdi_window_layout_actions:
+            self.menu_windows.addAction(action)
+        windows = [
+            window for window in self.mdi_area.subWindowList()
+            if window in getattr(self, "_image_documents", {})
+        ]
+        if windows:
+            self.menu_windows.addSeparator()
+        for index, subwindow in enumerate(windows, start=1):
+            title = str(subwindow.windowTitle() or "Untitled")
+            action = QAction(f"{index}. {title}", self.menu_windows)
+            action.setCheckable(True)
+            action.setChecked(subwindow is self.mdi_area.activeSubWindow())
+            action.triggered.connect(
+                lambda _checked=False, target=subwindow: self._activate_image_document(target)
+            )
+            self.menu_windows.addAction(action)
+
+    def _activate_image_document(self, subwindow):
+        if subwindow not in getattr(self, "_image_documents", {}):
+            return
+        self.mdi_area.setActiveSubWindow(subwindow)
+        subwindow.showNormal()
+        subwindow.show()
+        subwindow.raise_()
+
+    def _restore_image_document_state(self, state):
+        for name in getattr(self, "_image_document_state_fields", ()):
+            if name not in state:
+                continue
+            value = state[name]
+            if isinstance(value, dict):
+                value = dict(value)
+            elif isinstance(value, list):
+                value = list(value)
+            setattr(self, name, value)
+
+    def _on_image_subwindow_activated(self, subwindow):
+        if subwindow is None or not hasattr(self, "_image_documents"):
+            return
+        previous = getattr(self, "_active_image_subwindow", None)
+        if previous is not None and previous in self._image_documents:
+            self._image_document_states[previous] = self._capture_image_document_state()
+        viewer = self._image_documents.get(subwindow)
+        if viewer is None:
+            return
+        self._active_image_subwindow = subwindow
+        self.viewer = viewer
+        self._restore_image_document_state(self._image_document_states.get(subwindow, {}))
+        set_global_display_stretch(self.display_stretch_mode, self.display_stretch_linked)
+        if hasattr(self, "combo_stretch_bottom"):
+            stretch_index = self.combo_stretch_bottom.findData(self.display_stretch_mode)
+            if stretch_index >= 0:
+                self.combo_stretch_bottom.setCurrentIndex(stretch_index)
+        if hasattr(self, "btn_stretch_channels"):
+            self.btn_stretch_channels.blockSignals(True)
+            self.btn_stretch_channels.setChecked(bool(self.display_stretch_linked))
+            self.btn_stretch_channels.blockSignals(False)
+        self._update_thumbnails_view()
+        was_syncing = self._zoom_sync_in_progress
+        self._zoom_sync_in_progress = True
+        try:
+            if isinstance(self.processed_img, np.ndarray):
+                self.viewer.set_before(np_to_qpixmap(self.processed_img))
+            else:
+                self.viewer.set_before(QPixmap())
+        finally:
+            self._zoom_sync_in_progress = was_syncing
+        self.update_menu_actions()
+        self._update_viewer_status()
+
+    def _sync_mdi_zoom(self, source_view, zoom):
+        if (
+            not getattr(self, "mdi_sync_zoom_pan", True)
+            or getattr(self, "interface_mode", "easy") != "pro"
+            or self._zoom_sync_in_progress
+        ):
+            return
+        center = source_view.normalized_view_center()
+        if center is None:
+            return
+        self._apply_mdi_view_state(source_view, zoom, center)
+
+    def _sync_mdi_pan(self, source_view, center_x, center_y):
+        if (
+            not getattr(self, "mdi_sync_zoom_pan", True)
+            or getattr(self, "interface_mode", "easy") != "pro"
+            or self._zoom_sync_in_progress
+        ):
+            return
+        self._apply_mdi_view_state(source_view, source_view.scale_factor, (center_x, center_y))
+
+    def _apply_mdi_view_state(self, source_view, zoom, center):
+        self._zoom_sync_in_progress = True
+        try:
+            for viewer in self._image_documents.values():
+                target_view = getattr(viewer, "view", None)
+                if target_view is not None and target_view is not source_view:
+                    target_view.set_synchronized_view(zoom, center[0], center[1])
+        finally:
+            self._zoom_sync_in_progress = False
+
+    def _sync_mdi_current_view(self):
+        viewer = getattr(self, "viewer", None)
+        if (
+            viewer is None
+            or not getattr(self, "mdi_sync_zoom_pan", True)
+            or getattr(self, "interface_mode", "easy") != "pro"
+        ):
+            return
+        center = viewer.view.normalized_view_center()
+        if center is not None:
+            self._apply_mdi_view_state(viewer.view, viewer.view.scale_factor, center)
+
+    def _create_image_document_window(self, path):
+        viewer = BlendViewer()
+        viewer.view.set_image_size_provider(self._viewer_image_size)
+        viewer.view.zoom_changed_signal.connect(self.update_viewer_overlay)
+        viewer.view.zoom_changed_signal.connect(lambda _zoom: self._update_viewer_status())
+        viewer.view.zoom_changed_signal.connect(
+            lambda zoom, view=viewer.view: self._sync_mdi_zoom(view, zoom)
+        )
+        viewer.view.pan_changed_signal.connect(
+            lambda x, y, view=viewer.view: self._sync_mdi_pan(view, x, y)
+        )
+        viewer.view.image_changed_signal.connect(self._update_viewer_status)
+        viewer.view.imageHovered.connect(self._update_viewer_status)
+        viewer.view.imageClicked.connect(self.on_viewer_image_clicked)
+        viewer.view.roiDragStarted.connect(self._on_roi_drag_started)
+        viewer.view.roiDragUpdated.connect(self._on_roi_drag_updated)
+        viewer.view.roiDragFinished.connect(self._on_roi_drag_finished)
+        viewer.view.roiHoverMoved.connect(self._on_roi_hover_changed)
+        viewer.view.svgBrushDragStarted.connect(self._on_svg_brush_drag_started)
+        viewer.view.svgBrushDragUpdated.connect(self._on_svg_brush_drag_updated)
+        viewer.view.svgBrushDragFinished.connect(self._on_svg_brush_drag_finished)
+        viewer.imageDropped.connect(self._handle_dropped_images)
+        viewer.view.set_pick_mode(False)
+        document_host = QWidget()
+        document_layout = QVBoxLayout(document_host)
+        document_layout.setContentsMargins(0, 0, 0, 0)
+        document_layout.addWidget(viewer)
+        subwindow = MovableMdiSubWindow()
+        subwindow.setWidget(document_host)
+        self.mdi_area.addSubWindow(subwindow)
+        subwindow._mdi_workspace = self.mdi_area
+        subwindow.windowStateChanged.connect(self.mdi_area.schedule_minimized_position_restore)
+        subwindow.setWindowFlags(
+            Qt.SubWindow | Qt.WindowTitleHint | Qt.WindowSystemMenuHint
+            | Qt.WindowMinimizeButtonHint | Qt.WindowMaximizeButtonHint | Qt.WindowCloseButtonHint
+        )
+        subwindow.setWindowTitle(os.path.basename(path) or "Untitled")
+        subwindow.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, False)
+        self._image_documents[subwindow] = viewer
+        self.image_document_hosts[subwindow] = document_host
+        self._image_document_states[subwindow] = self._empty_image_document_state()
+        subwindow.show()
+        self.mdi_area.setActiveSubWindow(subwindow)
+        self._active_image_subwindow = subwindow
+        self.viewer = viewer
+        return subwindow
+
+    @staticmethod
+    def _build_aberration_inspector_mosaic(image, grid_size=3, panel_size=256, separation=4, gap_brightness=0.0):
+        source = np.asarray(image)
+        if source.ndim not in (2, 3) or source.size == 0:
+            raise ValueError("The active image has an unsupported shape.")
+        grid_size = max(2, min(9, int(grid_size)))
+        panel_size = max(16, int(panel_size))
+        separation = max(0, min(16, int(separation)))
+        height, width = source.shape[:2]
+        effective_panel = min(panel_size, width // grid_size, height // grid_size)
+        if effective_panel < 16:
+            raise ValueError(
+                f"The image is too small for a {grid_size}×{grid_size} inspector grid. "
+                "Each panel must be at least 16 pixels wide."
+            )
+
+        brightness = max(0.0, min(1.0, float(gap_brightness)))
+        if np.issubdtype(source.dtype, np.integer):
+            background = np.iinfo(source.dtype).max * brightness
+        else:
+            finite_max = float(np.nanmax(source)) if np.isfinite(source).any() else 1.0
+            background = brightness if finite_max <= 1.0 else brightness * finite_max
+
+        output_side = grid_size * effective_panel + (grid_size - 1) * separation
+        if source.ndim == 2:
+            output = np.full((output_side, output_side), background, dtype=source.dtype)
+        else:
+            output = np.full(
+                (output_side, output_side, source.shape[2]), background, dtype=source.dtype
+            )
+
+        for row in range(grid_size):
+            source_top = int(round(row * (height - effective_panel) / (grid_size - 1)))
+            target_top = row * (effective_panel + separation)
+            for col in range(grid_size):
+                source_left = int(round(col * (width - effective_panel) / (grid_size - 1)))
+                target_left = col * (effective_panel + separation)
+                output[
+                    target_top:target_top + effective_panel,
+                    target_left:target_left + effective_panel,
+                    ...,
+                ] = source[
+                    source_top:source_top + effective_panel,
+                    source_left:source_left + effective_panel,
+                    ...,
+                ]
+        return output, effective_panel
+
+    def show_aberration_inspector(self):
+        if getattr(self, "interface_mode", "easy") != "pro":
+            return
+        source = self.processed_img if isinstance(self.processed_img, np.ndarray) else self.magic_img
+        if not isinstance(source, np.ndarray):
+            QMessageBox.information(
+                self, "Aberration Inspector", "Open an image before creating an inspector mosaic."
+            )
+            return
+
+        dialog = AberrationInspectorDialog(
+            self,
+            image_size=(int(source.shape[1]), int(source.shape[0])),
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        params = dialog.parameters()
+        try:
+            mosaic, effective_panel = self._build_aberration_inspector_mosaic(
+                source,
+                params["grid_size"],
+                params["panel_size"],
+                params["separation"],
+                params["gap_brightness"],
+            )
+        except (TypeError, ValueError) as exc:
+            QMessageBox.warning(self, "Aberration Inspector", str(exc))
+            return
+
+        document_title = "Aberration Inspector"
+        subwindow = self._create_image_document_window(document_title)
+        self.image_document_title = document_title
+        self.original_img = mosaic.copy()
+        self.magic_img = mosaic.copy()
+        self.processed_img = mosaic.copy()
+        self._native_loaded_image = None
+        self.current_image_path = None
+        self.current_save_path = None
+        self.current_fits_header = None
+        self.latest_image_analysis = {}
+        self.analysis_dirty = True
+        self.undo_stack.clear()
+        self.redo_stack.clear()
+        self.processing_history.clear()
+        self.thumbnail_next_id = 1
+        self.selected_thumbnail_index = -1
+        self.current_history_node_id = None
+        set_global_display_stretch(self.display_stretch_mode, self.display_stretch_linked)
+
+        was_syncing = self._zoom_sync_in_progress
+        self._zoom_sync_in_progress = True
+        try:
+            self.viewer.set_before(np_to_qpixmap(self.processed_img))
+        finally:
+            self._zoom_sync_in_progress = was_syncing
+        subwindow.setWindowTitle(document_title)
+        self._update_viewer_status()
+        self.update_menu_actions()
+        self._update_thumbnails_view()
+        self.add_thumbnail(document_title, self.processed_img)
+        self._image_document_states[subwindow] = self._capture_image_document_state()
+        self.screen_stack.setCurrentWidget(self.editor_page)
+        self.log(
+            f"Aberration Inspector mosaic created ({params['grid_size']}×{params['grid_size']}, "
+            f"{effective_panel} px panels).",
+            "success",
+        )
+
+    def _empty_image_document_state(self):
+        baseline = getattr(self, "_blank_image_document_state", None)
+        if baseline is not None:
+            return {
+                name: dict(value) if isinstance(value, dict)
+                else list(value) if isinstance(value, list)
+                else value
+                for name, value in baseline.items()
+            }
+        state = self._capture_image_document_state()
+        for name in (
+            "original_img", "_native_loaded_image", "magic_img", "processed_img",
+            "current_save_path", "current_image_path", "current_fits_header",
+            "latest_plate_solve_result",
+        ):
+            if name in state:
+                state[name] = None
+        for name in ("layer_images", "overlay_layer_pixmaps", "layer_masks", "undo_stack", "redo_stack", "processing_history"):
+            if name in state:
+                state[name] = {}
+        if "processing_history" in state:
+            state["processing_history"] = []
+        if "undo_stack" in state:
+            state["undo_stack"] = []
+        if "redo_stack" in state:
+            state["redo_stack"] = []
+        return state
+
+    def _restore_image_subwindow(self):
+        target = self.mdi_area.activeSubWindow() or getattr(self, "_active_image_subwindow", None)
+        if target is None:
+            return
+        target.showNormal()
+        target.show()
+        self.mdi_area.setActiveSubWindow(target)
+
+    def _maximize_image_subwindow(self):
+        target = self.mdi_area.activeSubWindow() or getattr(self, "_active_image_subwindow", None)
+        if target is None:
+            return
+        target.showMaximized()
+        self.mdi_area.setActiveSubWindow(target)
 
     def _viewer_image_size(self):
         image = self.magic_img
@@ -27286,6 +28379,13 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         return f"{numeric:.5g}"
 
     def _update_viewer_status(self, coordinates=None):
+        image_path = str(getattr(self, "current_image_path", "") or "").strip()
+        image_title = str(getattr(self, "image_document_title", "") or "").strip()
+        if not image_title:
+            image_title = os.path.basename(image_path) if image_path else "Untitled"
+        active_subwindow = getattr(self, "_active_image_subwindow", None)
+        if active_subwindow is not None:
+            active_subwindow.setWindowTitle(image_title)
         if not hasattr(self, "status_coordinates_label"):
             return
         english = str(getattr(self, "language", "pl")).lower().startswith("en")
@@ -27498,17 +28598,21 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         return selected_path, dialog.selectedNameFilter()
 
     def load_image(self):
-        path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Wybierz obraz",
-            self._get_default_dialog_directory(),
-            "Obrazy (*.png *.jpg *.jpeg *.tif *.tiff *.webp *.fits *.fit *.fts);;FITS (*.fits *.fit *.fts);;Wszystkie pliki (*)",
-        )
-        if not path:
+        image_filter = "Obrazy (*.png *.jpg *.jpeg *.tif *.tiff *.webp *.fits *.fit *.fts);;FITS (*.fits *.fit *.fts);;Wszystkie pliki (*)"
+        if getattr(self, "interface_mode", "easy") == "pro":
+            paths, _ = QFileDialog.getOpenFileNames(
+                self, "Wybierz obrazy", self._get_default_dialog_directory(), image_filter
+            )
+        else:
+            path, _ = QFileDialog.getOpenFileName(
+                self, "Wybierz obraz", self._get_default_dialog_directory(), image_filter
+            )
+            paths = [path] if path else []
+        if not paths:
             self.log("Open image canceled.")
             return
-
-        self.load_image_from_path(path)
+        for path in paths:
+            self.load_image_from_path(path)
 
     def create_mosaic_from_frames(self):
         paths, _ = self._show_open_files_dialog(
@@ -28466,14 +29570,14 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         if not paths:
             self.log("Drop skipped: no valid image files.", "warning")
             return
-
-        first_path = paths[0]
-        self.load_image_from_path(first_path)
-        if len(paths) > 1:
+        if getattr(self, "interface_mode", "easy") != "pro" and len(paths) > 1:
             self.log(
-                f"Loaded first dropped image: {os.path.basename(first_path)}. Ignored {len(paths) - 1} additional file(s).",
+                f"Loaded first dropped image: {os.path.basename(paths[0])}. Ignored {len(paths) - 1} additional file(s).",
                 "warning",
             )
+            paths = paths[:1]
+        for path in paths:
+            self.load_image_from_path(path)
 
     def dragEnterEvent(self, event):
         if image_paths_from_mime_data(event.mimeData()):
@@ -28499,6 +29603,18 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         if not path:
             self.log("Open skipped: path is empty.", "warning")
             return False
+
+        if getattr(self, "interface_mode", "easy") == "pro" and not self._mdi_loading_document:
+            normalized_path = os.path.normcase(os.path.abspath(str(path)))
+            for subwindow, state in list(self._image_document_states.items()):
+                existing_path = str(state.get("current_image_path") or "")
+                if existing_path and os.path.normcase(os.path.abspath(existing_path)) == normalized_path:
+                    self.mdi_area.setActiveSubWindow(subwindow)
+                    subwindow.showNormal()
+                    subwindow.show()
+                    return True
+            if self.current_image_path:
+                self._create_image_document_window(str(path))
 
         loaded_header = None
         try:
@@ -28544,6 +29660,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             self.processed_img = loaded_img.copy()
             self.current_image_path = path
             self.current_save_path = path
+            self.image_document_title = os.path.basename(path)
             self.current_fits_header = loaded_header if _is_fits_path(path) else None
             self.latest_image_analysis = {}
             self.analysis_dirty = True
@@ -28568,7 +29685,12 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
                 self.combo_stretch_bottom.setCurrentIndex(stretch_index)
 
             # Aktualizacja widoku
-            self.viewer.set_before(np_to_qpixmap(self.processed_img))
+            was_syncing = self._zoom_sync_in_progress
+            self._zoom_sync_in_progress = True
+            try:
+                self.viewer.set_before(np_to_qpixmap(self.processed_img))
+            finally:
+                self._zoom_sync_in_progress = was_syncing
             self.update_menu_actions()
             self.apply_full_processing()
             
@@ -28578,10 +29700,12 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             self._remember_recent_image(path)
             self.screen_stack.setCurrentWidget(self.editor_page)
             QTimer.singleShot(0, self.viewer.view.fit_to_window)
-            if self.menuBar() is not None:
-                self.menuBar().setVisible(True)
+            self.app_menu_bar.setVisible(getattr(self, "interface_mode", "easy") != "easy")
             
             self.log(f"Successfully loaded: {filename}", "success")
+            active_subwindow = getattr(self, "_active_image_subwindow", None)
+            if active_subwindow in getattr(self, "_image_document_states", {}):
+                self._image_document_states[active_subwindow] = self._capture_image_document_state()
             QTimer.singleShot(
                 0,
                 lambda loaded_path=path: self.run_plate_solve(automatic=True)
@@ -29207,6 +30331,38 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         )
         self.starnet_worker.start()
 
+    def add_text_watermark(self):
+        if not isinstance(self.magic_img, np.ndarray):
+            self.log("Watermark skipped: no image loaded.", "warning")
+            return
+        source = self.magic_img.copy()
+        header = self.current_fits_header if isinstance(self.current_fits_header, dict) else {}
+        dialog = WatermarkDialog(self, header, source.shape[1], self.tr)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        options = dialog.values()
+        lines = [line for line in options["text"].splitlines() if line.strip()]
+        lines.extend(f"{label}: {value}" for label, value in options["metadata"])
+        if not lines:
+            QMessageBox.information(
+                self, self.tr("action_add_watermark", "Add watermark"),
+                self.tr("watermark_empty", "Enter text or select FITS metadata."),
+            )
+            return
+        result = compose_watermark_image(source, options)
+
+        self.undo_stack.append(source)
+        self.redo_stack.clear()
+        self.magic_img = result
+        self.preview_override_img = None
+        if hasattr(self, "levels_window") and self.levels_window is not None:
+            self.levels_window.levels_widget.set_image(result)
+        self.viewer.set_before(np_to_qpixmap(result))
+        self.apply_full_processing()
+        self.add_thumbnail("Watermark", self.processed_img)
+        self.update_menu_actions()
+        self.log("Text watermark added.", "success")
+
     def run_3d_fly_filter(self):
         if self.magic_img is None:
             self.log("3D FLY skipped: no image loaded.", "warning")
@@ -29273,7 +30429,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             self.log("Plate Solving: using WCS found in FITS header.", "info")
             if not automatic:
                 self.show_plate_solving_dialog()
-            self.on_plate_solve_finished(header_result, "", True)
+            self.on_plate_solve_finished(header_result, "", not automatic)
             return
 
         try:
@@ -29313,8 +30469,8 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         )
         self.plate_solve_worker.progress_signal.connect(self.on_plate_solve_progress)
         self.plate_solve_worker.finished_signal.connect(
-            lambda result, error, solve_id=request_id: (
-                self.on_plate_solve_finished(result, error, True)
+            lambda result, error, solve_id=request_id, show_overlays=not automatic: (
+                self.on_plate_solve_finished(result, error, show_overlays)
                 if solve_id == self._plate_solve_request_id else None
             )
         )
@@ -29343,7 +30499,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
                 continue
             button.setEnabled(has_result)
             previous = button.blockSignals(True)
-            button.setChecked(checked if has_result else False)
+            button.setChecked(checked)
             button.blockSignals(previous)
 
         dialog = getattr(self, "plate_solving_dialog", None)
@@ -31192,6 +32348,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             "action_plate_solve",
             "action_starnet",
             "action_3d_fly",
+            "action_add_watermark",
             "action_color_calibration",
             "action_star_correction",
             "action_blur",
@@ -31201,10 +32358,15 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             "action_rotate",
             "action_crop",
             "action_paste_layer",
+            "action_aberration_inspector",
         ):
             action = getattr(self, action_name, None)
             if action is not None:
                 action.setEnabled(has_img)
+        if hasattr(self, "action_aberration_inspector"):
+            self.action_aberration_inspector.setEnabled(
+                has_img and getattr(self, "interface_mode", "easy") == "pro"
+            )
         if hasattr(self, "action_deepsnr"):
             self.action_deepsnr.setEnabled(has_any_image)
         if hasattr(self, "action_stretch"):
@@ -31336,6 +32498,8 @@ def main():
         splash.finish(window)
     if not window.onboarding_completed:
         QTimer.singleShot(0, window._start_first_run_onboarding)
+    elif not window.mode_selector_tour_completed:
+        QTimer.singleShot(0, window._start_mode_selector_onboarding)
     sys.exit(app.exec())
 
 
