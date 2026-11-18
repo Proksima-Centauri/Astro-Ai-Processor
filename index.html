@@ -1420,7 +1420,7 @@
     <section class="download card" id="download">
       <div>
         <h2 id="txtDownloadTitle">Gotowe do pobrania i uruchomienia</h2>
-        <p id="txtDownloadBody">Wybierz system operacyjny, aby pobrać Astro AI Processor dla Windows lub Linux.</p>
+        <p id="txtDownloadBody">Wybierz system operacyjny, aby pobrać Astro AI Processor dla Windows, Linux lub macOS.</p>
       </div>
       <div class="download-options" id="downloadOptions" role="group" aria-label="Pobieranie dla Windows i Linux">
         <article class="download-option" id="downloadOptionWindows">
@@ -1434,7 +1434,7 @@
             </svg>
             <span id="txtDownloadWindows">Windows</span>
           </div>
-          <a class="btn" id="btnDownloadWindows" href="https://drive.google.com/file/d/1jkeIRXX0zQcV-pzkkf2NF7PR631Mtt-L/view?usp=sharing" target="_blank" rel="noopener noreferrer">Pobierz dla Windows</a>
+          <a class="btn" id="btnDownloadWindows" href="https://github.com/Proksima-Centauri/Astro-Ai-Processor/releases/latest/download/Astro-AI-Processor-windows.zip">Pobierz dla Windows</a>
         </article>
         <article class="download-option" id="downloadOptionLinux">
           <span class="download-recommended" id="downloadBadgeLinux" role="status" hidden></span>
@@ -1442,7 +1442,14 @@
             <img src="assets/website/download/linux.png" alt="" aria-hidden="true">
             <span id="txtDownloadLinux">Linux</span>
           </div>
-          <a class="btn" id="btnDownloadLinux" href="https://drive.google.com/drive/u/0/folders/1oEki081bdyn-EJmghjcV88YkoKuIMVhO" target="_blank" rel="noopener noreferrer">Pobierz dla Linux</a>
+          <a class="btn" id="btnDownloadLinux" href="https://github.com/Proksima-Centauri/Astro-Ai-Processor/releases/latest/download/Astro-AI-Processor-linux.tar.gz">Pobierz dla Linux</a>
+        </article>
+        <article class="download-option" id="downloadOptionMac">
+          <div class="download-platform">
+            <span id="txtDownloadMac">macOS</span>
+          </div>
+          <a class="btn" id="btnDownloadMacApple" href="https://github.com/Proksima-Centauri/Astro-Ai-Processor/releases/latest/download/Astro-AI-Processor-macos-arm64.zip">macOS · Apple silicon</a>
+          <a class="btn" id="btnDownloadMacIntel" href="https://github.com/Proksima-Centauri/Astro-Ai-Processor/releases/latest/download/Astro-AI-Processor-macos-intel.zip">macOS · Intel</a>
         </article>
       </div>
     </section>
@@ -1692,12 +1699,15 @@
         txtFlyTitle: "Podglad efektu 3D FLY",
         txtFlyBody: "Zobacz, jak wyglada finalna animacja wygenerowana narzedziem 3D FLY.",
         txtDownloadTitle: "Gotowe do pobrania i uruchomienia",
-        txtDownloadBody: "Wybierz system operacyjny, aby pobrać Astro AI Processor dla Windows lub Linux.",
+        txtDownloadBody: "Wybierz system operacyjny, aby pobrać Astro AI Processor dla Windows, Linux lub macOS.",
         txtDownloadWindows: "Windows",
         btnDownloadWindows: "Pobierz dla Windows",
         txtDownloadLinux: "Linux",
         btnDownloadLinux: "Pobierz dla Linux",
-        txtDownloadOptionsLabel: "Pobieranie dla Windows i Linux",
+        txtDownloadMac: "macOS",
+        btnDownloadMacApple: "macOS · Apple silicon",
+        btnDownloadMacIntel: "macOS · Intel",
+        txtDownloadOptionsLabel: "Pobieranie dla Windows, Linux i macOS",
         txtDetectedSystem: "Wykryto na tym urządzeniu",
         txtDownloadDetectedWindows: "Wykryto Windows. Pobieranie dla tego systemu jest wyróżnione poniżej.",
         txtDownloadDetectedLinux: "Wykryto Linux. Pobieranie dla tego systemu jest wyróżnione poniżej.",
@@ -1797,12 +1807,15 @@
         txtFlyTitle: "3D FLY effect preview",
         txtFlyBody: "See how the final animation generated with 3D FLY looks.",
         txtDownloadTitle: "Ready to download and run",
-        txtDownloadBody: "Choose your operating system to download Astro AI Processor for Windows or Linux.",
+        txtDownloadBody: "Choose your operating system to download Astro AI Processor for Windows, Linux, or macOS.",
         txtDownloadWindows: "Windows",
         btnDownloadWindows: "Download for Windows",
         txtDownloadLinux: "Linux",
         btnDownloadLinux: "Download for Linux",
-        txtDownloadOptionsLabel: "Downloads for Windows and Linux",
+        txtDownloadMac: "macOS",
+        btnDownloadMacApple: "macOS · Apple silicon",
+        btnDownloadMacIntel: "macOS · Intel",
+        txtDownloadOptionsLabel: "Downloads for Windows, Linux, and macOS",
         txtDetectedSystem: "Detected for this device",
         txtDownloadDetectedWindows: "Windows detected. Its download is highlighted below.",
         txtDownloadDetectedLinux: "Linux detected. Its download is highlighted below.",
@@ -1902,12 +1915,15 @@
         txtFlyTitle: "3D-FLY-Effektvorschau",
         txtFlyBody: "Sehen Sie sich die fertige Animation an, die mit 3D FLY erstellt wurde.",
         txtDownloadTitle: "Bereit zum Herunterladen und Starten",
-        txtDownloadBody: "Wählen Sie ein Betriebssystem, um Astro AI Processor für Windows oder Linux herunterzuladen.",
+        txtDownloadBody: "Wählen Sie ein Betriebssystem, um Astro AI Processor für Windows, Linux oder macOS herunterzuladen.",
         txtDownloadWindows: "Windows",
         btnDownloadWindows: "Für Windows herunterladen",
         txtDownloadLinux: "Linux",
         btnDownloadLinux: "Für Linux herunterladen",
-        txtDownloadOptionsLabel: "Downloads für Windows und Linux",
+        txtDownloadMac: "macOS",
+        btnDownloadMacApple: "macOS · Apple silicon",
+        btnDownloadMacIntel: "macOS · Intel",
+        txtDownloadOptionsLabel: "Downloads für Windows, Linux und macOS",
         txtDetectedSystem: "Für dieses Gerät erkannt",
         txtDownloadDetectedWindows: "Windows erkannt. Der passende Download ist unten hervorgehoben.",
         txtDownloadDetectedLinux: "Linux erkannt. Der passende Download ist unten hervorgehoben.",
@@ -2007,12 +2023,15 @@
         txtFlyTitle: "Vista previa del efecto 3D FLY",
         txtFlyBody: "Descubre cómo es la animación final creada con 3D FLY.",
         txtDownloadTitle: "Lista para descargar y usar",
-        txtDownloadBody: "Elige un sistema operativo para descargar Astro AI Processor para Windows o Linux.",
+        txtDownloadBody: "Elige un sistema operativo para descargar Astro AI Processor para Windows, Linux o macOS.",
         txtDownloadWindows: "Windows",
         btnDownloadWindows: "Descargar para Windows",
         txtDownloadLinux: "Linux",
         btnDownloadLinux: "Descargar para Linux",
-        txtDownloadOptionsLabel: "Descargas para Windows y Linux",
+        txtDownloadMac: "macOS",
+        btnDownloadMacApple: "macOS · Apple silicon",
+        btnDownloadMacIntel: "macOS · Intel",
+        txtDownloadOptionsLabel: "Descargas para Windows, Linux y macOS",
         txtDetectedSystem: "Detectado para este dispositivo",
         txtDownloadDetectedWindows: "Windows detectado. La descarga correspondiente está resaltada abajo.",
         txtDownloadDetectedLinux: "Linux detectado. La descarga correspondiente está resaltada abajo.",
@@ -2112,12 +2131,15 @@
         txtFlyTitle: "Aperçu de l’effet 3D FLY",
         txtFlyBody: "Découvrez l’animation finale créée avec 3D FLY.",
         txtDownloadTitle: "Prêt à télécharger et à utiliser",
-        txtDownloadBody: "Choisissez un système d’exploitation pour télécharger Astro AI Processor pour Windows ou Linux.",
+        txtDownloadBody: "Choisissez un système d’exploitation pour télécharger Astro AI Processor pour Windows, Linux ou macOS.",
         txtDownloadWindows: "Windows",
         btnDownloadWindows: "Télécharger pour Windows",
         txtDownloadLinux: "Linux",
         btnDownloadLinux: "Télécharger pour Linux",
-        txtDownloadOptionsLabel: "Téléchargements pour Windows et Linux",
+        txtDownloadMac: "macOS",
+        btnDownloadMacApple: "macOS · Apple silicon",
+        btnDownloadMacIntel: "macOS · Intel",
+        txtDownloadOptionsLabel: "Téléchargements pour Windows, Linux et macOS",
         txtDetectedSystem: "Détecté pour cet appareil",
         txtDownloadDetectedWindows: "Windows détecté. Le téléchargement correspondant est mis en évidence ci-dessous.",
         txtDownloadDetectedLinux: "Linux détecté. Le téléchargement correspondant est mis en évidence ci-dessous.",

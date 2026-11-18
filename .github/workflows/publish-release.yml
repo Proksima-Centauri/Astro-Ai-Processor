@@ -1,0 +1,141 @@
+name: Build and publish release
+
+on:
+  push:
+    branches:
+      - updates
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      app_version: ${{ steps.version.outputs.app_version }}
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Sync selected main revision to updates
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+        run: git push origin HEAD:refs/heads/updates
+      - id: version
+        shell: bash
+        run: |
+          version=$(python -c 'import ast; tree=ast.parse(open("Astro Ai Processor.py", encoding="utf-8").read()); node=next(n for n in tree.body if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "APP_VERSION" for t in n.targets)); print(ast.literal_eval(node.value))')
+          if [[ -z "$version" ]]; then
+            echo "APP_VERSION was not found" >&2
+            exit 1
+          fi
+          echo "app_version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          if git ls-remote --exit-code --tags origin "refs/tags/v$version" >/dev/null 2>&1; then
+            echo "Release tag v$version already exists. Bump APP_VERSION before publishing." >&2
+            exit 1
+          fi
+
+  build:
+    needs: version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            platform: linux
+          - os: windows-2025
+            platform: windows
+          - os: macos-15
+            platform: macos-arm64
+          - os: macos-15-intel
+            platform: macos-intel
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.95.0
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libportaudio2 portaudio19-dev
+      - name: Install macOS build dependencies
+        if: runner.os == 'macOS'
+        run: brew install portaudio
+      - name: Install Python dependencies
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install -r requirements-dev.txt pyinstaller
+      - name: Build application
+        run: pyinstaller --noconfirm --clean "Astro Ai Processor.spec"
+      - name: Package Windows build
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          $exe = "dist/Astro AI Processor.exe"
+          if (!(Test-Path $exe)) { throw "Windows executable was not created: $exe" }
+          Compress-Archive -Path $exe -DestinationPath "dist/Astro-AI-Processor-windows.zip" -Force
+      - name: Package Linux build
+        if: matrix.platform == 'linux'
+        run: tar -czf dist/Astro-AI-Processor-linux.tar.gz -C dist "Astro AI Processor"
+      - name: Package macOS build
+        if: startsWith(matrix.platform, 'macos-')
+        run: ditto -c -k --sequesterRsrc --keepParent "dist/Astro AI Processor" "dist/Astro-AI-Processor-${{ matrix.platform }}.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Astro-AI-Processor-${{ matrix.platform }}
+          path: dist/Astro-AI-Processor-${{ matrix.platform }}.*
+          if-no-files-found: error
+
+  release:
+    needs: [version, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.version.outputs.tag }}
+          name: Astro AI Processor ${{ needs.version.outputs.app_version }}
+          generate_release_notes: true
+          make_latest: true
+          files: release-assets/*
+
+  update-download-metadata:
+    needs: [version, release]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Update app update feed
+        env:
+          APP_VERSION: ${{ needs.version.outputs.app_version }}
+          RELEASE_URL: https://github.com/${{ github.repository }}/releases/tag/${{ needs.version.outputs.tag }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          feed_path = Path("updates/latest")
+          feed = json.loads(feed_path.read_text(encoding="utf-8"))
+          feed["version"] = os.environ["APP_VERSION"]
+          feed["update_url"] = os.environ["RELEASE_URL"]
+          feed_path.write_text(json.dumps(feed, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+          PY
+      - name: Publish update feed to main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add updates/latest
+          git commit -m "Publish release ${{ needs.version.outputs.tag }} update feed"
+          git push origin HEAD:main

@@ -84,6 +84,20 @@ chmod +x packaging/linux/build-gui-installer.sh
 ```
 
 2. Distribute `dist/Astro-Ai-Processor-Installer-Linux`.
+
+## Publishing a release
+
+Normal development continues on `main`. Set `APP_VERSION` to the release version
+before preparing a build. To publish the selected `main` revision, run the
+GitHub Actions workflow **Build and publish release** with the `main` branch
+selected. It synchronizes that revision to `updates`, builds Windows, Linux,
+macOS Apple silicon and macOS Intel packages, publishes a GitHub Release, and
+updates `updates/latest` on `main` for the in-app updater. Pushing a commit to
+`updates` also starts a release build. Each release requires a new `APP_VERSION`.
+
+The website download buttons use GitHub's `releases/latest/download/` links, so
+they follow the newest release automatically without editing the links for every
+version.
 3. User double-clicks installer, selects install folder, optionally enables `Create .desktop shortcut on Desktop`, then clicks `Install`.
 
 The installer also creates the application menu entry in `~/.local/share/applications`.
