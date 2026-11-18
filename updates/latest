@@ -1,13 +1,13 @@
 {
   "app_id": "astro-ai-processor",
   "target_os": "linux",
-  "version": "1.0.1-beta.1",
+  "version": "1.0.1-beta.2",
   "changes": [],
-  "update_url": "https://github.com/Proksima-Centauri/Astro-Ai-Processor/releases/tag/v1.0.1-beta.1",
+  "update_url": "https://github.com/Proksima-Centauri/Astro-Ai-Processor/releases/tag/v1.0.1-beta.2",
   "downloads": {
-    "linux": "https://github.com/Proksima-Centauri/Astro-Ai-Processor/releases/download/v1.0.1-beta.1/Astro-AI-Processor-linux.tar.gz",
-    "windows": "https://github.com/Proksima-Centauri/Astro-Ai-Processor/releases/download/v1.0.1-beta.1/Astro-AI-Processor-windows.zip",
-    "macos-arm64": "https://github.com/Proksima-Centauri/Astro-Ai-Processor/releases/download/v1.0.1-beta.1/Astro-AI-Processor-macos-arm64.zip",
-    "macos-intel": "https://github.com/Proksima-Centauri/Astro-Ai-Processor/releases/download/v1.0.1-beta.1/Astro-AI-Processor-macos-intel.zip"
+    "linux": "https://github.com/Proksima-Centauri/Astro-Ai-Processor/releases/download/v1.0.1-beta.2/Astro-AI-Processor-linux.tar.gz",
+    "windows": "https://github.com/Proksima-Centauri/Astro-Ai-Processor/releases/download/v1.0.1-beta.2/Astro-AI-Processor-windows.zip",
+    "macos-arm64": "https://github.com/Proksima-Centauri/Astro-Ai-Processor/releases/download/v1.0.1-beta.2/Astro-AI-Processor-macos-arm64.zip",
+    "macos-intel": "https://github.com/Proksima-Centauri/Astro-Ai-Processor/releases/download/v1.0.1-beta.2/Astro-AI-Processor-macos-intel.zip"
   }
 }
