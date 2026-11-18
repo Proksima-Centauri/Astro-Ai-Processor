@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 import os
+import platform
 import json
 import ast
 import html
@@ -293,6 +294,9 @@ I18N = {
     "action_new_workspace": {"pl": "Nowa przestrzeń...", "en": "New Workspace..."},
     "action_preferences": {"pl": "Preferencje", "en": "Preferences"},
     "check_updates": {"pl": "Sprawdź aktualizacje", "en": "Check for updates"},
+    "update_available_banner": {"pl": "Dostępna aktualizacja Astro AI Processor: {version}", "en": "Astro AI Processor update available: {version}"},
+    "update_download": {"pl": "Pobierz aktualizację", "en": "Download update"},
+    "update_dismiss": {"pl": "Zamknij powiadomienie", "en": "Dismiss update notice"},
     "action_histogram": {"pl": "Histogram", "en": "Histogram"},
     "action_console": {"pl": "Konsola", "en": "Console"},
     "action_menu": {"pl": "Menu", "en": "Menu"},
@@ -20625,6 +20629,72 @@ class AstroApp(QMainWindow):
             return "linux"
         return "any"
 
+    @staticmethod
+    def _update_download_key(target_os: str) -> str:
+        target_os = str(target_os or "").strip().lower()
+        if target_os in {"linux", "windows"}:
+            return target_os
+        if target_os == "macos":
+            arch = platform.machine().strip().lower()
+            suffix = "arm64" if arch in {"arm64", "aarch64"} else "intel"
+            return f"macos-{suffix}"
+        return ""
+
+    @staticmethod
+    def _update_asset_name(target_os: str) -> str:
+        download_key = AstroApp._update_download_key(target_os)
+        if download_key == "linux":
+            return "Astro-AI-Processor-linux.tar.gz"
+        if download_key == "windows":
+            return "Astro-AI-Processor-windows.zip"
+        if download_key == "macos-arm64":
+            return "Astro-AI-Processor-macos-arm64.zip"
+        if download_key == "macos-intel":
+            return "Astro-AI-Processor-macos-intel.zip"
+        return ""
+
+    def _update_download_url(self, version: str, system: str, provided_url: str = "") -> str:
+        asset = self._update_asset_name(system)
+        if not asset:
+            return ""
+        supplied = str(provided_url or "").strip()
+        if supplied.lower().endswith("/" + asset.lower()):
+            return supplied
+        tag = str(version or "").strip()
+        if not tag:
+            return supplied
+        if not tag.lower().startswith("v"):
+            tag = "v" + tag
+        return f"https://github.com/Proksima-Centauri/Astro-Ai-Processor/releases/download/{urllib.parse.quote(tag, safe='')}/{asset}"
+
+    def _open_update_download(self):
+        info = getattr(self, "_available_update", None)
+        if not isinstance(info, dict):
+            return
+        link = str(info.get("href") or "").strip()
+        if not link:
+            return
+        if str(info.get("api") or "") == "new":
+            try:
+                decision_payload = {
+                    "app_id": self.update_app_id,
+                    "target_os": self.update_program_os,
+                    "current_version": APP_VERSION,
+                    "offered_version": str(info.get("version") or ""),
+                    "decision": "update",
+                }
+                req = urllib.request.Request(
+                    f"{self.update_api_base}/updates/decision",
+                    data=json.dumps(decision_payload, ensure_ascii=True).encode("utf-8"),
+                    method="POST",
+                    headers={"Content-Type": "application/json", "Accept": "application/json"},
+                )
+                with urllib.request.urlopen(req, timeout=4.0):
+                    pass
+            except Exception:
+                pass
+        webbrowser.open(link)
+
     def check_for_new_version(self, user_initiated: bool = False):
         if self._update_check_in_progress:
             if user_initiated:
@@ -20665,7 +20735,7 @@ class AstroApp(QMainWindow):
                 result["latestVersion"] = {
                     "version": latest_version,
                     "system": self.update_program_os,
-                    "href": str(payload.get("update_url") or "").strip(),
+                    "href": self._update_download_url(latest_version, self.update_program_os, payload.get("update_url")),
                     "changes": payload.get("changes") or [],
                     "api": "new",
                 }
@@ -20676,9 +20746,12 @@ class AstroApp(QMainWindow):
                     payload = fetch_json(static_url)
                     payload_app_id = str(payload.get("app_id") or "").strip()
                     payload_os = str(payload.get("target_os") or self.update_program_os).strip().lower() or self.update_program_os
+                    downloads = payload.get("downloads") if isinstance(payload.get("downloads"), dict) else {}
+                    download_key = self._update_download_key(self.update_program_os)
+                    download_url = str(downloads.get(download_key) or downloads.get(self.update_program_os) or "").strip()
                     if payload_app_id and payload_app_id != self.update_app_id:
                         raise ValueError("Update metadata app_id mismatch")
-                    if payload_os not in {self.update_program_os, "any", "all"}:
+                    if not download_url and payload_os not in {self.update_program_os, "any", "all"}:
                         result["ok"] = True
                         result["hasUpdate"] = False
                         result["latestVersion"] = None
@@ -20690,7 +20763,7 @@ class AstroApp(QMainWindow):
                         result["latestVersion"] = {
                             "version": latest_version,
                             "system": payload_os,
-                            "href": str(payload.get("update_url") or "").strip(),
+                            "href": self._update_download_url(latest_version, self.update_program_os, download_url or payload.get("update_url")),
                             "changes": changes,
                             "api": "static",
                         }
@@ -20712,6 +20785,9 @@ class AstroApp(QMainWindow):
                     latest_payload = payload.get("latestVersion") or {}
                     if isinstance(latest_payload, dict):
                         latest_payload["api"] = "legacy"
+                        latest_payload["href"] = self._update_download_url(
+                            latest_payload.get("version"), self.update_program_os, latest_payload.get("href")
+                        )
                     result["latestVersion"] = latest_payload
                 except Exception:
                     pass
@@ -20744,64 +20820,21 @@ class AstroApp(QMainWindow):
         if version in self._notified_update_versions and not user_initiated:
             return
 
-        self._notified_update_versions.add(version)
-        system_label = str(latest.get("system") or self.update_program_os)
-        link = str(latest.get("href") or "").strip()
+        link = self._update_download_url(version, self.update_program_os, latest.get("href"))
         if not link:
-            link = APP_UPDATE_PAGE_URL
-        notes = str(latest.get("notes") or "").strip()
-        changes = latest.get("changes") if isinstance(latest.get("changes"), list) else []
-        api_kind = str(latest.get("api") or "legacy")
-
-        message_lines = [
-            f"Dostepna jest nowa wersja: {version}",
-            f"System: {system_label}",
-        ]
-        if changes:
-            message_lines.append("")
-            message_lines.append("Zmiany:")
-            for change in changes[:8]:
-                message_lines.append(f"- {str(change)}")
-        if notes:
-            message_lines.append(f"Opis: {notes}")
-        if link:
-            message_lines.append(f"Pobierz: {link}")
-        message_lines.append("")
-        message_lines.append("Pobrac teraz? (Yes = Update, No = Do it later)")
-
-        decision = QMessageBox.question(
-            self,
-            "Nowa wersja",
-            "\n".join(message_lines),
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.Yes,
-        )
-
-        decision_text = "update" if decision == QMessageBox.Yes else "later"
-        if api_kind == "new":
-            try:
-                decision_payload = {
-                    "app_id": self.update_app_id,
-                    "target_os": self.update_program_os,
-                    "current_version": APP_VERSION,
-                    "offered_version": version,
-                    "decision": decision_text,
-                }
-                body = json.dumps(decision_payload, ensure_ascii=True).encode("utf-8")
-                req = urllib.request.Request(
-                    f"{self.update_api_base}/updates/decision",
-                    data=body,
-                    method="POST",
-                    headers={"Content-Type": "application/json", "Accept": "application/json"},
-                )
-                with urllib.request.urlopen(req, timeout=4.0):
-                    pass
-            except Exception:
-                pass
-
-        if decision == QMessageBox.Yes:
-            webbrowser.open(link)
-        self.log(f"New version available: {version} ({system_label})", "success")
+            return
+        latest = dict(latest)
+        latest["version"] = version
+        latest["href"] = link
+        latest["api"] = str(latest.get("api") or "legacy")
+        self._available_update = latest
+        self._notified_update_versions.add(version)
+        if hasattr(self, "update_banner_label"):
+            self.update_banner_label.setText(
+                self.tr("update_available_banner", "Astro AI Processor update available: {version}").format(version=version)
+            )
+            self.update_banner.show()
+        self.log(f"New version available: {version} ({self.update_program_os})", "success")
 
     def _sync_histogram_zoom_state(self, source, zoom_factor, view_center):
         if self._zoom_sync_in_progress:
@@ -25618,6 +25651,30 @@ class AstroApp(QMainWindow):
         root_widget = QWidget(self)
         root_layout = QVBoxLayout(root_widget)
         root_layout.setContentsMargins(0, 0, 0, 0)
+
+        self.update_banner = QFrame(root_widget)
+        self.update_banner.setObjectName("updateBanner")
+        self.update_banner.setStyleSheet(
+            "QFrame#updateBanner { background: #173a50; border-bottom: 1px solid #3287b8; }"
+            "QLabel { color: #f2f7fb; font-weight: 600; }"
+            "QPushButton { background: #168bd2; color: white; border: 0; border-radius: 5px; padding: 7px 14px; font-weight: 600; }"
+            "QPushButton:hover { background: #27a1eb; }"
+        )
+        update_banner_layout = QHBoxLayout(self.update_banner)
+        update_banner_layout.setContentsMargins(14, 7, 10, 7)
+        update_banner_layout.setSpacing(12)
+        self.update_banner_label = QLabel(self.update_banner)
+        update_banner_layout.addWidget(self.update_banner_label, 1)
+        self.update_download_button = QPushButton(self.tr("update_download", "Download update"), self.update_banner)
+        self.update_download_button.clicked.connect(self._open_update_download)
+        update_banner_layout.addWidget(self.update_download_button)
+        dismiss_update_button = QPushButton("×", self.update_banner)
+        dismiss_update_button.setToolTip(self.tr("update_dismiss", "Dismiss update notice"))
+        dismiss_update_button.setFixedWidth(30)
+        dismiss_update_button.clicked.connect(self.update_banner.hide)
+        update_banner_layout.addWidget(dismiss_update_button)
+        self.update_banner.hide()
+        root_layout.addWidget(self.update_banner)
 
         main_widget = QWidget(root_widget)
         main_layout = QVBoxLayout(main_widget)

@@ -133,6 +133,13 @@ jobs:
           feed = json.loads(feed_path.read_text(encoding="utf-8"))
           feed["version"] = os.environ["APP_VERSION"]
           feed["update_url"] = os.environ["RELEASE_URL"]
+          release_download_base = f"https://github.com/{os.environ['REPOSITORY']}/releases/download/{os.environ['RELEASE_TAG']}"
+          feed["downloads"] = {
+              "linux": f"{release_download_base}/Astro-AI-Processor-linux.tar.gz",
+              "windows": f"{release_download_base}/Astro-AI-Processor-windows.zip",
+              "macos-arm64": f"{release_download_base}/Astro-AI-Processor-macos-arm64.zip",
+              "macos-intel": f"{release_download_base}/Astro-AI-Processor-macos-intel.zip",
+          }
           feed_path.write_text(json.dumps(feed, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
           page_path = Path("index.html")
