@@ -119,11 +119,14 @@ jobs:
       - name: Update app update feed
         env:
           APP_VERSION: ${{ needs.version.outputs.app_version }}
+          RELEASE_TAG: ${{ needs.version.outputs.tag }}
           RELEASE_URL: https://github.com/${{ github.repository }}/releases/tag/${{ needs.version.outputs.tag }}
+          REPOSITORY: ${{ github.repository }}
         run: |
           python - <<'PY'
           import json
           import os
+          import re
           from pathlib import Path
 
           feed_path = Path("updates/latest")
@@ -131,11 +134,27 @@ jobs:
           feed["version"] = os.environ["APP_VERSION"]
           feed["update_url"] = os.environ["RELEASE_URL"]
           feed_path.write_text(json.dumps(feed, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+          page_path = Path("index.html")
+          page = page_path.read_text(encoding="utf-8")
+          base_url = f"https://github.com/{os.environ['REPOSITORY']}/releases/download/{os.environ['RELEASE_TAG']}"
+          assets = {
+              "btnDownloadWindows": "Astro-AI-Processor-windows.zip",
+              "btnDownloadLinux": "Astro-AI-Processor-linux.tar.gz",
+              "btnDownloadMacApple": "Astro-AI-Processor-macos-arm64.zip",
+              "btnDownloadMacIntel": "Astro-AI-Processor-macos-intel.zip",
+          }
+          for element_id, asset in assets.items():
+              pattern = rf'(<a\b(?=[^>]*\bid="{element_id}")[^>]*\bhref=")[^"]*(")'
+              page, count = re.subn(pattern, rf'\g<1>{base_url}/{asset}\g<2>', page, count=1)
+              if count != 1:
+                  raise SystemExit(f"Expected exactly one download link for {element_id}, found {count}")
+          page_path.write_text(page, encoding="utf-8")
           PY
       - name: Publish update feed to main
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add updates/latest
+          git add updates/latest index.html
           git commit -m "Publish release ${{ needs.version.outputs.tag }} update feed"
           git push origin HEAD:main
