@@ -64,7 +64,7 @@ AI_ASSISTANT_NAME = "Altair"
 ALTAIR_3D_FLY_GUIDE_FILE = "3d_fly_help.md"
 DEFAULT_DEEPSNR_ARGS = "-i \"{input}\" -o \"{output}\" -q -m 2"
 DEFAULT_DEEPSNR_STRENGTH = 2
-APP_VERSION = "1.0.1-beta.1"
+APP_VERSION = "1.0.1-beta.2"
 APP_UPDATE_PAGE_URL = "https://proksima-centauri.github.io/Astro-Ai-Processor/"
 ALTAIR_DEFAULT_MAX_TOKENS = 900
 ALTAIR_DEFAULT_TEMPERATURE = 0.2
@@ -359,6 +359,10 @@ I18N = {
     "check_updates": {"pl": "Sprawdź aktualizacje", "en": "Check for updates"},
     "update_available_banner": {"pl": "Dostępna aktualizacja Astro AI Processor: {version}", "en": "Astro AI Processor update available: {version}"},
     "update_download": {"pl": "Pobierz aktualizację", "en": "Download update"},
+    "update_downloading": {"pl": "Pobieranie aktualizacji… {percent}%", "en": "Downloading update… {percent}%"},
+    "update_installing": {"pl": "Instalowanie aktualizacji. Aplikacja uruchomi się ponownie.", "en": "Installing update. The app will restart."},
+    "update_install_failed": {"pl": "Nie udało się zainstalować aktualizacji. Stara wersja pozostała na miejscu. Szczegóły: {error}", "en": "Could not install the update. The current version was kept. Details: {error}"},
+    "update_source_build": {"pl": "Automatyczna podmiana działa w pobranej aplikacji. Uruchomiony program ze źródeł nie zostanie zastąpiony.", "en": "Automatic replacement is available in the packaged app. A source checkout cannot be replaced automatically."},
     "update_dismiss": {"pl": "Zamknij powiadomienie", "en": "Dismiss update notice"},
     "window_close": {"pl": "Zamknij", "en": "Close"},
     "window_minimize": {"pl": "Minimalizuj", "en": "Minimize"},
@@ -19787,6 +19791,8 @@ class OnboardingTourOverlay(QWidget):
 class AstroApp(QMainWindow):
     image_analysis_completed = pyqtSignal(object, str)
     update_check_result_ready = pyqtSignal(object, bool)
+    update_download_progress = pyqtSignal(int, int)
+    update_download_result_ready = pyqtSignal(object)
     @staticmethod
     def _default_ghs_params() -> dict:
         return {
@@ -20401,6 +20407,9 @@ class AstroApp(QMainWindow):
         apply_dialog_window_flags(self)
         self.setAcceptDrops(True)
         self.update_check_result_ready.connect(self._handle_update_result)
+        self.update_download_progress.connect(self._handle_update_download_progress)
+        self.update_download_result_ready.connect(self._handle_update_download_finished)
+        self._update_download_in_progress = False
 
         self.setWindowTitle("Astro AI Processor")
 
@@ -20785,33 +20794,269 @@ class AstroApp(QMainWindow):
             tag = "v" + tag
         return f"https://github.com/Proksima-Centauri/Astro-Ai-Processor/releases/download/{urllib.parse.quote(tag, safe='')}/{asset}"
 
-    def _open_update_download(self):
+    def _record_update_decision(self, decision: str, info: dict):
+        if str(info.get("api") or "") != "new":
+            return
+        try:
+            payload = {
+                "app_id": self.update_app_id,
+                "target_os": self.update_program_os,
+                "current_version": APP_VERSION,
+                "offered_version": str(info.get("version") or ""),
+                "decision": decision,
+            }
+            request = urllib.request.Request(
+                f"{self.update_api_base}/updates/decision",
+                data=json.dumps(payload, ensure_ascii=True).encode("utf-8"),
+                method="POST",
+                headers={"Content-Type": "application/json", "Accept": "application/json"},
+            )
+            with urllib.request.urlopen(request, timeout=4.0):
+                pass
+        except Exception:
+            pass
+
+    def _download_and_install_update(self):
         info = getattr(self, "_available_update", None)
         if not isinstance(info, dict):
             return
         link = str(info.get("href") or "").strip()
-        if not link:
+        expected_asset = self._update_asset_name(self.update_program_os)
+        parsed_link = urllib.parse.urlparse(link)
+        if (
+            not link
+            or not expected_asset
+            or parsed_link.scheme != "https"
+            or parsed_link.netloc.lower() != "github.com"
+            or "/releases/download/" not in parsed_link.path
+            or os.path.basename(parsed_link.path).lower() != expected_asset.lower()
+        ):
+            QMessageBox.warning(self, self.tr("check_updates", "Check for updates"), "The update download link is invalid.")
             return
-        if str(info.get("api") or "") == "new":
+        if not getattr(sys, "frozen", False):
+            QMessageBox.information(
+                self,
+                self.tr("check_updates", "Check for updates"),
+                self.tr(
+                    "update_source_build",
+                    "Automatic replacement is available in the packaged app. A source checkout cannot be replaced automatically.",
+                ),
+            )
+            return
+        if self._update_download_in_progress:
+            return
+
+        self._update_download_in_progress = True
+        self.update_download_button.setEnabled(False)
+        self.update_banner_label.setText(
+            self.tr("update_downloading", "Downloading update… {percent}%").format(percent=0)
+        )
+
+        def worker():
+            result = {"ok": False, "info": dict(info), "archive": "", "work_dir": "", "error": ""}
             try:
-                decision_payload = {
-                    "app_id": self.update_app_id,
-                    "target_os": self.update_program_os,
-                    "current_version": APP_VERSION,
-                    "offered_version": str(info.get("version") or ""),
-                    "decision": "update",
-                }
-                req = urllib.request.Request(
-                    f"{self.update_api_base}/updates/decision",
-                    data=json.dumps(decision_payload, ensure_ascii=True).encode("utf-8"),
-                    method="POST",
-                    headers={"Content-Type": "application/json", "Accept": "application/json"},
+                work_dir = tempfile.mkdtemp(prefix="astro-ai-update-")
+                result["work_dir"] = work_dir
+                archive_name = self._update_asset_name(self.update_program_os)
+                archive_path = os.path.join(work_dir, archive_name)
+                request = urllib.request.Request(link, headers={"User-Agent": "Astro-AI-Processor-Updater"})
+                received = 0
+                with urllib.request.urlopen(request, timeout=60.0) as response, open(archive_path, "wb") as output:
+                    total = int(response.headers.get("Content-Length") or 0)
+                    while True:
+                        chunk = response.read(1024 * 1024)
+                        if not chunk:
+                            break
+                        output.write(chunk)
+                        received += len(chunk)
+                        self.update_download_progress.emit(received, total)
+                if received <= 0:
+                    raise RuntimeError("The download was empty.")
+                result["archive"] = archive_path
+                result["ok"] = True
+            except Exception as exc:
+                result["error"] = str(exc)
+            self.update_download_result_ready.emit(result)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _handle_update_download_progress(self, received: int, total: int):
+        if not self._update_download_in_progress or not hasattr(self, "update_banner_label"):
+            return
+        percent = min(100, int(received * 100 / total)) if total > 0 else 0
+        self.update_banner_label.setText(
+            self.tr("update_downloading", "Downloading update… {percent}%").format(percent=percent)
+        )
+
+    def _launch_update_replacer(self, archive_path: str, work_dir: str):
+        if self.update_program_os == "windows":
+            install_path = os.path.abspath(sys.executable)
+            if not os.access(os.path.dirname(install_path), os.W_OK):
+                raise PermissionError("The application folder is not writable.")
+            config_path = os.path.join(work_dir, "update.json")
+            helper_path = os.path.join(work_dir, "replace-update.ps1")
+            config = {
+                "parent_pid": os.getpid(),
+                "archive": archive_path,
+                "install_path": install_path,
+                "work_dir": work_dir,
+            }
+            Path(config_path).write_text(json.dumps(config), encoding="utf-8")
+            helper = r'''param([Parameter(Mandatory=$true)][string]$ConfigPath)
+$ErrorActionPreference = 'Stop'
+$c = Get-Content -LiteralPath $ConfigPath -Raw | ConvertFrom-Json
+$log = Join-Path $c.work_dir 'update.log'
+try {
+  try { Wait-Process -Id ([int]$c.parent_pid) -ErrorAction SilentlyContinue } catch {}
+  $parent = Split-Path -Parent $c.install_path
+  $stage = Join-Path $c.work_dir 'unpacked'
+  $newExe = Join-Path $stage 'Astro AI Processor.exe'
+  $backup = "$($c.install_path).old-$($c.parent_pid)"
+  Expand-Archive -LiteralPath $c.archive -DestinationPath $stage -Force
+  if (!(Test-Path -LiteralPath $newExe -PathType Leaf)) { throw 'The downloaded package did not contain Astro AI Processor.exe.' }
+  Move-Item -LiteralPath $c.install_path -Destination $backup -Force
+  try { Move-Item -LiteralPath $newExe -Destination $c.install_path -Force }
+  catch { Move-Item -LiteralPath $backup -Destination $c.install_path -Force; throw }
+  $app = Start-Process -FilePath $c.install_path -WorkingDirectory $parent -PassThru
+  Start-Sleep -Seconds 4
+  if ($app.HasExited) {
+    Remove-Item -LiteralPath $c.install_path -Force -ErrorAction SilentlyContinue
+    Move-Item -LiteralPath $backup -Destination $c.install_path -Force
+    Start-Process -FilePath $c.install_path -WorkingDirectory $parent
+    throw 'The updated app did not start. The previous version was restored.'
+  }
+  Remove-Item -LiteralPath $backup -Force
+} catch {
+  $_ | Out-File -LiteralPath $log -Encoding utf8
+}
+'''
+            Path(helper_path).write_text(helper, encoding="utf-8")
+            powershell = shutil.which("powershell.exe") or shutil.which("powershell")
+            if not powershell:
+                raise RuntimeError("PowerShell was not found.")
+            flags = getattr(subprocess, "DETACHED_PROCESS", 0x00000008) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
+            subprocess.Popen(
+                [powershell, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", helper_path, "-ConfigPath", config_path],
+                cwd=work_dir,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=flags,
+                close_fds=True,
+            )
+            return
+
+        install_dir = os.path.dirname(os.path.realpath(sys.executable))
+        parent_dir = os.path.dirname(install_dir)
+        if not os.access(parent_dir, os.W_OK):
+            raise PermissionError("The application folder is not writable.")
+        helper_path = os.path.join(work_dir, "replace-update.sh")
+        platform_name = self.update_program_os
+        values = {
+            "parent_pid": str(os.getpid()),
+            "archive": shlex.quote(os.path.abspath(archive_path)),
+            "install_dir": shlex.quote(install_dir),
+            "parent_dir": shlex.quote(parent_dir),
+            "work_dir": shlex.quote(os.path.abspath(work_dir)),
+            "platform": platform_name,
+        }
+        helper = f'''#!/bin/sh
+set -u
+PID={values['parent_pid']}
+ARCHIVE={values['archive']}
+INSTALL_DIR={values['install_dir']}
+PARENT_DIR={values['parent_dir']}
+WORK_DIR={values['work_dir']}
+PLATFORM={values['platform']}
+LOG="$WORK_DIR/update.log"
+while kill -0 "$PID" 2>/dev/null; do sleep 1; done
+STAGE="$PARENT_DIR/.astro-ai-update-stage-$PID"
+BACKUP="$PARENT_DIR/.astro-ai-old-$PID"
+mkdir -p "$STAGE" || exit 1
+if [ "$PLATFORM" = "linux" ]; then
+  tar -xzf "$ARCHIVE" -C "$STAGE" >>"$LOG" 2>&1 || exit 1
+else
+  /usr/bin/ditto -x -k "$ARCHIVE" "$STAGE" >>"$LOG" 2>&1 || exit 1
+fi
+NEW_DIR="$STAGE/Astro AI Processor"
+NEW_APP="$NEW_DIR/Astro AI Processor"
+if [ ! -d "$NEW_DIR" ] || [ ! -f "$NEW_APP" ]; then echo 'Package contents are missing.' >>"$LOG"; exit 1; fi
+mv "$INSTALL_DIR" "$BACKUP" || exit 1
+if ! mv "$NEW_DIR" "$INSTALL_DIR"; then mv "$BACKUP" "$INSTALL_DIR"; exit 1; fi
+chmod +x "$INSTALL_DIR/Astro AI Processor"
+if [ "$PLATFORM" = "macos" ]; then
+  "$INSTALL_DIR/Astro AI Processor" >/dev/null 2>&1 &
+else
+  "$INSTALL_DIR/Astro AI Processor" >/dev/null 2>&1 &
+fi
+NEW_PID=$!
+sleep 4
+if ! kill -0 "$NEW_PID" 2>/dev/null; then
+  rm -rf "$INSTALL_DIR"
+  mv "$BACKUP" "$INSTALL_DIR"
+  "$INSTALL_DIR/Astro AI Processor" >/dev/null 2>&1 &
+  echo 'Updated app did not start; previous version restored.' >>"$LOG"
+  exit 1
+fi
+cd "$PARENT_DIR" || exit 1
+rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
+'''
+        Path(helper_path).write_text(helper, encoding="utf-8")
+        os.chmod(helper_path, 0o700)
+        subprocess.Popen(
+            ["/bin/sh", helper_path],
+            cwd=work_dir,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+            close_fds=True,
+        )
+
+    def _handle_update_download_finished(self, result: dict):
+        info = result.get("info") if isinstance(result, dict) else {}
+        if not isinstance(info, dict):
+            info = {}
+        if not result.get("ok"):
+            self._update_download_in_progress = False
+            self.update_download_button.setEnabled(True)
+            error = str(result.get("error") or "Unknown download error")
+            self.update_banner_label.setText(
+                self.tr("update_available_banner", "Astro AI Processor update available: {version}").format(
+                    version=info.get("version", "")
                 )
-                with urllib.request.urlopen(req, timeout=4.0):
-                    pass
-            except Exception:
-                pass
-        webbrowser.open(link)
+            )
+            QMessageBox.warning(
+                self,
+                self.tr("check_updates", "Check for updates"),
+                self.tr("update_install_failed", "Could not install the update. The current version was kept. Details: {error}").format(error=error),
+            )
+            return
+        try:
+            self._launch_update_replacer(result["archive"], result["work_dir"])
+        except Exception as exc:
+            shutil.rmtree(result.get("work_dir") or "", ignore_errors=True)
+            self._update_download_in_progress = False
+            self.update_download_button.setEnabled(True)
+            error = str(exc)
+            self.update_banner_label.setText(
+                self.tr("update_available_banner", "Astro AI Processor update available: {version}").format(
+                    version=info.get("version", "")
+                )
+            )
+            QMessageBox.warning(
+                self,
+                self.tr("check_updates", "Check for updates"),
+                self.tr("update_install_failed", "Could not install the update. The current version was kept. Details: {error}").format(error=error),
+            )
+            return
+
+        threading.Thread(target=self._record_update_decision, args=("update", info), daemon=True).start()
+        self.update_banner_label.setText(
+            self.tr("update_installing", "Installing update. The app will restart.")
+        )
+        self.log(f"Downloaded update {info.get('version', '')}; restarting to replace the current version.", "success")
+        QTimer.singleShot(250, self.close)
 
     def check_for_new_version(self, user_initiated: bool = False):
         if self._update_check_in_progress:
@@ -25819,7 +26064,7 @@ class AstroApp(QMainWindow):
         self.update_banner_label = QLabel(self.update_banner)
         update_banner_layout.addWidget(self.update_banner_label, 1)
         self.update_download_button = QPushButton(self.tr("update_download", "Download update"), self.update_banner)
-        self.update_download_button.clicked.connect(self._open_update_download)
+        self.update_download_button.clicked.connect(self._download_and_install_update)
         update_banner_layout.addWidget(self.update_download_button)
         dismiss_update_button = QPushButton("×", self.update_banner)
         dismiss_update_button.setToolTip(self.tr("update_dismiss", "Dismiss update notice"))
