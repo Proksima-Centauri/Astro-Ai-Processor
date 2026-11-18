@@ -25722,7 +25722,9 @@ class AstroApp(QMainWindow):
         self.action_magic_filter.triggered.connect(self.run_magic)
 
         self.action_astro_upscale = QAction("Astro Upscale", self)
-        self.action_astro_upscale.triggered.connect(self.run_astro_upscale)
+        self.action_astro_upscale.triggered.connect(
+            lambda _checked=False: self.run_astro_upscale()
+        )
 
         self.action_star_shrink = QAction("Star Shrink", self)
         self.action_star_shrink.triggered.connect(self.run_star_shrink)
@@ -25765,7 +25767,9 @@ class AstroApp(QMainWindow):
         self.action_blur.setEnabled(False)
 
         self.action_background_extraction = QAction("Background Extraction", self)
-        self.action_background_extraction.triggered.connect(self.run_background_extraction)
+        self.action_background_extraction.triggered.connect(
+            lambda _checked=False: self.run_background_extraction()
+        )
         self.action_background_extraction.setEnabled(False)
 
         self.action_deconvolution = QAction("Deconvolution", self)
