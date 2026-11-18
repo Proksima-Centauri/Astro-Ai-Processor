@@ -9,7 +9,7 @@ photutils==1.13.0
 SpeechRecognition==3.17.0
 PyAudio==0.2.14
 onnxruntime==1.20.1
-PyQt5==5.15.11
+PyQt6==6.12.1
 pyserial==3.5
 scikit-image==0.24.0
 scipy==1.14.1

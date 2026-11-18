@@ -43,7 +43,7 @@ def accept_setup(dialog):
     dialog.theme_combo.setCurrentText("Graphite")
     return module.QDialog.Accepted
 
-with patch.object(module.FirstRunSetupDialog, "exec_", accept_setup):
+with patch.object(module.FirstRunSetupDialog, "exec", accept_setup):
     window._start_first_run_onboarding()
 app.processEvents()
 assert window.language == "en"

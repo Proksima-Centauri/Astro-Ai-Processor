@@ -12,8 +12,8 @@ import os
 import sys
 import tempfile
 
-from PyQt5.QtTest import QTest
-from PyQt5.QtGui import QMouseEvent
+from PyQt6.QtTest import QTest
+from PyQt6.QtGui import QMouseEvent
 
 home = tempfile.TemporaryDirectory()
 os.environ["HOME"] = home.name

@@ -23,14 +23,14 @@ and top-level module organization were inspected: `gui`, `core`, `io`, `algos`,
 Siril/GraXpert predate this performance work and are not a new provenance audit.
 
 Added dependencies: **none**. Measurements use Python's `cProfile`, `pstats`,
-`perf_counter` and already-installed NumPy/OpenCV/PyQt5/ONNX Runtime/Astropy.
+`perf_counter` and already-installed NumPy/OpenCV/PyQt6/ONNX Runtime/Astropy.
 No new library installation is proposed for the first implementation stages.
 
 ## Environment and methodology
 
 - Linux 7.0.0-38-generic, x86_64, glibc 2.43.
 - Intel i7-3610QM, 4 physical cores / 8 threads; approximately 12 GiB RAM.
-- Python 3.14.4; NumPy 2.5.3; OpenCV 5.0.0 (8 threads); PyQt5 5.15.11.
+- Python 3.14.4; NumPy 2.5.3; OpenCV 5.0.0 (8 threads); PyQt6 5.15.11.
 - These NumPy/OpenCV versions differ from `requirements.txt` pins.
 - Synthetic reproducible 6000 x 4000 x 3 `float32` BGR image: 288 MB
   (274.7 MiB), background gradient plus random noise, seed 20261018.

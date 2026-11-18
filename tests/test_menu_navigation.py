@@ -74,10 +74,10 @@ window.action_dashboard.trigger()
 assert window.screen_stack.currentWidget() is window.dashboard_page
 
 opened = []
-original_exec = module.QDialog.exec_
-module.QDialog.exec_ = lambda self: opened.append(self.windowTitle()) or module.QDialog.Accepted
+original_exec = module.QDialog.exec
+module.QDialog.exec = lambda self: opened.append(self.windowTitle()) or module.QDialog.Accepted
 window.show_3d_fly_help()
-module.QDialog.exec_ = original_exec
+module.QDialog.exec = original_exec
 assert opened == ["3D FLY Guide"]
 
 messages = []

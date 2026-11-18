@@ -64,17 +64,30 @@ AI_ASSISTANT_NAME = "Altair"
 ALTAIR_3D_FLY_GUIDE_FILE = "3d_fly_help.md"
 DEFAULT_DEEPSNR_ARGS = "-i \"{input}\" -o \"{output}\" -q -m 2"
 DEFAULT_DEEPSNR_STRENGTH = 2
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.0.1-beta.1"
 APP_UPDATE_PAGE_URL = "https://proksima-centauri.github.io/Astro-Ai-Processor/"
 ALTAIR_DEFAULT_MAX_TOKENS = 900
 ALTAIR_DEFAULT_TEMPERATURE = 0.2
 
 
 def parse_version(version: str):
-    numbers = re.findall(r"\d+", str(version or ""))
+    value = str(version or "").strip().lstrip("vV")
+    core, _, build_metadata = value.partition("+")
+    core, has_prerelease, prerelease = core.partition("-")
+    numbers = [int(num) for num in re.findall(r"\d+", core)]
     if not numbers:
-        return (0,)
-    return tuple(int(num) for num in numbers)
+        return (0, 0, 0, 1, ())
+    numbers = (numbers + [0, 0, 0])[:3]
+    if not has_prerelease:
+        return tuple(numbers) + (1, ())
+
+    identifiers = []
+    for token in re.split(r"[.-]", prerelease):
+        if token.isdigit():
+            identifiers.append((0, int(token)))
+        else:
+            identifiers.append((1, token.lower()))
+    return tuple(numbers) + (0, tuple(identifiers))
 
 
 def normalize_deepsnr_args(raw_args: str) -> str:
@@ -153,19 +166,68 @@ if sys.platform == "win32":
     except Exception:
         pass
 
-from PyQt5.QtWidgets import (
+from PyQt6.QtWidgets import (
     QApplication, QWidget, QMainWindow,
     QVBoxLayout, QHBoxLayout, QPushButton, QFileDialog, QGraphicsView,
     QGraphicsScene, QSlider, QLabel, QFrame, QTabWidget, QGridLayout,
-    QMenuBar, QMenu, QAction, QDialog, QStyle, QSpinBox,
+    QMenuBar, QMenu, QDialog, QStyle, QSpinBox,
     QDoubleSpinBox, QTextEdit, QLineEdit, QComboBox, QCompleter, QSplitter, QDialogButtonBox,
     QScrollArea, QStackedLayout, QTabBar, QListWidget, QListWidgetItem, QStackedWidget, QPlainTextEdit, QSizeGrip,
     QSplashScreen, QStyledItemDelegate, QButtonGroup,
 )
-from PyQt5.QtGui import QImage, QPixmap, QPainter, QIcon, QColor, QFont, QPolygon, QPolygonF, QPen, QPalette, QRegion, QLinearGradient, QDrag, QCursor, QTransform, QImageReader, QTextDocument
-from PyQt5.QtCore import Qt, QPoint, QPointF, QRect, QRectF, QThread, pyqtSignal, QTimer, QSize, QByteArray, QEvent, qInstallMessageHandler, QMimeData
-from PyQt5.QtWidgets import QSizePolicy, QCheckBox, QInputDialog, QMessageBox, QGraphicsItem, QProgressBar
-from PyQt5.QtGui import QPainterPath, QBrush
+from PyQt6.QtGui import QAction, QImage, QPixmap, QPainter, QIcon, QColor, QFont, QPolygon, QPolygonF, QPen, QPalette, QRegion, QLinearGradient, QDrag, QCursor, QTransform, QImageReader, QTextDocument
+from PyQt6.QtCore import Qt as _Qt, QPoint, QPointF, QRect, QRectF, QThread, pyqtSignal, QTimer, QSize, QByteArray, QEvent, qInstallMessageHandler, QMimeData
+from PyQt6.QtWidgets import QSizePolicy, QCheckBox, QInputDialog, QMessageBox, QGraphicsItem, QProgressBar
+from PyQt6.QtGui import QPainterPath, QBrush
+
+
+class _QtNamespaceCompat:
+    """Expose Qt 5's unscoped enum names over Qt 6's scoped enum namespaces."""
+    def __getattr__(self, name):
+        try:
+            return getattr(_Qt, name)
+        except AttributeError:
+            pass
+        for scope_name in dir(_Qt):
+            scope = getattr(_Qt, scope_name, None)
+            try:
+                return getattr(scope, name)
+            except (AttributeError, TypeError):
+                continue
+        raise AttributeError(name)
+
+
+Qt = _QtNamespaceCompat()
+
+
+class _QtEnumCompatMeta(type(QWidget)):
+    def __getattr__(cls, name):
+        base = getattr(cls, "_qt6_base", None)
+        if base is not None:
+            try:
+                return getattr(base, name)
+            except AttributeError:
+                for scope_name in dir(base):
+                    scope = getattr(base, scope_name, None)
+                    try:
+                        return getattr(scope, name)
+                    except (AttributeError, TypeError):
+                        continue
+        raise AttributeError(name)
+
+
+def _qt_enum_compat(base):
+    return _QtEnumCompatMeta(base.__name__, (base,), {"_qt6_base": base, "__module__": base.__module__})
+
+
+for _qt_enum_class in (
+    QApplication, QCompleter, QDialog, QDialogButtonBox, QEvent, QFileDialog, QFrame,
+    QGraphicsItem, QGraphicsView, QImage, QLineEdit, QListWidget, QMessageBox,
+    QPainter, QPalette, QSerialPort if "QSerialPort" in globals() else None,
+    QSizePolicy, QStyle, QTextEdit, QColor,
+):
+    if _qt_enum_class is not None:
+        globals()[_qt_enum_class.__name__] = _qt_enum_compat(_qt_enum_class)
 
 
 def _qt_message_handler(_msg_type, _context, message):
@@ -181,14 +243,15 @@ def _qt_message_handler(_msg_type, _context, message):
 
 qInstallMessageHandler(_qt_message_handler)
 try:
-    from PyQt5.QtSerialPort import QSerialPort, QSerialPortInfo
+    from PyQt6.QtSerialPort import QSerialPort, QSerialPortInfo
+    QSerialPort = _qt_enum_compat(QSerialPort)
     QT_SERIAL_AVAILABLE = True
 except ImportError:
     QSerialPort = None
     QSerialPortInfo = None
     QT_SERIAL_AVAILABLE = False
 try:
-    from PyQt5.QtSvg import QSvgRenderer
+    from PyQt6.QtSvg import QSvgRenderer
     SVG_AVAILABLE = True
 except ImportError:
     QSvgRenderer = None
@@ -297,6 +360,9 @@ I18N = {
     "update_available_banner": {"pl": "Dostępna aktualizacja Astro AI Processor: {version}", "en": "Astro AI Processor update available: {version}"},
     "update_download": {"pl": "Pobierz aktualizację", "en": "Download update"},
     "update_dismiss": {"pl": "Zamknij powiadomienie", "en": "Dismiss update notice"},
+    "window_close": {"pl": "Zamknij", "en": "Close"},
+    "window_minimize": {"pl": "Minimalizuj", "en": "Minimize"},
+    "window_maximize": {"pl": "Maksymalizuj lub przywróć", "en": "Maximize or restore"},
     "action_histogram": {"pl": "Histogram", "en": "Histogram"},
     "action_console": {"pl": "Konsola", "en": "Console"},
     "action_menu": {"pl": "Menu", "en": "Menu"},
@@ -626,7 +692,7 @@ _WHITE_SUR_THEME_ACTIVE = None
 
 
 def is_white_sur_desktop_theme_active() -> bool:
-    """Detect a WhiteSur GTK theme so Qt dialogs expose matching window controls."""
+    """Detect a WhiteSur GTK theme so the main Qt window can draw matching controls."""
     global _WHITE_SUR_THEME_ACTIVE
     env_theme = str(os.environ.get("GTK_THEME", "") or "").strip().lower()
     if env_theme:
@@ -659,7 +725,140 @@ def apply_dialog_window_flags(widget, white_sur_active=None):
     )
     if use_white_sur_controls:
         flags |= Qt.WindowMinimizeButtonHint | Qt.WindowMaximizeButtonHint
+        if isinstance(widget, QMainWindow):
+            widget._white_sur_titlebar_enabled = True
+            flags |= Qt.FramelessWindowHint
     widget.setWindowFlags(flags)
+
+
+class WhiteSurTitleBar(QWidget):
+    """Compact WhiteSur-style client title bar used when GNOME has no GTK CSD."""
+    def __init__(self, window):
+        super().__init__(window)
+        self.window = window
+        self._drag_offset = None
+        self.setObjectName("whiteSurTitleBar")
+        self.setFixedHeight(38)
+        self.setStyleSheet("QWidget#whiteSurTitleBar { background: #1e1e1e; }")
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(12, 0, 12, 0)
+        layout.setSpacing(8)
+
+        controls = QWidget(self)
+        controls.setFixedWidth(70)
+        controls_layout = QHBoxLayout(controls)
+        controls_layout.setContentsMargins(0, 0, 0, 0)
+        controls_layout.setSpacing(8)
+        for object_name, color, tooltip, callback in (
+            ("whiteSurCloseButton", "#ff5f57", self.window.tr("window_close", "Close"), self.window.close),
+            ("whiteSurMinimizeButton", "#febc2e", self.window.tr("window_minimize", "Minimize"), self.window.showMinimized),
+            ("whiteSurMaximizeButton", "#28c840", self.window.tr("window_maximize", "Maximize or restore"), self._toggle_maximized),
+        ):
+            button = QPushButton(controls)
+            button.setObjectName(object_name)
+            button.setToolTip(tooltip)
+            button.setFixedSize(14, 14)
+            button.setFocusPolicy(Qt.NoFocus)
+            button.setStyleSheet(
+                f"QPushButton#{object_name} {{ background: {color}; border: none; border-radius: 7px; padding: 0; }}"
+                f"QPushButton#{object_name}:hover {{ background: {color}; border: 1px solid rgba(0,0,0,0.35); }}"
+                f"QPushButton#{object_name}:pressed {{ background: #d5d5d5; }}"
+            )
+            button.clicked.connect(callback)
+            controls_layout.addWidget(button)
+        layout.addWidget(controls)
+
+        self.title_label = QLabel(self.window.windowTitle(), self)
+        self.title_label.setAlignment(Qt.AlignCenter)
+        self.title_label.setStyleSheet("color: #eeeeee; background: transparent; font-weight: 600;")
+        layout.addWidget(self.title_label, 1)
+        layout.addSpacing(70)
+
+    def _toggle_maximized(self):
+        if self.window.isMaximized():
+            self.window.showNormal()
+        else:
+            self.window.showMaximized()
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            handle = self.window.windowHandle()
+            if handle is not None and hasattr(handle, "startSystemMove") and handle.startSystemMove():
+                event.accept()
+                return
+            self._drag_offset = event.globalPosition().toPoint() - self.window.frameGeometry().topLeft()
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if self._drag_offset is not None and event.buttons() & Qt.LeftButton:
+            self.window.move(event.globalPosition().toPoint() - self._drag_offset)
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        self._drag_offset = None
+        super().mouseReleaseEvent(event)
+
+    def mouseDoubleClickEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self._toggle_maximized()
+            event.accept()
+            return
+        super().mouseDoubleClickEvent(event)
+
+
+class WhiteSurResizeHandle(QWidget):
+    def __init__(self, window, edges, cursor):
+        super().__init__(window)
+        self.window = window
+        self.edges = edges
+        self._drag_origin = None
+        self._initial_geometry = None
+        self.setCursor(cursor)
+        self.setMouseTracking(True)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            handle = self.window.windowHandle()
+            if handle is not None and hasattr(handle, "startSystemResize"):
+                if handle.startSystemResize(self.edges) is not False:
+                    event.accept()
+                    return
+            self._drag_origin = event.globalPosition().toPoint()
+            self._initial_geometry = self.window.geometry()
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if self._drag_origin is None or not event.buttons() & Qt.LeftButton:
+            super().mouseMoveEvent(event)
+            return
+        delta = event.globalPosition().toPoint() - self._drag_origin
+        rect = self._initial_geometry
+        left, top, right, bottom = rect.left(), rect.top(), rect.right(), rect.bottom()
+        if self.edges & Qt.LeftEdge:
+            left += delta.x()
+        if self.edges & Qt.RightEdge:
+            right += delta.x()
+        if self.edges & Qt.TopEdge:
+            top += delta.y()
+        if self.edges & Qt.BottomEdge:
+            bottom += delta.y()
+        minimum_width = self.window.minimumWidth()
+        minimum_height = self.window.minimumHeight()
+        if right - left + 1 >= minimum_width and bottom - top + 1 >= minimum_height:
+            self.window.setGeometry(left, top, right - left + 1, bottom - top + 1)
+        event.accept()
+
+    def mouseReleaseEvent(self, event):
+        self._drag_origin = None
+        self._initial_geometry = None
+        super().mouseReleaseEvent(event)
 
 
 class DashboardImageCard(QWidget):
@@ -801,7 +1000,7 @@ class DashboardScriptBlockFrame(QFrame):
         mime_data = QMimeData()
         mime_data.setData("application/x-astroap-script-block", str(int(source_index)).encode("ascii"))
         drag.setMimeData(mime_data)
-        drag.exec_(Qt.MoveAction)
+        drag.exec(Qt.MoveAction)
         self._drag_start_position = None
 
     def dragEnterEvent(self, event):
@@ -830,11 +1029,8 @@ def apply_standard_layout_margins(layout, margins=(20, 20, 20, 20), spacing=12):
 
 
 def get_safe_file_dialog_options():
-    options = QFileDialog.Options()
-    if sys.platform.startswith("linux"):
-        options |= QFileDialog.DontUseNativeDialog
-        options |= QFileDialog.DontUseCustomDirectoryIcons
-    return options
+    # Keep Qt's native file picker and the operating system's normal styling.
+    return QFileDialog.Option(0)
 
 
 def get_runtime_base_dir() -> str:
@@ -1062,8 +1258,6 @@ def apply_theme_application(app, theme_name="Fusion Dark", accent_name=None):
             accent_name = global_prefs.get("accent_name", "Ultra Blue")
         else:
             accent_name = "Ultra Blue"
-    app.setStyle("Fusion")
-    app.setPalette(get_theme_palette(theme_name, accent_name))
     app.setStyleSheet(get_theme_stylesheet(theme_name, accent_name))
 
 
@@ -3128,7 +3322,7 @@ class BackgroundExtractionDialog(QDialog):
         if self.image_data is None:
             return
         picker = BackgroundPointPickerDialog(self.image_data, self._background_points, self)
-        if picker.exec_() == QDialog.Accepted:
+        if picker.exec() == QDialog.Accepted:
             self._background_points = list(picker.points)
             self._refresh_background_points_label()
 
@@ -5882,7 +6076,7 @@ class Fly3DDialog(QDialog):
 
         if app is not None and hasattr(app, "_get_starnet_dialog"):
             starnet_settings_dialog = app._get_starnet_dialog()
-            if starnet_settings_dialog.exec_() != QDialog.Accepted:
+            if starnet_settings_dialog.exec() != QDialog.Accepted:
                 QMessageBox.information(self, "Usun gwiazdy", "Anulowano ustawienia StarNet++.")
                 return
             params = starnet_settings_dialog.get_parameters()
@@ -11322,7 +11516,7 @@ class ArduinoJoystickWorker(QThread):
             return
 
         if not QT_SERIAL_AVAILABLE or QSerialPort is None or QSerialPortInfo is None:
-            self.error_signal.emit("Serial support is not available. Install pyserial or PyQt5 QtSerialPort.")
+            self.error_signal.emit("Serial support is not available. Install pyserial or PyQt6 QtSerialPort.")
             return
 
 
@@ -16770,7 +16964,7 @@ class PhotoshopMenuPanel(QFrame):
         if self.host is not None and hasattr(self.host, "can_delete_layer"):
             can_delete = self.host.can_delete_layer(key)
         delete_action.setEnabled(can_delete)
-        selected_action = menu.exec_(source_widget.mapToGlobal(pos))
+        selected_action = menu.exec(source_widget.mapToGlobal(pos))
         if selected_action == delete_action and self.host is not None and hasattr(self.host, "delete_selected_layer"):
             self.host.delete_selected_layer()
             self.update_from_app(self.host)
@@ -17912,10 +18106,6 @@ class HSLPanel(QFrame):
 
 def get_dark_stylesheet() -> str:
     return """
-    QWidget, QMainWindow, QDialog {
-        background-color: #1e1e1e;
-        color: #f0f0f0;
-    }
 
     QMenuBar {
         background-color: #252526;
@@ -18167,85 +18357,17 @@ def get_dark_stylesheet() -> str:
         border: 1px solid #000000;
     }
 
-    QFileDialog {
-        background-color: #1e1e1e;
-        border: 1px solid #3d3d3d;
-    }
 
-    QFileDialog QWidget {
-        background-color: #1e1e1e;
-        color: #f0f0f0;
-    }
 
-    QFileDialog QLineEdit,
-    QFileDialog QComboBox {
-        background-color: #252526;
-        border: 1px solid #3d3d3d;
-        border-radius: 4px;
-        padding: 4px 6px;
-    }
 
-    QFileDialog QListView,
-    QFileDialog QTreeView {
-        background-color: #1a1d21;
-        border: 1px solid #34383f;
-        outline: none;
-        alternate-background-color: #20242a;
-        show-decoration-selected: 1;
-    }
 
-    QFileDialog QListView::item,
-    QFileDialog QTreeView::item {
-        padding: 3px 6px;
-        border: none;
-        color: #dce5ee;
-    }
 
-    QFileDialog QListView::item:selected,
-    QFileDialog QTreeView::item:selected {
-        background-color: #007acc;
-        color: #ffffff;
-    }
 
-    QFileDialog QHeaderView::section {
-        background-color: #252526;
-        color: #d2d9df;
-        border: none;
-        border-bottom: 1px solid #3d3d3d;
-        padding: 6px 8px;
-        font-weight: 600;
-    }
 
-    QFileDialog QToolButton {
-        background-color: #2d2d2d;
-        border: 1px solid #3d3d3d;
-        border-radius: 4px;
-        padding: 4px 8px;
-        color: #f0f0f0;
-    }
 
-    QFileDialog QToolButton:hover {
-        background-color: #3a3a3a;
-    }
 
-    QFileDialog QDialogButtonBox QPushButton {
-        background-color: #3a3a3a;
-        border: 1px solid #4a4a4a;
-        border-radius: 4px;
-        padding: 6px 12px;
-        color: #f0f0f0;
-        min-width: 90px;
-    }
 
-    QFileDialog QDialogButtonBox QPushButton:hover {
-        background-color: #4a4a4a;
-    }
 
-    QFileDialog QSplitter::handle {
-        background-color: #30343a;
-        width: 1px;
-        height: 1px;
-    }
 
     QToolTip {
         background-color: #252526;
@@ -18257,10 +18379,6 @@ def get_dark_stylesheet() -> str:
 
 def get_light_stylesheet() -> str:
     return """
-    QApplication, QWidget, QMainWindow, QDialog {
-        background-color: #f4f4f4;
-        color: #1f1f1f;
-    }
 
     QMenuBar {
         background-color: #f8f8f8;
@@ -18810,7 +18928,7 @@ class DraggableTopActionButton(QPushButton):
         drag.setMimeData(mime)
         drag.setPixmap(self.grab())
         drag.setHotSpot(event.pos())
-        drag.exec_(Qt.MoveAction)
+        drag.exec(Qt.MoveAction)
 
 
 class ReorderableTopActionsBar(QFrame):
@@ -19406,7 +19524,7 @@ class CommandPaletteDialog(QDialog):
             y = min(max(bounds.top(), center.y() - self.height() // 2), bounds.bottom() - self.height() + 1)
             self.move(x, y)
         QTimer.singleShot(0, self.search_edit.setFocus)
-        return self.exec_()
+        return self.exec()
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_Escape:
@@ -20150,7 +20268,7 @@ class AstroApp(QMainWindow):
         if strength is None:
             dialog = self._get_deepsnr_dialog()
             self._restore_easy_stage_dialogs()
-            if dialog.exec_() != QDialog.Accepted:
+            if dialog.exec() != QDialog.Accepted:
                 self.log("deepSNR canceled.", "warning")
                 return False
             params = dialog.get_parameters()
@@ -21828,7 +21946,7 @@ class AstroApp(QMainWindow):
         buttons = QDialogButtonBox(QDialogButtonBox.Close, parent=dialog)
         buttons.rejected.connect(dialog.reject)
         layout.addWidget(buttons)
-        dialog.exec_()
+        dialog.exec()
 
     def show_keyboard_shortcuts(self):
         if self.language == "pl":
@@ -21889,7 +22007,7 @@ class AstroApp(QMainWindow):
             return
 
         setup = FirstRunSetupDialog(self.language, self.theme_name, self)
-        if setup.exec_() != QDialog.Accepted:
+        if setup.exec() != QDialog.Accepted:
             return
 
         language, theme_name = setup.selections()
@@ -22553,7 +22671,7 @@ class AstroApp(QMainWindow):
         self._begin_dialog_compare(dialog)
         self.log("Gaussian Blur dialog opened.")
         preview_blur(dialog.get_value())
-        if dialog.exec_() == QDialog.Accepted:
+        if dialog.exec() == QDialog.Accepted:
             dialog.preview_timer.stop()
             sigma = dialog.get_value()
             
@@ -22654,7 +22772,7 @@ class AstroApp(QMainWindow):
         current_params = dialog.get_values()
         preview_lce(current_params)
 
-        if dialog.exec_() == QDialog.Accepted:
+        if dialog.exec() == QDialog.Accepted:
             dialog.preview_timer.stop()
             params = dialog.get_values()
             normalized_params = {
@@ -22767,7 +22885,7 @@ class AstroApp(QMainWindow):
             self.log("Rotate skipped: no image loaded.", "warning")
             return
         dialog = RotateDialog(self, source_img=self.magic_img, language=self.language)
-        if dialog.exec_() != QDialog.Accepted:
+        if dialog.exec() != QDialog.Accepted:
             self.log("Rotate canceled.", "warning")
             return
         angle, flip_h, flip_v = dialog.get_transform()
@@ -23297,7 +23415,7 @@ class AstroApp(QMainWindow):
 
     def show_new_workspace_dialog(self):
         dialog = NewWorkspaceDialog(self)
-        if dialog.exec_() != QDialog.Accepted:
+        if dialog.exec() != QDialog.Accepted:
             self.log("New workspace canceled.")
             return
         workspace = dialog.get_workspace()
@@ -24243,6 +24361,37 @@ class AstroApp(QMainWindow):
         self._ensure_topbar_single_trailing_stretch()
         self._save_topbar_button_order()
         self.log("Toolbar order restored to default.")
+
+    def _position_whitesur_resize_handles(self):
+        handles = getattr(self, "_whitesur_resize_handles", None)
+        if not handles:
+            return
+        if self.isMaximized():
+            for handle in handles.values():
+                handle.hide()
+            return
+        width = self.width()
+        height = self.height()
+        corner = self._whitesur_resize_corner
+        edge = self._whitesur_resize_edge
+        geometries = {
+            "top_left": (0, 0, corner, corner),
+            "top": (corner, 0, max(0, width - 2 * corner), edge),
+            "top_right": (width - corner, 0, corner, corner),
+            "right": (width - edge, corner, edge, max(0, height - 2 * corner)),
+            "bottom_right": (width - corner, height - corner, corner, corner),
+            "bottom": (corner, height - edge, max(0, width - 2 * corner), edge),
+            "bottom_left": (0, height - corner, corner, corner),
+            "left": (0, corner, edge, max(0, height - 2 * corner)),
+        }
+        for name, geometry in geometries.items():
+            handles[name].setGeometry(*geometry)
+            handles[name].show()
+            handles[name].raise_()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._position_whitesur_resize_handles()
 
     def closeEvent(self, event):
         if not self._close_after_workers_finished:
@@ -25652,6 +25801,10 @@ class AstroApp(QMainWindow):
         root_layout = QVBoxLayout(root_widget)
         root_layout.setContentsMargins(0, 0, 0, 0)
 
+        if getattr(self, "_white_sur_titlebar_enabled", False):
+            self.whitesur_titlebar = WhiteSurTitleBar(self)
+            root_layout.addWidget(self.whitesur_titlebar)
+
         self.update_banner = QFrame(root_widget)
         self.update_banner.setObjectName("updateBanner")
         self.update_banner.setStyleSheet(
@@ -25903,7 +26056,7 @@ class AstroApp(QMainWindow):
             if self.menu_workspace is None:
                 return
             pos = self.btn_workspace.mapToGlobal(self.btn_workspace.rect().bottomLeft())
-            self.menu_workspace.exec_(pos)
+            self.menu_workspace.exec(pos)
 
         self.btn_open = _add_top_btn("Open", action=self.action_open)
         self.btn_save = _add_top_btn("Save", action=self.action_save)
@@ -25936,7 +26089,7 @@ class AstroApp(QMainWindow):
         self.crop_rotate_menu.addAction(self.action_crop)
         self.crop_rotate_menu.addAction(self.action_rotate)
         self.btn_crop_top.clicked.connect(
-            lambda: self.crop_rotate_menu.exec_(
+            lambda: self.crop_rotate_menu.exec(
                 self.btn_crop_top.mapToGlobal(QPoint(0, self.btn_crop_top.height()))
             )
         )
@@ -26529,6 +26682,27 @@ class AstroApp(QMainWindow):
         self.screen_stack.setCurrentWidget(self.dashboard_page)
         root_layout.addWidget(self.screen_stack, 1)
         self.setCentralWidget(root_widget)
+        if getattr(self, "_white_sur_titlebar_enabled", False):
+            corner = 14
+            edge = 6
+            handle_specs = {
+                "top_left": (Qt.LeftEdge | Qt.TopEdge, Qt.SizeFDiagCursor),
+                "top": (Qt.TopEdge, Qt.SizeVerCursor),
+                "top_right": (Qt.RightEdge | Qt.TopEdge, Qt.SizeBDiagCursor),
+                "right": (Qt.RightEdge, Qt.SizeHorCursor),
+                "bottom_right": (Qt.RightEdge | Qt.BottomEdge, Qt.SizeFDiagCursor),
+                "bottom": (Qt.BottomEdge, Qt.SizeVerCursor),
+                "bottom_left": (Qt.LeftEdge | Qt.BottomEdge, Qt.SizeBDiagCursor),
+                "left": (Qt.LeftEdge, Qt.SizeHorCursor),
+            }
+            self._whitesur_resize_handles = {
+                name: WhiteSurResizeHandle(self, edges, cursor)
+                for name, (edges, cursor) in handle_specs.items()
+            }
+            self._whitesur_resize_corner = corner
+            self._whitesur_resize_edge = edge
+            self._position_whitesur_resize_handles()
+            QTimer.singleShot(0, self._position_whitesur_resize_handles)
 
         self.status_operation_label = QLabel(
             "Ready" if str(self.language).lower().startswith("en") else "Gotowy"
@@ -27040,7 +27214,7 @@ class AstroApp(QMainWindow):
         dialog.setFileMode(QFileDialog.ExistingFile)
         dialog.setOptions(get_safe_file_dialog_options())
         dialog.setViewMode(QFileDialog.Detail)
-        if dialog.exec_() != QDialog.Accepted:
+        if dialog.exec() != QDialog.Accepted:
             manual_path = self._request_manual_path_after_cancel(title, path_kind="file")
             return str(manual_path or ""), dialog.selectedNameFilter()
         selected_files = dialog.selectedFiles()
@@ -27055,7 +27229,7 @@ class AstroApp(QMainWindow):
         dialog.setFileMode(QFileDialog.ExistingFiles)
         dialog.setOptions(get_safe_file_dialog_options())
         dialog.setViewMode(QFileDialog.Detail)
-        if dialog.exec_() != QDialog.Accepted:
+        if dialog.exec() != QDialog.Accepted:
             manual_paths = self._request_manual_path_after_cancel(
                 title,
                 path_kind="file",
@@ -27072,7 +27246,7 @@ class AstroApp(QMainWindow):
         dialog.setFileMode(QFileDialog.AnyFile)
         dialog.setOptions(get_safe_file_dialog_options())
         dialog.setViewMode(QFileDialog.Detail)
-        if dialog.exec_() != QDialog.Accepted:
+        if dialog.exec() != QDialog.Accepted:
             return "", dialog.selectedNameFilter()
         selected_files = dialog.selectedFiles()
         selected_path = selected_files[0] if selected_files else ""
@@ -27107,7 +27281,7 @@ class AstroApp(QMainWindow):
 
         dialog = self._get_mosaic_dialog()
         dialog.set_selected_files(paths)
-        if dialog.exec_() != QDialog.Accepted:
+        if dialog.exec() != QDialog.Accepted:
             self.log("Mosaic settings canceled.", "warning")
             return
         params = dialog.get_parameters()
@@ -27227,7 +27401,7 @@ class AstroApp(QMainWindow):
 
     def create_stack_from_frames(self):
         dialog = self._get_stack_dialog()
-        if dialog.exec_() != QDialog.Accepted:
+        if dialog.exec() != QDialog.Accepted:
             self.log("Stacking canceled.", "warning")
             return
         paths = [str(path or "").strip() for path in (dialog.get_selected_files() or []) if str(path or "").strip()]
@@ -27603,7 +27777,7 @@ class AstroApp(QMainWindow):
 
     def create_stack_from_solar_video(self):
         dialog = self._get_solar_stack_dialog()
-        if dialog.exec_() != QDialog.Accepted:
+        if dialog.exec() != QDialog.Accepted:
             self.log("Planetary stacking canceled.", "warning")
             return
 
@@ -27845,7 +28019,7 @@ class AstroApp(QMainWindow):
 
     def create_timelapse_from_frames(self):
         dialog = self._get_timelapse_dialog()
-        if dialog.exec_() != QDialog.Accepted:
+        if dialog.exec() != QDialog.Accepted:
             self.log("Time-lapse canceled.", "warning")
             return
 
@@ -28259,7 +28433,7 @@ class AstroApp(QMainWindow):
 
         if parameters is None:
             dialog = AstroUpscaleDialog(self.magic_img, self.language, self)
-            if dialog.exec_() != QDialog.Accepted:
+            if dialog.exec() != QDialog.Accepted:
                 self.log("Astro Upscale canceled.", "warning")
                 return False
             params = dialog.get_parameters()
@@ -28498,7 +28672,7 @@ class AstroApp(QMainWindow):
                         (int(point[0]), int(point[1])) for point in np.asarray(points).reshape(-1, 2)
                     ]
                     dialog._refresh_background_points_label()
-            if dialog.exec_() != QDialog.Accepted:
+            if dialog.exec() != QDialog.Accepted:
                 self.log("Background Extraction canceled.", "warning")
                 return False
             try:
@@ -28666,7 +28840,7 @@ class AstroApp(QMainWindow):
         if dialog_params is None:
             dialog = self._get_deconvolution_dialog()
             self._restore_easy_stage_dialogs()
-            if dialog.exec_() != QDialog.Accepted:
+            if dialog.exec() != QDialog.Accepted:
                 self.log("Deconvolution canceled.", "warning")
                 return
             dialog_params = dialog.get_parameters()
@@ -28751,7 +28925,7 @@ class AstroApp(QMainWindow):
             return
 
         dialog = self._get_starnet_dialog()
-        if dialog.exec_() != QDialog.Accepted:
+        if dialog.exec() != QDialog.Accepted:
             self.log("StarNet++ canceled.", "warning")
             return
 
@@ -28797,7 +28971,7 @@ class AstroApp(QMainWindow):
         if dialog is None:
             self.log("3D FLY skipped: no valid source image.", "warning")
             return
-        if dialog.exec_() != QDialog.Accepted:
+        if dialog.exec() != QDialog.Accepted:
             self.log("3D FLY canceled.", "warning")
             return
 
@@ -30184,7 +30358,7 @@ class AstroApp(QMainWindow):
         self.log("Star Shrink dialog opened.")
         amount, selection = dialog.get_values()
         preview_star_shrink(amount, selection)
-        dialog.exec_()
+        dialog.exec()
 
     def _apply_mask_blend(self, base_img: np.ndarray, layer_img: np.ndarray, mask: np.ndarray) -> np.ndarray:
         if base_img is None:
@@ -30601,7 +30775,7 @@ class AstroApp(QMainWindow):
         menu = QMenu(self)
         rename_action = menu.addAction("Rename")
         remove_action = menu.addAction("Remove")
-        selected_action = menu.exec_(global_pos)
+        selected_action = menu.exec(global_pos)
 
         if selected_action == rename_action:
             self.rename_thumbnail(index)
@@ -30917,7 +31091,7 @@ def main():
         splash.finish(window)
     if not window.onboarding_completed:
         QTimer.singleShot(0, window._start_first_run_onboarding)
-    sys.exit(app.exec_())
+    sys.exit(app.exec())
 
 
 if __name__ == "__main__":

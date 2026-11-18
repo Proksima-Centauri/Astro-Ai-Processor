@@ -4,7 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
-from PyQt5.QtCore import QCoreApplication
+from PyQt6.QtCore import QCoreApplication
 
 
 APP_PATH = Path(__file__).resolve().parents[1] / "Astro Ai Processor.py"

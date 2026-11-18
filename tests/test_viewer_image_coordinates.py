@@ -10,7 +10,7 @@ def test_viewer_maps_clicks_to_full_resolution_image_coordinates():
 import importlib.util
 import sys
 
-from PyQt5.QtTest import QTest
+from PyQt6.QtTest import QTest
 
 spec = importlib.util.spec_from_file_location("astro_app_viewer_coordinates_test", "Astro Ai Processor.py")
 module = importlib.util.module_from_spec(spec)

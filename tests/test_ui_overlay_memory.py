@@ -262,11 +262,12 @@ nonlinear_path = os.path.join(temporary_home.name, "display.png")
 assert module.safe_imwrite(nonlinear_path, module.np.full((8, 8, 3), 127, dtype=module.np.uint8))
 _, is_autostretched = window._dashboard_image_pixmap(nonlinear_path)
 assert not is_autostretched
-assert not window.windowFlags() & module.Qt.FramelessWindowHint
-assert not hasattr(window, "whitesur_titlebar")
+assert window.windowFlags() & module.Qt.FramelessWindowHint
+assert hasattr(window, "whitesur_titlebar")
 assert window.menuBar() is not None and not window.menuBar().isVisible()
 module.apply_theme_application(app, "Light", "ZWO Red")
-assert "background-color: #cfcfcf" in app.styleSheet()
+assert "QMainWindow" not in app.styleSheet()
+assert "QFileDialog" not in app.styleSheet()
 assert "background-color: #d51313" in app.styleSheet()
 module.apply_theme_application(app, "Fusion Dark", "Ultra Blue")
 ask_icon = window.command_palette_dialog.ask_icon.pixmap()

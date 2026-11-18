@@ -37,7 +37,7 @@ Astro AI Processor combines classic editing tools (Levels, Curves, Histogram, Bl
 
 - Python 3.10+ (recommended 3.11-3.13).
 - Linux or Windows (on Linux the app enables software OpenGL).
-- Packages from `requirements.txt`: `numpy`, `opencv-python`, `largestinteriorrectangle`, `matplotlib`, `sep`, `astropy`, `photutils`, `SpeechRecognition`, `onnxruntime`, `PyQt5`, `pyserial`, `scikit-image`.
+- Packages from `requirements.txt`: `numpy`, `opencv-python`, `largestinteriorrectangle`, `matplotlib`, `sep`, `astropy`, `photutils`, `SpeechRecognition`, `onnxruntime`, `PyQt6`, `pyserial`, `scikit-image`.
 
 Optional external tools:
 

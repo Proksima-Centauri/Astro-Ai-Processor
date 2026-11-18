@@ -105,7 +105,8 @@ jobs:
           tag_name: ${{ needs.version.outputs.tag }}
           name: Astro AI Processor ${{ needs.version.outputs.app_version }}
           generate_release_notes: true
-          make_latest: true
+          prerelease: ${{ contains(needs.version.outputs.app_version, '-') }}
+          make_latest: ${{ !contains(needs.version.outputs.app_version, '-') }}
           files: release-assets/*
 
   update-download-metadata:
