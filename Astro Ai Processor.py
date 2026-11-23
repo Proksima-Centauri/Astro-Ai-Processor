@@ -42,6 +42,7 @@ from processing.openrouter import (
     resolve_backend_url,
 )
 from processing.chat_history import ChatHistoryStore
+from processing.star_spikes import add_star_spikes
 from processing.plate_solver import resolve_skyshot, solve_with_skyshot
 from processing.image_analysis import compute_image_analysis_metrics
 from processing.image_effects import _normalize_mask01, local_contrast_enhancement, neutralize_background
@@ -363,6 +364,7 @@ I18N = {
     "easy_stage_sharpen": {"pl": "7. Wyostrzanie", "en": "7. Sharpen"},
     "easy_stage_correction": {"pl": "8. Korekta", "en": "8. Correction"},
     "easy_stage_save": {"pl": "9. Zapisz", "en": "9. Save"},
+    "easy_stage_effects": {"pl": "10. Tricks & Effects", "en": "10. Tricks & Effects"},
     "easy_stage_load_description": {"pl": "Wczytaj zdjęcie astronomiczne, aby rozpocząć.", "en": "Choose an astronomical image to begin."},
     "easy_stage_crop_description": {"pl": "Wybierz kadr, przeciągając jego krawędzie na obrazie.", "en": "Choose the image area by dragging its crop handles."},
     "easy_stage_background_description": {"pl": "Usuń gradienty i nierówne tło nieba.", "en": "Remove gradients and uneven sky background."},
@@ -372,9 +374,21 @@ I18N = {
     "easy_stage_sharpen_description": {"pl": "Wydobądź drobne szczegóły obrazu.", "en": "Bring out fine image details."},
     "easy_stage_correction_description": {"pl": "Wprowadź końcowe korekty obrazu i gwiazd.", "en": "Make final image and star corrections."},
     "easy_stage_save_description": {"pl": "Zapisz gotowy obraz lub jego kopię.", "en": "Save the finished image or a copy."},
+    "easy_stage_effects_description": {"pl": "Dodaj podpis, kolce dyfrakcyjne lub przygotuj efekt 3D FLY.", "en": "Add a signature or diffraction spikes, or create a 3D FLY effect."},
+    "easy_add_signature": {"pl": "Dodaj podpis", "en": "Add signature"},
+    "action_star_spikes": {"pl": "Star Spikes", "en": "Star Spikes"},
+    "star_spikes_length": {"pl": "Długość bazowa (px)", "en": "Base length (px)"},
+    "star_spikes_brightness": {"pl": "Najjaśniejsze gwiazdy (%)", "en": "Brightest stars (%)"},
+    "star_spikes_length_scaling": {"pl": "Skalowanie długości", "en": "Length scaling"},
+    "star_spikes_intensity": {"pl": "Intensywność", "en": "Intensity"},
+    "star_spikes_width": {"pl": "Szerokość przy jądrze (px)", "en": "Core width (px)"},
+    "star_spikes_angle": {"pl": "Kąt", "en": "Angle"},
+    "star_spikes_rays": {"pl": "Liczba promieni", "en": "Number of rays"},
+    "star_spikes_apply": {"pl": "Dodaj kolce dyfrakcyjne", "en": "Add diffraction spikes"},
     "easy_previous": {"pl": "Wstecz", "en": "Back"},
     "easy_next": {"pl": "Dalej", "en": "Next"},
     "action_add_watermark": {"pl": "Dodaj znak wodny", "en": "Add watermark"},
+    "action_cancel": {"pl": "Anuluj", "en": "Cancel"},
     "watermark_prompt": {"pl": "Wpisz tekst znaku wodnego:", "en": "Enter watermark text:"},
     "watermark_text": {"pl": "Tekst", "en": "Text"},
     "watermark_text_placeholder": {"pl": "Tekst opcjonalny", "en": "Optional text"},
@@ -2364,6 +2378,135 @@ def compose_watermark_image(source: np.ndarray, options: dict) -> np.ndarray:
         limits = np.iinfo(source.dtype)
         return np.clip(np.rint(blended), limits.min, limits.max).astype(source.dtype)
     return blended.astype(source.dtype)
+
+
+class StarSpikesDialog(QDialog):
+    def __init__(self, translate, image=None, linear_default=False, parent=None):
+        super().__init__(parent)
+        apply_dialog_window_flags(self)
+        self._translate = translate
+        self._preview_source = np.asarray(image) if isinstance(image, np.ndarray) else None
+        self.setWindowTitle(translate("action_star_spikes", "Star Spikes"))
+        self.setMinimumWidth(440)
+        layout = QVBoxLayout(self)
+        apply_standard_layout_margins(layout)
+        info = QLabel(
+            "Dodaje automatycznie wykrytym jasnym gwiazdom kolce dyfrakcyjne."
+            if str(getattr(parent, "language", "pl")).lower().startswith("pl")
+            else "Adds diffraction spikes to automatically detected bright stars."
+        )
+        info.setWordWrap(True)
+        layout.addWidget(info)
+        controls = QGridLayout()
+        self.spin_brightness = QSpinBox(self)
+        self.spin_brightness.setRange(1, 100)
+        self.spin_brightness.setValue(10)
+        self.spin_length = QSpinBox(self)
+        self.spin_length.setRange(5, 2000)
+        self.spin_length.setValue(100)
+        self.spin_length_scale = QDoubleSpinBox(self)
+        self.spin_length_scale.setRange(0.0, 1.0)
+        self.spin_length_scale.setSingleStep(0.1)
+        self.spin_length_scale.setValue(0.5)
+        self.spin_intensity = QSpinBox(self)
+        self.spin_intensity.setRange(1, 200)
+        self.spin_intensity.setValue(70)
+        self.spin_width = QDoubleSpinBox(self)
+        self.spin_width.setRange(0.5, 20.0)
+        self.spin_width.setSingleStep(0.5)
+        self.spin_width.setValue(2.5)
+        self.spin_angle = QSpinBox(self)
+        self.spin_angle.setRange(0, 179)
+        self.spin_rays = QComboBox(self)
+        for count in (2, 4, 6):
+            self.spin_rays.addItem(str(count), count)
+        self.spin_rays.setCurrentIndex(self.spin_rays.findData(4))
+        self.chk_halo = QCheckBox("Halo / rozbłysk jądra" if str(getattr(parent, "language", "pl")).lower().startswith("pl") else "Core halo / glow", self)
+        self.chk_halo.setChecked(True)
+        self.chk_linear = QCheckBox("Obraz liniowy" if str(getattr(parent, "language", "pl")).lower().startswith("pl") else "Linear image", self)
+        self.chk_linear.setChecked(bool(linear_default))
+        for row, (key, fallback, widget) in enumerate((
+            ("star_spikes_brightness", "Bright stars (%)", self.spin_brightness),
+            ("star_spikes_length", "Base length (px)", self.spin_length),
+            ("star_spikes_length_scaling", "Length scaling", self.spin_length_scale),
+            ("star_spikes_intensity", "Intensity", self.spin_intensity),
+            ("star_spikes_width", "Core width (px)", self.spin_width),
+            ("star_spikes_angle", "Angle", self.spin_angle),
+            ("star_spikes_rays", "Number of rays", self.spin_rays),
+        )):
+            controls.addWidget(QLabel(translate(key, fallback), self), row, 0)
+            controls.addWidget(widget, row, 1)
+        layout.addLayout(controls)
+        layout.addWidget(self.chk_halo)
+        layout.addWidget(self.chk_linear)
+        self.preview_label = QLabel(self)
+        self.preview_label.setAlignment(Qt.AlignCenter)
+        self.preview_label.setMinimumSize(360, 180)
+        self.preview_label.setMaximumHeight(240)
+        self.preview_label.setStyleSheet("background: #111820; border: 1px solid #394552; border-radius: 5px;")
+        self.preview_label.setText("Podgląd na żywo" if str(getattr(parent, "language", "pl")).lower().startswith("pl") else "Live preview")
+        layout.addWidget(self.preview_label)
+        self._preview_timer = QTimer(self)
+        self._preview_timer.setSingleShot(True)
+        self._preview_timer.setInterval(180)
+        self._preview_timer.timeout.connect(self._update_preview)
+        for widget in (self.spin_brightness, self.spin_length, self.spin_intensity, self.spin_angle):
+            widget.valueChanged.connect(self._schedule_preview)
+        for widget in (self.spin_length_scale, self.spin_width):
+            widget.valueChanged.connect(self._schedule_preview)
+        self.spin_rays.currentIndexChanged.connect(self._schedule_preview)
+        self.chk_halo.toggled.connect(self._schedule_preview)
+        self.chk_linear.toggled.connect(self._schedule_preview)
+        buttons = QHBoxLayout()
+        self.btn_apply = QPushButton(translate("star_spikes_apply", "Add diffraction spikes"), self)
+        self.btn_cancel = QPushButton(translate("action_cancel", "Cancel"), self)
+        self.btn_apply.clicked.connect(self.accept)
+        self.btn_cancel.clicked.connect(self.reject)
+        buttons.addStretch(1)
+        buttons.addWidget(self.btn_cancel)
+        buttons.addWidget(self.btn_apply)
+        layout.addLayout(buttons)
+        self._update_preview()
+
+    def _schedule_preview(self, *_args):
+        self._preview_timer.start()
+
+    def _update_preview(self):
+        if self._preview_source is None or not self._preview_source.size:
+            return
+        h, w = self._preview_source.shape[:2]
+        scale = min(1.0, 680.0 / max(h, w))
+        if scale < 1.0:
+            preview_source = cv2.resize(
+                self._preview_source, (max(1, round(w * scale)), max(1, round(h * scale))),
+                interpolation=cv2.INTER_AREA,
+            )
+        else:
+            preview_source = self._preview_source
+        params = self.values()
+        params["base_length"] = max(4.0, params["base_length"] * scale)
+        params["max_stars"] = 100
+        try:
+            preview, _count = add_star_spikes(preview_source, **params)
+            pixmap = np_to_qpixmap(preview)
+            self.preview_label.setPixmap(
+                pixmap.scaled(self.preview_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            )
+        except Exception as exc:
+            self.preview_label.setText(str(exc))
+
+    def values(self):
+        return {
+            "brightness_percent": self.spin_brightness.value(),
+            "base_length": self.spin_length.value(),
+            "length_scaling": self.spin_length_scale.value(),
+            "intensity": self.spin_intensity.value() / 100.0,
+            "width": self.spin_width.value(),
+            "angle_degrees": self.spin_angle.value(),
+            "rays": self.spin_rays.currentData(),
+            "halo": self.chk_halo.isChecked(),
+            "linear_input": self.chk_linear.isChecked(),
+        }
 
 
 class WatermarkDialog(QDialog):
@@ -24596,6 +24739,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             ("action_starnet", "action_starnet", "Run StarNet++"),
             ("action_deepsnr", "action_deepsnr", "Run deepSNR"),
             ("action_3d_fly", "action_3d_fly", "3D FLY Filter"),
+            ("action_star_spikes", "action_star_spikes", "Star Spikes"),
             ("action_add_watermark", "action_add_watermark", "Add watermark"),
             ("action_correction", "action_correction", "Correction"),
             ("action_star_correction", "action_star_correction", "Star Correction"),
@@ -27580,6 +27724,9 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         self.action_3d_fly = QAction("3D FLY Filter", self)
         self.action_3d_fly.triggered.connect(self.run_3d_fly_filter)
 
+        self.action_star_spikes = QAction("Star Spikes", self)
+        self.action_star_spikes.triggered.connect(self.run_star_spikes)
+
         self.action_add_watermark = QAction("Add watermark", self)
         self.action_add_watermark.triggered.connect(self.add_text_watermark)
 
@@ -28062,6 +28209,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             self.action_color_calibration,
             self.action_correction,
             self.action_star_correction,
+            self.action_star_spikes,
             self.action_aberration_inspector,
         ])
         _add_top_menu("filters", "Filters", [
@@ -28492,6 +28640,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             ("easy_stage_sharpen", "7. Sharpen"),
             ("easy_stage_correction", "8. Correction"),
             ("easy_stage_save", "9. Save"),
+            ("easy_stage_effects", "10. Tricks & Effects"),
         ]
         self.easy_current_stage = 0
         self.easy_stage_buttons = []
@@ -28594,6 +28743,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             ("easy_stage_sharpen", "Sharpen", "Bring out fine image details."),
             ("easy_stage_correction", "Correction", "Make final image and star corrections."),
             ("easy_stage_save", "Save", "Save the finished image or a copy."),
+            ("easy_stage_effects", "Tricks & Effects", "Add a signature or diffraction spikes, or create a 3D FLY effect."),
         ]
         key, title, description = stages[index]
         key_by_index = self.easy_stage_names[index][0]
@@ -28663,17 +28813,19 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             self._hide_easy_dialog_button(star_dialog.btn_close)
             self._embed_easy_dialog(star_dialog)
         elif index == 8:
-            self._add_easy_action_button("action_3d_fly", "3D FLY")
-            self._add_easy_action_button("action_add_watermark", "Add watermark")
             self._add_easy_action_button("action_save", "Save image")
             self._add_easy_action_button("action_save_as", "Save as…")
+        elif index == 9:
+            self._add_easy_action_button("action_3d_fly", "3D FLY")
+            self._add_easy_action_button("action_add_watermark", "Add signature", label_key="easy_add_signature")
+            self._add_easy_action_button("action_star_spikes", "Star Spikes")
         self.easy_actions_layout.addStretch(1)
         self.easy_previous_button.setEnabled(index > 0)
         self.easy_next_button.setEnabled(index < len(self.easy_stage_buttons) - 1)
 
-    def _add_easy_action_button(self, action_name, fallback):
+    def _add_easy_action_button(self, action_name, fallback, label_key=None):
         action = getattr(self, action_name)
-        button = QPushButton(self.tr(action_name, fallback), self.easy_actions_widget)
+        button = QPushButton(self.tr(label_key or action_name, fallback), self.easy_actions_widget)
         button.setMinimumHeight(36)
         button.setEnabled(action.isEnabled())
         button.clicked.connect(action.trigger)
@@ -31191,6 +31343,38 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         self.update_menu_actions()
         self.log("Text watermark added.", "success")
 
+    def run_star_spikes(self):
+        if not isinstance(self.magic_img, np.ndarray):
+            self.log("Star Spikes skipped: no image loaded.", "warning")
+            return
+        dialog = StarSpikesDialog(
+            self.tr,
+            self.magic_img,
+            linear_default=bool(getattr(self, "current_fits_header", None)),
+            parent=self,
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        source = self.magic_img.copy()
+        try:
+            result, star_count = add_star_spikes(source, **dialog.values())
+        except Exception as exc:
+            QMessageBox.warning(self, self.tr("action_star_spikes", "Star Spikes"), str(exc))
+            return
+        if star_count <= 0 or np.array_equal(source, result):
+            self.log("Star Spikes found no suitable bright stars.", "warning")
+            return
+        self.undo_stack.append(source)
+        self.redo_stack.clear()
+        self.magic_img = result
+        self.preview_override_img = None
+        self.levels_window.levels_widget.set_image(result)
+        self.viewer.set_before(np_to_qpixmap(result))
+        self.apply_full_processing()
+        self.add_thumbnail("Star Spikes", self.processed_img)
+        self.update_menu_actions()
+        self.log(f"Diffraction spikes added to {star_count} bright stars.", "success")
+
     def run_3d_fly_filter(self):
         if self.magic_img is None:
             self.log("3D FLY skipped: no image loaded.", "warning")
@@ -33212,6 +33396,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             "action_plate_solve",
             "action_starnet",
             "action_3d_fly",
+            "action_star_spikes",
             "action_add_watermark",
             "action_color_calibration",
             "action_star_correction",
