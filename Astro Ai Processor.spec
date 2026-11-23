@@ -44,7 +44,11 @@ a = Analysis(
          'skyshot_runtime/provenance/data-releases/2026.10.17.2'),
         ('3d_fly_help.md', '.'),
     ],
-    hiddenimports=collect_submodules('processing'),
+    hiddenimports=(
+        collect_submodules('processing')
+        + collect_submodules('markdown.extensions')
+        + collect_submodules('pygments.lexers')
+    ),
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

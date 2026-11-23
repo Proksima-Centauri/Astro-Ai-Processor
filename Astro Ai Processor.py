@@ -42,6 +42,7 @@ from processing.openrouter import (
     resolve_backend_url,
 )
 from processing.chat_history import ChatHistoryStore
+from processing.markdown_renderer import CODE_HIGHLIGHT_CSS, render_markdown_html
 from processing.star_spikes import add_star_spikes
 from processing.plate_solver import resolve_skyshot, solve_with_skyshot
 from processing.image_analysis import compute_image_analysis_metrics
@@ -175,17 +176,18 @@ if sys.platform == "win32":
 
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QMainWindow,
-    QVBoxLayout, QHBoxLayout, QPushButton, QFileDialog, QGraphicsView,
+    QVBoxLayout, QHBoxLayout, QBoxLayout, QPushButton, QFileDialog, QGraphicsView,
     QGraphicsScene, QSlider, QLabel, QFrame, QTabWidget, QGridLayout,
     QMenuBar, QMenu, QDialog, QStyle, QSpinBox,
-    QDoubleSpinBox, QTextEdit, QLineEdit, QComboBox, QCompleter, QSplitter, QDialogButtonBox,
+    QDoubleSpinBox, QTextEdit, QTextBrowser, QLineEdit, QComboBox, QCompleter, QSplitter, QDialogButtonBox,
     QScrollArea, QStackedLayout, QTabBar, QListWidget, QListWidgetItem, QStackedWidget, QPlainTextEdit, QSizeGrip,
     QSplashScreen, QStyledItemDelegate, QButtonGroup, QToolButton,
     QMdiArea, QMdiSubWindow,
 )
-from PyQt6.QtGui import QAction, QImage, QPixmap, QPainter, QIcon, QColor, QFont, QFontDatabase, QPolygon, QPolygonF, QPen, QPalette, QRegion, QLinearGradient, QDrag, QCursor, QTransform, QImageReader, QTextDocument, QSyntaxHighlighter, QTextCharFormat
-from PyQt6.QtCore import Qt as _Qt, QPoint, QPointF, QRect, QRectF, QThread, pyqtSignal, QTimer, QSize, QByteArray, QEvent, qInstallMessageHandler, QMimeData
+from PyQt6.QtGui import QAction, QImage, QPixmap, QPainter, QIcon, QColor, QFont, QFontDatabase, QFontMetrics, QPolygon, QPolygonF, QPen, QPalette, QRegion, QLinearGradient, QDrag, QCursor, QTransform, QImageReader, QTextDocument, QSyntaxHighlighter, QTextCharFormat, QDesktopServices
+from PyQt6.QtCore import Qt as _Qt, QPoint, QPointF, QRect, QRectF, QThread, pyqtSignal, QTimer, QSize, QByteArray, QEvent, qInstallMessageHandler, QMimeData, QUrl
 from PyQt6.QtWidgets import QSizePolicy, QCheckBox, QInputDialog, QMessageBox, QGraphicsItem, QProgressBar
+from PyQt6.QtWidgets import QProgressDialog
 from PyQt6.QtGui import QPainterPath, QBrush
 from PyQt6 import sip
 
@@ -307,6 +309,11 @@ I18N = {
     "dashboard_theme": {"pl": "Motyw", "en": "Theme"},
     "dashboard_accent": {"pl": "Kolor", "en": "Accent"},
     "dashboard_language": {"pl": "Język", "en": "Language"},
+    "dashboard_zoom_controls_position": {"pl": "Położenie kontrolek powiększenia", "en": "Zoom controls position"},
+    "dashboard_zoom_position_top": {"pl": "Góra obrazu", "en": "Image top"},
+    "dashboard_zoom_position_bottom": {"pl": "Dół obrazu", "en": "Image bottom"},
+    "dashboard_zoom_position_left": {"pl": "Lewa krawędź obrazu", "en": "Image left edge"},
+    "dashboard_zoom_position_right": {"pl": "Prawa krawędź obrazu", "en": "Image right edge"},
     "white_sur_toggle": {"pl": "Używaj dekoracji okien WhiteSur", "en": "Use WhiteSur window decorations"},
     "white_sur_restart_hint": {"pl": "Zmiana zacznie działać po ponownym uruchomieniu aplikacji.", "en": "Restart the app for this change to take effect."},
     "white_sur_config_label": {"pl": "Dekoracje okien", "en": "Window decorations"},
@@ -375,6 +382,7 @@ I18N = {
     "easy_stage_correction_description": {"pl": "Wprowadź końcowe korekty obrazu i gwiazd.", "en": "Make final image and star corrections."},
     "easy_stage_save_description": {"pl": "Zapisz gotowy obraz lub jego kopię.", "en": "Save the finished image or a copy."},
     "easy_stage_effects_description": {"pl": "Dodaj podpis, kolce dyfrakcyjne lub przygotuj efekt 3D FLY.", "en": "Add a signature or diffraction spikes, or create a 3D FLY effect."},
+    "easy_add_to_gallery": {"pl": "Dodaj do galerii", "en": "Add to Gallery"},
     "easy_add_signature": {"pl": "Dodaj podpis", "en": "Add signature"},
     "action_star_spikes": {"pl": "Star Spikes", "en": "Star Spikes"},
     "star_spikes_length": {"pl": "Długość bazowa (px)", "en": "Base length (px)"},
@@ -385,6 +393,14 @@ I18N = {
     "star_spikes_angle": {"pl": "Kąt", "en": "Angle"},
     "star_spikes_rays": {"pl": "Liczba promieni", "en": "Number of rays"},
     "star_spikes_apply": {"pl": "Dodaj kolce dyfrakcyjne", "en": "Add diffraction spikes"},
+    "star_spikes_progress_title": {"pl": "Dodawanie kolców dyfrakcyjnych", "en": "Adding diffraction spikes"},
+    "star_spikes_progress_prepare": {"pl": "Przygotowuję obraz…", "en": "Preparing image…"},
+    "star_spikes_progress_background": {"pl": "Analizuję tło obrazu…", "en": "Analyzing image background…"},
+    "star_spikes_progress_measure": {"pl": "Wykrywam i mierzę jasne gwiazdy…", "en": "Detecting and measuring bright stars…"},
+    "star_spikes_progress_render": {"pl": "Dodaję kolce dyfrakcyjne ({current}/{total})…", "en": "Adding diffraction spikes ({current}/{total})…"},
+    "star_spikes_progress_done": {"pl": "Kończę…", "en": "Finishing…"},
+    "easy_gallery_added": {"pl": "Dodano obraz do galerii: {name}", "en": "Added image to gallery: {name}"},
+    "easy_gallery_add_failed": {"pl": "Nie udało się dodać obrazu do galerii: {error}", "en": "Could not add image to gallery: {error}"},
     "easy_previous": {"pl": "Wstecz", "en": "Back"},
     "easy_next": {"pl": "Dalej", "en": "Next"},
     "action_add_watermark": {"pl": "Dodaj znak wodny", "en": "Add watermark"},
@@ -1200,7 +1216,10 @@ class DashboardImageCard(QWidget):
 
         filename_label = QLabel(filename, self)
         filename_label.setObjectName("dashboardCardFilename")
-        filename_label.setWordWrap(True)
+        filename_label.setFixedWidth(168)
+        filename_label.setWordWrap(False)
+        filename_label.setText(QFontMetrics(filename_label.font()).elidedText(filename, Qt.ElideMiddle, 168))
+        filename_label.setToolTip(filename)
         filename_label.setAttribute(Qt.WA_TransparentForMouseEvents, True)
         layout.addWidget(filename_label)
 
@@ -8311,6 +8330,63 @@ class PythonCodeHighlighter(QSyntaxHighlighter):
                 self.setFormat(match.start(), match.end() - match.start(), char_format)
 
 
+class MarkdownMessageView(QTextBrowser):
+    """Auto-sized, read-only Markdown view used inside existing chat rows."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._markdown_source = None
+        self.setReadOnly(True)
+        self.setOpenLinks(False)
+        self.setOpenExternalLinks(False)
+        self.setFrameShape(QFrame.NoFrame)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
+        self.setTextInteractionFlags(Qt.TextSelectableByMouse | Qt.LinksAccessibleByMouse)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.document().setDocumentMargin(0)
+        self.document().setDefaultStyleSheet(
+            "body { color: #e8edf5; font-family: sans-serif; font-size: 12px; }"
+            "p { margin-top: 0; margin-bottom: 8px; }"
+            "h1 { font-size: 23px; margin-top: 12px; margin-bottom: 8px; }"
+            "h2 { font-size: 19px; margin-top: 12px; margin-bottom: 7px; }"
+            "h3 { font-size: 16px; margin-top: 10px; margin-bottom: 6px; }"
+            "h4, h5, h6 { font-size: 13px; margin-top: 9px; margin-bottom: 5px; }"
+            "a { color: #8ab4ff; text-decoration: none; }"
+            "blockquote { color: #b8c5d6; margin-left: 8px; padding-left: 10px; "
+            "border-left: 3px solid #53677f; }"
+            "table { border-collapse: collapse; margin-top: 7px; margin-bottom: 9px; }"
+            "th, td { border: 1px solid #46515e; padding: 5px 8px; }"
+            "th { background-color: #27313d; font-weight: bold; }"
+            "hr { color: #46515e; background-color: #46515e; }"
+            "pre { white-space: pre-wrap; background-color: #171d26; border: 1px solid #35404d; "
+            "border-radius: 7px; padding: 9px; }"
+            "code { font-family: monospace; color: #d7e3f4; }"
+            + CODE_HIGHLIGHT_CSS
+        )
+        self.setStyleSheet("QTextBrowser { background: transparent; border: none; color: #e8edf5; }")
+        self.setMinimumHeight(20)
+
+    def set_markdown(self, source: str):
+        text = str(source or "")
+        if text == self._markdown_source:
+            return
+        self._markdown_source = text
+        self.setHtml(render_markdown_html(text))
+        self._resize_to_document()
+
+    def _resize_to_document(self):
+        width = max(80, self.viewport().width())
+        self.document().setTextWidth(width)
+        height = self.document().documentLayout().documentSize().height()
+        self.setFixedHeight(max(20, int(height + 8)))
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._resize_to_document()
+
+
 class AIAssistantPanel(QFrame):
     script_generated = pyqtSignal(str)
 
@@ -8601,6 +8677,10 @@ class AIAssistantPanel(QFrame):
         self.ai_worker = None
         self.streaming_response = ""
         self.streaming_message_label = None
+        self._last_rendered_streaming_response = ""
+        self._stream_render_timer = QTimer(self)
+        self._stream_render_timer.setInterval(90)
+        self._stream_render_timer.timeout.connect(self._render_streaming_response)
         self.chat_history_dir = os.path.join(os.path.expanduser("~"), ".astroaiprocessor", "altair_chats")
         self.chat_history_store = ChatHistoryStore(os.path.join(os.path.expanduser("~"), ".astroaiprocessor", "altair_chats.sqlite3"))
         self.current_chat_id = ""
@@ -8618,6 +8698,30 @@ class AIAssistantPanel(QFrame):
             self.btn_voice.setToolTip("Voice to Text wymaga pakietu SpeechRecognition")
         if sys.platform.startswith("win"):
             self.append_assistant_message("Przepraszamy, Asystent AI jest niedostępny w wersji Windows.")
+
+    def set_app_theme(self, dark: bool):
+        background = "#151a22" if dark else "#f4f6f8"
+        surface = "#1b222c" if dark else "#ffffff"
+        border = "#303a47" if dark else "#d8dee6"
+        foreground = "#f0f3f8" if dark else "#20252b"
+        self.network_error_page.setStyleSheet(
+            f"QWidget#altairNetworkErrorPage {{ background: {background}; color: {foreground}; }}"
+        )
+        self.lbl_network_error.setStyleSheet(
+            f"color: {foreground}; background: {background}; font-size: 18px;"
+        )
+        self.welcome_page.setStyleSheet(
+            f"QWidget#altairWelcomePage {{ background: {background}; color: {foreground}; border: 0; }}"
+        )
+        self.chat_scroll.setStyleSheet(
+            f"QScrollArea {{ background: {background}; color: {foreground}; "
+            f"border: 1px solid {border}; border-radius: 8px; }}"
+        )
+        self.chat_container.setStyleSheet(f"background: {background}; color: {foreground};")
+        self.prompt_box.setStyleSheet(
+            f"QFrame#altairPromptBox {{ background: {surface}; color: {foreground}; "
+            f"border: 1px solid {border}; border-radius: 10px; }}"
+        )
 
     def _refresh_model_label(self):
         self.lbl_local_model.setText("Nemotron 3.5 Lightning (OpenRouter)")
@@ -8732,6 +8836,7 @@ class AIAssistantPanel(QFrame):
             combo.setItemText(index, title)
 
     def _start_new_chat(self):
+        self._stream_render_timer.stop()
         if self.current_chat_id:
             self._save_chat_history()
         self.last_failed_prompt = ""
@@ -8744,6 +8849,7 @@ class AIAssistantPanel(QFrame):
         self.last_generated_python = ""
         self.streaming_response = ""
         self.streaming_message_label = None
+        self._last_rendered_streaming_response = ""
         self.chat_history_combo.blockSignals(True)
         self.chat_history_combo.insertItem(0, "New Altair chat", self.current_chat_id)
         self.chat_history_combo.setCurrentIndex(0)
@@ -8753,9 +8859,11 @@ class AIAssistantPanel(QFrame):
         self._show_welcome_panel()
 
     def _discard_streaming_assistant_message(self):
+        self._stream_render_timer.stop()
         label = self.streaming_message_label
         self.streaming_message_label = None
         self.streaming_response = ""
+        self._last_rendered_streaming_response = ""
         if label is None:
             return
         response_widget = label.parentWidget()
@@ -8774,6 +8882,7 @@ class AIAssistantPanel(QFrame):
         self._load_chat_history(chat_id)
 
     def _load_chat_history(self, chat_id: str):
+        self._stream_render_timer.stop()
         history = None
         try:
             history = self.chat_history_store.load(chat_id)
@@ -8982,10 +9091,8 @@ class AIAssistantPanel(QFrame):
         response_layout.setSpacing(3)
         role_label = QLabel(role, response)
         role_label.setStyleSheet(f"color: {accent['border']}; font-size: 10px; font-weight: 600;")
-        message_label = QLabel(response)
-        message_label.setWordWrap(True)
-        message_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        message_label.setStyleSheet("color: #f0f2f4; background: transparent; border: none;")
+        message_label = MarkdownMessageView(response)
+        message_label.anchorClicked.connect(self._open_assistant_link)
         response_layout.addWidget(role_label)
         response_layout.addWidget(message_label)
         row_layout.addWidget(response, 1)
@@ -8995,14 +9102,24 @@ class AIAssistantPanel(QFrame):
 
     @staticmethod
     def _set_assistant_response_text(message_label, text: str):
-        markdown_document = QTextDocument(message_label)
-        markdown_document.setDefaultStyleSheet(
-            "body { color: #f0f2f4; font-family: sans-serif; font-size: 12px; } "
-            "a { color: #82aaff; }"
-        )
-        markdown_document.setMarkdown(str(text or ""))
-        message_label.setTextFormat(Qt.RichText)
-        message_label.setText(markdown_document.toHtml())
+        message_label.set_markdown(str(text or ""))
+
+    @staticmethod
+    def _open_assistant_link(url: QUrl):
+        if not isinstance(url, QUrl):
+            return
+        if url.scheme().lower() not in {"http", "https"} or not url.host():
+            return
+        QDesktopServices.openUrl(url)
+
+    def _render_streaming_response(self):
+        label = self.streaming_message_label
+        text = self.streaming_response
+        if label is None or text == self._last_rendered_streaming_response:
+            return
+        self._set_assistant_response_text(label, text)
+        self._last_rendered_streaming_response = text
+        self._scroll_chat_to_bottom()
 
     def on_ai_chunk(self, chunk: str):
         if not chunk:
@@ -9012,8 +9129,9 @@ class AIAssistantPanel(QFrame):
             return
         if self.streaming_message_label is None:
             self.streaming_message_label = self._create_assistant_response_label()
-        self._set_assistant_response_text(self.streaming_message_label, self.streaming_response)
-        self._scroll_chat_to_bottom()
+            self._last_rendered_streaming_response = ""
+        if not self._stream_render_timer.isActive():
+            self._stream_render_timer.start()
 
     def _append_message(self, role: str, text: str):
         role_key = (role or AI_ASSISTANT_NAME).strip().lower()
@@ -9478,6 +9596,7 @@ class AIAssistantPanel(QFrame):
         )
 
     def on_ai_finished(self, response: str, error: str, token_meta: dict):
+        self._stream_render_timer.stop()
         self.btn_send.setEnabled(True)
         self.btn_send.setText("")
         self.btn_run_python.setEnabled(True)
@@ -9537,6 +9656,7 @@ class AIAssistantPanel(QFrame):
                 self.script_generated.emit(code)
         self.streaming_response = ""
         self.streaming_message_label = None
+        self._last_rendered_streaming_response = ""
 
     def on_clear(self):
         self._hide_assistant_typing_indicator()
@@ -10692,7 +10812,12 @@ def build_altair_system_prompt() -> str:
         "Jesteś ekspertem od analizy zdjęć astronomicznych. Otrzymujesz tylko metadane i wyniki analizy w formacie JSON. "
         "Nie interpretuj surowych pikseli obrazu ani nie zakładaj dodatkowych danych poza tym, co jest w payload. "
         "Odpowiadaj naturalnie po polsku i dbaj o poprawna odmiane wyrazow. "
-        "Pisz zwiezle, ale pelnymi zdaniami, bez urywania odpowiedzi. "
+        "Pisz zwięźle, ale pełnymi zdaniami, bez urywania odpowiedzi. "
+        "Formatuj odpowiedzi poprawnym Markdown: krótkie odpowiedzi podawaj bez zbędnych sekcji; "
+        "dłuższe porządkuj nagłówkami ## i ###, używaj list zamiast długich wyliczeń w zdaniach, "
+        "wyróżniaj ważne informacje pogrubieniem i podawaj kod w blokach z oznaczeniem języka. "
+        "Używaj tabel tylko wtedy, gdy ułatwiają porównanie, cytatów dla ważnych uwag i separatorów oszczędnie. "
+        "Najważniejszą informację umieszczaj na początku, unikaj powtórzeń, monotonnych bloków i nadmiaru emoji. "
         "Jesli temat jest szeroki, zacznij od konkretnej odpowiedzi i dopiero potem dopisz krotkie doprecyzowanie. "
         "Na powitanie daj krótki komunikat bez podsumowywania payload. "
         "Jeśli użytkownik pyta o filtr 3D FLY, najpierw opieraj odpowiedź o lokalną instrukcję 3d_fly_help.md. "
@@ -14719,6 +14844,7 @@ def get_default_config() -> dict:
         "workspaces": [],
         "home_folder": "",
         "topbar_button_order": [],
+        "zoom_controls_position": "bottom",
         "recent_images": [],
         "mdi_sync_zoom_pan": True,
     }
@@ -14844,6 +14970,8 @@ def load_config() -> dict:
                     for name in config["topbar_button_order"]
                     if str(name).strip()
                 ]
+            if config.get("zoom_controls_position") not in {"top", "bottom", "left", "right"}:
+                config["zoom_controls_position"] = "bottom"
 
             recent_images = config.get("recent_images", [])
             if not isinstance(recent_images, list):
@@ -14981,6 +15109,7 @@ def save_config(denoise_path: str = None, bg_removal_path: str = None,
             for name in (topbar_button_order if isinstance(topbar_button_order, list) else [])
             if str(name).strip()
         ],
+        "zoom_controls_position": APP_PREFERENCES.get("zoom_controls_position", "bottom"),
         "recent_images": list(recent_images)[:8] if isinstance(recent_images, list) else [],
         "mdi_sync_zoom_pan": bool(APP_PREFERENCES.get("mdi_sync_zoom_pan", True)),
     }
@@ -15013,6 +15142,7 @@ APP_PREFERENCES = {
     "workspaces": [],
     "home_folder": "",
     "topbar_button_order": [],
+    "zoom_controls_position": "bottom",
     "recent_images": [],
     "mdi_sync_zoom_pan": True,
     "astro_ai_backend_url": DEFAULT_BACKEND_URL,
@@ -18742,10 +18872,46 @@ class BlendViewer(QWidget):
         super().__init__()
         self.setAcceptDrops(True)
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
 
         self.view = SingleViewer()
         self.view.imageDropped.connect(self.imageDropped)
-        layout.addWidget(self.view)
+        layout.addWidget(self.view, 1)
+        self.zoom_controls_widget = QWidget(self.view)
+        self.zoom_controls_widget.setObjectName("viewerZoomControls")
+        self.zoom_controls_layout = QHBoxLayout(self.zoom_controls_widget)
+        self.zoom_controls_layout.setContentsMargins(0, 0, 0, 0)
+        self.zoom_controls_layout.setSpacing(2)
+        self.zoom_in_button = QToolButton(self.zoom_controls_widget)
+        icon_dir = os.path.join(get_runtime_base_dir(), "assets", "icons", "zoom")
+        self.zoom_in_button.setIcon(QIcon(os.path.join(icon_dir, "plus.png")))
+        self.zoom_in_button.setIconSize(QSize(54, 54))
+        self.zoom_in_button.setToolTip("Powiększ obraz")
+        self.zoom_in_button.setFixedSize(60, 60)
+        self.zoom_in_button.clicked.connect(self.view.zoom_in)
+        self.zoom_out_button = QToolButton(self.zoom_controls_widget)
+        self.zoom_out_button.setIcon(QIcon(os.path.join(icon_dir, "minus.png")))
+        self.zoom_out_button.setIconSize(QSize(54, 54))
+        self.zoom_out_button.setToolTip("Pomniejsz obraz")
+        self.zoom_out_button.setFixedSize(60, 60)
+        self.zoom_out_button.clicked.connect(self.view.zoom_out)
+        self.zoom_fit_button = QToolButton(self.zoom_controls_widget)
+        self.zoom_fit_button.setIcon(QIcon(os.path.join(icon_dir, "fit.png")))
+        self.zoom_fit_button.setIconSize(QSize(54, 54))
+        self.zoom_fit_button.setToolTip("Dopasuj obraz do okna")
+        self.zoom_fit_button.setFixedSize(60, 60)
+        self.zoom_fit_button.clicked.connect(self.view.fit_to_window)
+        self.zoom_controls_widget.setStyleSheet(
+            "QWidget#viewerZoomControls { background: transparent; border: none; }"
+            "QToolButton { background: transparent; border: none; padding: 0; }"
+        )
+        self._zoom_control_buttons = (
+            self.zoom_in_button,
+            self.zoom_out_button,
+            self.zoom_fit_button,
+        )
+        self._zoom_controls_position = "bottom"
+        self.set_zoom_controls_position("bottom")
 
         self.slider = QSlider(Qt.Horizontal)
         self.slider.setRange(0, 100)
@@ -18783,6 +18949,49 @@ class BlendViewer(QWidget):
 
         self.view.installEventFilter(self)
         self.view.viewport().installEventFilter(self)
+
+    def set_zoom_controls_position(self, position: str):
+        selected = str(position or "bottom").lower()
+        if selected not in {"top", "bottom", "left", "right"}:
+            selected = "bottom"
+        self._zoom_controls_position = selected
+        vertical = selected in {"left", "right"}
+        self.zoom_controls_layout.setDirection(
+            QBoxLayout.Direction.TopToBottom
+            if vertical
+            else QBoxLayout.Direction.LeftToRight
+        )
+        for button in self._zoom_control_buttons:
+            self.zoom_controls_layout.removeWidget(button)
+            self.zoom_controls_layout.addWidget(button)
+        self._position_zoom_controls()
+
+    def _position_zoom_controls(self):
+        if not hasattr(self, "zoom_controls_widget") or self.view.width() <= 0 or self.view.height() <= 0:
+            return
+        self.zoom_controls_widget.adjustSize()
+        width = self.zoom_controls_widget.width()
+        height = self.zoom_controls_widget.height()
+        margin = 10
+        image_rect = self.view.viewport().geometry()
+        pixmap_item = getattr(self.view, "_pixmap_item", None)
+        if pixmap_item is not None and not pixmap_item.pixmap().isNull():
+            scene_rect = pixmap_item.mapToScene(pixmap_item.boundingRect()).boundingRect()
+            image_top_left = self.view.mapFromScene(scene_rect.topLeft()) + image_rect.topLeft()
+            image_bottom_right = self.view.mapFromScene(scene_rect.bottomRight()) + image_rect.topLeft()
+            visible_image_rect = QRect(image_top_left, image_bottom_right).normalized().intersected(image_rect)
+            if not visible_image_rect.isEmpty():
+                image_rect = visible_image_rect
+        if self._zoom_controls_position == "top":
+            x, y = image_rect.left() + (image_rect.width() - width) // 2, image_rect.top() + margin
+        elif self._zoom_controls_position == "left":
+            x, y = image_rect.left() + margin, image_rect.top() + (image_rect.height() - height) // 2
+        elif self._zoom_controls_position == "right":
+            x, y = image_rect.right() - width - margin, image_rect.top() + (image_rect.height() - height) // 2
+        else:
+            x, y = image_rect.left() + (image_rect.width() - width) // 2, image_rect.bottom() - height - margin
+        self.zoom_controls_widget.move(max(0, x), max(0, y))
+        self.zoom_controls_widget.raise_()
 
     def set_before(self, pix: QPixmap, *, clear_after: bool = True):
         self.pix_before = pix
@@ -18866,6 +19075,8 @@ class BlendViewer(QWidget):
             self.view.unsetCursor()
 
     def eventFilter(self, obj, event):
+        if obj is self.view and event.type() == QEvent.Resize:
+            self._position_zoom_controls()
         is_view_event = obj in (self.view, self.view.viewport())
         has_pair = self.pix_before is not None and self.pix_after is not None
         if is_view_event and self.compare_enabled and has_pair:
@@ -21942,6 +22153,10 @@ class AstroApp(QMainWindow):
 
         # ---------- config ----------
         config = load_config()
+        self.zoom_controls_position = str(config.get("zoom_controls_position", "bottom"))
+        if self.zoom_controls_position not in {"top", "bottom", "left", "right"}:
+            self.zoom_controls_position = "bottom"
+        APP_PREFERENCES["zoom_controls_position"] = self.zoom_controls_position
         self.white_sur_theme_enabled = False
         APP_PREFERENCES["white_sur_theme_enabled"] = False
         APP_PREFERENCES["white_sur_theme_configured"] = True
@@ -26092,9 +26307,13 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
     def _dashboard_image_pixmap(self, path: str) -> tuple[QPixmap, bool]:
         linear_source = _is_fits_path(path)
         if _is_fits_path(path):
-            image_data, _ = safe_fits_read_with_header(path)
+            image_data, fits_header = safe_fits_read_with_header(path)
             if image_data is None or getattr(image_data, "size", 0) == 0:
                 raise ValueError("The FITS file contains no image data.")
+            if image_data.ndim == 2:
+                bayer_pattern = extract_bayer_pattern_from_fits_header(fits_header)
+                if bayer_pattern:
+                    image_data = debayer_bayer_frame(image_data, bayer_pattern)
         else:
             image_data = safe_imread(path)
             if image_data is not None and getattr(image_data, "size", 0):
@@ -26114,7 +26333,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
                 interpolation=cv2.INTER_AREA,
             )
             pixmap = np_to_qpixmap(
-                stretch_image(image_data, "autostretch"),
+                stretch_image(image_data, "autostretch", linked_channels=False),
                 apply_display_stretch=False,
             )
         else:
@@ -26157,7 +26376,9 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             title = f"{display_name} · {designation}" if display_name != designation else designation
             aliases = " ".join(str(alias) for alias in obj.get("aliases", []))
         else:
-            title = self.tr("dashboard_unknown_object", "Astronomical image")
+            title = filename.replace("_", " ").replace("-", " ").strip()
+            if not title or title in {"*", "*.*"}:
+                title = self.tr("dashboard_unknown_object", "Astronomical image")
             aliases = ""
 
         search_text = " ".join((title, filename, extension, aliases, path))
@@ -26211,12 +26432,17 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         self.dashboard_open_button.clicked.connect(self.load_image)
         sidebar_layout.addWidget(self.dashboard_open_button)
         sidebar_layout.addSpacing(8)
-        self.dashboard_search = QLineEdit(self.dashboard_sidebar)
+        self.dashboard_search_container = QWidget(self.dashboard_sidebar)
+        self.dashboard_search_container.setFixedHeight(38)
+        search_layout = QVBoxLayout(self.dashboard_search_container)
+        search_layout.setContentsMargins(0, 0, 0, 0)
+        self.dashboard_search = QLineEdit(self.dashboard_search_container)
         self.dashboard_search.setObjectName("dashboardSearch")
         self.dashboard_search.setClearButtonEnabled(True)
         self.dashboard_search.setPlaceholderText(self.tr("dashboard_search", "Search objects or files…"))
-        self.dashboard_search.setMinimumHeight(38)
-        sidebar_layout.addWidget(self.dashboard_search)
+        self.dashboard_search.setFixedHeight(38)
+        search_layout.addWidget(self.dashboard_search)
+        sidebar_layout.addWidget(self.dashboard_search_container)
         sidebar_layout.addSpacing(8)
         self.dashboard_tab_buttons = []
         tab_icons = {
@@ -26272,9 +26498,11 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         self.dashboard_subtitle_label.setStyleSheet("font-size: 14px; color: #9aa8b8;")
         content_layout.addWidget(self.dashboard_title_label)
         content_layout.addWidget(self.dashboard_subtitle_label)
+        self._dashboard_has_navigated = False
 
         self.dashboard_stack = QStackedWidget(content)
         self.dashboard_stack.setObjectName("dashboardContent")
+        self.dashboard_stack.setFrameShape(QFrame.NoFrame)
         content_layout.addWidget(self.dashboard_stack, 1)
         self.dashboard_cards_by_tab = {"projects": [], "gallery": []}
 
@@ -26313,15 +26541,17 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         settings_content_layout.setContentsMargins(8, 8, 8, 8)
         settings_content_layout.setHorizontalSpacing(12)
         settings_content_layout.setVerticalSpacing(12)
-        for column in range(3):
-            settings_content_layout.setColumnStretch(column, 1)
+        # Keep settings sections in one full-width column. The previous
+        # three-column grid compressed the cards in narrower windows and made
+        # their headings and controls collide near the upper-left corner.
+        settings_content_layout.setColumnStretch(0, 1)
         section_positions = {
             "Appearance": (0, 0, 1, 1),
-            "Processor": (0, 1, 1, 1),
-            "Joystick": (0, 2, 1, 1),
-            "Models and tools": (1, 0, 1, 3),
-            "Layers": (2, 0, 1, 1),
-            "AI Assistant": (2, 1, 1, 2),
+            "Processor": (1, 0, 1, 1),
+            "Joystick": (2, 0, 1, 1),
+            "Models and tools": (3, 0, 1, 1),
+            "Layers": (4, 0, 1, 1),
+            "AI Assistant": (5, 0, 1, 1),
         }
 
         def add_settings_section(title: str) -> QVBoxLayout:
@@ -26368,6 +26598,20 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         language_index = self.dashboard_language_combo.findData(self.language)
         if language_index >= 0:
             self.dashboard_language_combo.setCurrentIndex(language_index)
+        self.dashboard_zoom_controls_label = QLabel(
+            self.tr("dashboard_zoom_controls_position", "Zoom controls position"), settings_tab
+        )
+        self.dashboard_zoom_controls_combo = QComboBox(settings_tab)
+        for key, fallback, value in (
+            ("dashboard_zoom_position_top", "Top", "top"),
+            ("dashboard_zoom_position_bottom", "Bottom", "bottom"),
+            ("dashboard_zoom_position_left", "Left", "left"),
+            ("dashboard_zoom_position_right", "Right", "right"),
+        ):
+            self.dashboard_zoom_controls_combo.addItem(self.tr(key, fallback), value)
+        zoom_position_index = self.dashboard_zoom_controls_combo.findData(self.zoom_controls_position)
+        if zoom_position_index >= 0:
+            self.dashboard_zoom_controls_combo.setCurrentIndex(zoom_position_index)
         self.dashboard_white_sur_checkbox = QCheckBox(
             self.tr("white_sur_toggle", "Use WhiteSur window decorations"), settings_tab
         )
@@ -26382,6 +26626,11 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         add_setting_row(appearance_layout, self.dashboard_theme_label.text(), self.dashboard_theme_combo)
         add_setting_row(appearance_layout, self.dashboard_accent_label.text(), self.dashboard_accent_combo)
         add_setting_row(appearance_layout, self.dashboard_language_label.text(), self.dashboard_language_combo)
+        add_setting_row(
+            appearance_layout,
+            self.dashboard_zoom_controls_label.text(),
+            self.dashboard_zoom_controls_combo,
+        )
 
         processor_layout = add_settings_section("Processor")
         self.dashboard_cpu_cores = QSpinBox(settings_content)
@@ -26475,9 +26724,15 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         )
         self.dashboard_save_settings_button.clicked.connect(self._apply_dashboard_settings)
         settings_layout.addWidget(self.dashboard_save_settings_button)
+        settings_layout.addSpacing(10)
         self.dashboard_clear_config_button = QPushButton(
             self.tr("dashboard_clear_config", "Clear configuration"),
             settings_tab,
+        )
+        self.dashboard_clear_config_button.setProperty("destructive", True)
+        self.dashboard_clear_config_button.setStyleSheet(
+            "QPushButton { color: #ffb3b3; border: 1px solid #9a4545; background: rgba(130, 35, 35, 0.18); }"
+            "QPushButton:hover { background: rgba(160, 45, 45, 0.35); }"
         )
         self.dashboard_clear_config_button.clicked.connect(self._clear_application_config)
         settings_layout.addWidget(self.dashboard_clear_config_button)
@@ -26488,9 +26743,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
 
         altair_tab = QWidget(self.dashboard_stack)
         altair_tab.setObjectName("dashboardAltairTab")
-        altair_tab.setStyleSheet(
-            "QWidget#dashboardAltairTab { background: #000000; color: #ffffff; }"
-        )
+        self.altair_tab = altair_tab
         altair_layout = QVBoxLayout(altair_tab)
         altair_layout.setContentsMargins(0, 0, 0, 0)
         self.dashboard_altair_chat = AIAssistantPanel(parent=altair_tab, app=self)
@@ -26586,10 +26839,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         self.dashboard_script_errors.setReadOnly(True)
         self.dashboard_script_errors.setMaximumHeight(90)
         self.dashboard_script_errors.setPlaceholderText("Workflow validation errors will appear here.")
-        self.dashboard_script_errors.setStyleSheet(
-            "QPlainTextEdit#dashboardScriptErrors { color: #ff9a9a; border: 1px solid #9a4545; "
-            "border-radius: 6px; background: rgba(130, 35, 35, 0.12); }"
-        )
+        self._set_dashboard_script_validation_message("")
         script_editor_layout.addWidget(self.dashboard_script_errors)
         self.dashboard_script_output = QPlainTextEdit(script_editor_panel)
         self.dashboard_script_output.setReadOnly(True)
@@ -26649,11 +26899,17 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             "star-shrink/c11/c11_shrinked.png",
             "astro-upscale/c11/c11_upscaled.png",
         )
-        return [
+        sample_paths = [
             os.path.join(assets, relative_path)
             for relative_path in relative_paths
             if os.path.isfile(os.path.join(assets, relative_path))
         ]
+        user_gallery_paths = sorted(
+            str(path)
+            for path in Path(self._user_gallery_dir()).glob("*")
+            if path.is_file() and path.suffix.lower() in {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".fits", ".fit", ".fts", ".webp"}
+        )
+        return sample_paths + user_gallery_paths
 
     def _add_dashboard_card(self, layout: QGridLayout, card: DashboardImageCard, index: int):
         columns = 5
@@ -26662,37 +26918,42 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
     def _dashboard_tab_key(self):
         return {0: "projects", 1: "gallery"}.get(self.dashboard_stack.currentIndex())
 
+    def _update_dashboard_section_header(self):
+        if not hasattr(self, "dashboard_title_label"):
+            return
+        if not getattr(self, "_dashboard_has_navigated", False):
+            self.dashboard_title_label.setText(self.tr("dashboard_title", "Welcome to Astro AI Processor"))
+            self.dashboard_subtitle_label.setText(
+                self.tr("dashboard_subtitle", "Open an image or choose one of your recent files.")
+            )
+            self.dashboard_subtitle_label.show()
+            return
+        labels = {
+            0: ("dashboard_projects", "Projects"),
+            1: ("dashboard_gallery", "Gallery"),
+            2: ("dashboard_settings", "Settings"),
+            3: ("dashboard_altair", "Altair"),
+            4: ("dashboard_scripts", "Scripts"),
+        }
+        key, fallback = labels.get(self.dashboard_stack.currentIndex(), ("dashboard_projects", "Projects"))
+        self.dashboard_title_label.setText(self.tr(key, fallback))
+        self.dashboard_subtitle_label.clear()
+        self.dashboard_subtitle_label.hide()
+
     def _set_dashboard_tab(self, index: int):
         self.dashboard_stack.setCurrentIndex(index)
+        self._dashboard_has_navigated = True
+        self._update_dashboard_section_header()
         self.dashboard_search.setVisible(index in (0, 1))
         if index not in (0, 1):
             self.dashboard_search.clear()
-        if index == 3:
-            self.dashboard_page.setStyleSheet(
-                "QWidget#imageDashboard { background: #000000; }"
-                "QLabel { border: none; background: transparent; color: #ffffff; }"
-            )
-            self.dashboard_sidebar.setStyleSheet(
-                "QFrame#dashboardSidebar { background: #000000; border: 1px solid #222222; border-radius: 12px; }"
-            )
-            self.dashboard_content.setStyleSheet("background: #000000; color: #ffffff;")
-        else:
-            self.dashboard_page.setStyleSheet(self._dashboard_default_page_stylesheet)
-            self.dashboard_sidebar.setStyleSheet(self._dashboard_default_sidebar_stylesheet)
-            self.dashboard_content.setStyleSheet(self._dashboard_default_content_stylesheet)
         for button_index, button in enumerate(self.dashboard_tab_buttons):
             button.setChecked(button_index == index)
-            if button_index == 3 and index == 3:
-                button.setStyleSheet(
-                    "QPushButton { text-align: left; padding: 8px 12px; border: none; "
-                    "border-radius: 6px; background: #000000; color: #ffffff; font-weight: 600; }"
-                )
-            else:
-                button.setStyleSheet(
-                    "QPushButton { text-align: left; padding: 8px 12px; border: none; "
-                    "border-radius: 6px; background: transparent; }"
-                    "QPushButton:checked { background: #263648; color: #ffffff; font-weight: 600; }"
-                )
+            button.setStyleSheet(
+                "QPushButton { text-align: left; padding: 8px 12px; border: none; "
+                "border-radius: 6px; background: transparent; }"
+                "QPushButton:checked { background: #263648; color: #ffffff; font-weight: 600; }"
+            )
         self._filter_dashboard_cards()
 
     def _dashboard_scripts_directory(self) -> str:
@@ -26952,9 +27213,26 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         try:
             self._dashboard_script_source()
         except astroap.AstroAPError as exc:
-            self.dashboard_script_errors.setPlainText(str(exc))
+            self._set_dashboard_script_validation_message(str(exc))
         else:
-            self.dashboard_script_errors.clear()
+            self._set_dashboard_script_validation_message("")
+
+    def _set_dashboard_script_validation_message(self, message: str):
+        editor = getattr(self, "dashboard_script_errors", None)
+        if editor is None:
+            return
+        text = str(message or "")
+        editor.setPlainText(text)
+        if text:
+            editor.setStyleSheet(
+                "QPlainTextEdit#dashboardScriptErrors { color: #ffb3b3; border: 1px solid #9a4545; "
+                "border-radius: 6px; background: rgba(130, 35, 35, 0.12); }"
+            )
+        else:
+            editor.setStyleSheet(
+                "QPlainTextEdit#dashboardScriptErrors { color: palette(text); border: 1px solid #46515e; "
+                "border-radius: 6px; background: rgba(120, 140, 160, 0.06); }"
+            )
 
     def _dashboard_script_source(self) -> str:
         lines = ["import astroap"]
@@ -27123,7 +27401,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         self.dashboard_script_path = ""
         self.dashboard_script_title.setText("New AstroAP workflow")
         self.dashboard_script_output.clear()
-        self.dashboard_script_errors.setPlainText("Add at least one action block to build this workflow.")
+        self._set_dashboard_script_validation_message("")
         self.dashboard_script_view_stack.setCurrentIndex(1)
 
     def _load_selected_dashboard_script(self, script_path: str):
@@ -27134,7 +27412,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             with open(script_path, "r", encoding="utf-8") as script_file:
                 source = script_file.read()
         except (OSError, UnicodeError) as exc:
-            self.dashboard_script_errors.setPlainText(f"Could not open script: {exc}")
+            self._set_dashboard_script_validation_message(f"Could not open script: {exc}")
             self.log(f"Could not open Python script {script_path}: {exc}", "error")
             self.dashboard_script_view_stack.setCurrentIndex(1)
             return
@@ -27142,7 +27420,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             calls = astroap.validate_script(source)
         except astroap.AstroAPError as exc:
             self._clear_dashboard_script_blocks()
-            self.dashboard_script_errors.setPlainText(f"Could not load script blocks: {exc}")
+            self._set_dashboard_script_validation_message(f"Could not load script blocks: {exc}")
             self.log(f"Could not parse Python script {script_path}: {exc}", "error")
             self.dashboard_script_view_stack.setCurrentIndex(1)
             return
@@ -27158,7 +27436,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         try:
             source = self._dashboard_script_source()
         except astroap.AstroAPError as exc:
-            self.dashboard_script_errors.setPlainText(str(exc))
+            self._set_dashboard_script_validation_message(str(exc))
             return
         script_path = str(self.dashboard_script_path or "")
         if not script_path:
@@ -27170,7 +27448,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             with open(script_path, "w", encoding="utf-8", newline="\n") as script_file:
                 script_file.write(source)
         except OSError as exc:
-            self.dashboard_script_errors.setPlainText(f"Could not save script: {exc}")
+            self._set_dashboard_script_validation_message(f"Could not save script: {exc}")
             self.log(f"Could not save Python script: {exc}", "error")
             return
         self.dashboard_script_path = script_path
@@ -27185,10 +27463,10 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             astroap.execute_script(source)
         except Exception as exc:
             self.dashboard_script_output.setPlainText(f"Script failed: {exc}")
-            self.dashboard_script_errors.setPlainText(str(exc))
+            self._set_dashboard_script_validation_message(str(exc))
             self.log(f"Python script failed: {exc}", "error")
             return
-        self.dashboard_script_errors.clear()
+        self._set_dashboard_script_validation_message("")
         self.dashboard_script_output.setPlainText("AstroAP script completed successfully.")
         self.log("AstroAP script completed successfully.", "success")
 
@@ -27213,6 +27491,11 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         empty_label.setVisible(visible_count == 0)
 
     def _apply_dashboard_settings(self):
+        self.zoom_controls_position = str(
+            self.dashboard_zoom_controls_combo.currentData() or "bottom"
+        )
+        APP_PREFERENCES["zoom_controls_position"] = self.zoom_controls_position
+        self.viewer.set_zoom_controls_position(self.zoom_controls_position)
         self.apply_preferences(
             theme_name=self.dashboard_theme_combo.currentText(),
             accent_name=self.dashboard_accent_combo.currentText(),
@@ -27244,6 +27527,11 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         defaults = get_default_config()
         APP_PREFERENCES.clear()
         APP_PREFERENCES.update(defaults)
+        self.zoom_controls_position = defaults["zoom_controls_position"]
+        self.viewer.set_zoom_controls_position(self.zoom_controls_position)
+        zoom_index = self.dashboard_zoom_controls_combo.findData(self.zoom_controls_position)
+        if zoom_index >= 0:
+            self.dashboard_zoom_controls_combo.setCurrentIndex(zoom_index)
         APP_PREFERENCES["recent_images"] = []
 
         self.denoise_model_path = defaults["denoise_model_path"]
@@ -27348,10 +27636,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
     def _update_dashboard_language(self):
         if not hasattr(self, "dashboard_stack"):
             return
-        self.dashboard_title_label.setText(self.tr("dashboard_title", "Welcome to Astro AI Processor"))
-        self.dashboard_subtitle_label.setText(
-            self.tr("dashboard_subtitle", "Open an image or choose one of your recent files.")
-        )
+        self._update_dashboard_section_header()
         self.dashboard_open_button.setText(self.tr("dashboard_open_image", "Open image"))
         self.dashboard_search.setPlaceholderText(self.tr("dashboard_search", "Search objects or files…"))
         for button, key, fallback in zip(
@@ -27369,6 +27654,25 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         self.dashboard_theme_label.setText(self.tr("dashboard_theme", "Theme"))
         self.dashboard_accent_label.setText(self.tr("dashboard_accent", "Accent"))
         self.dashboard_language_label.setText(self.tr("dashboard_language", "Language"))
+        self.dashboard_zoom_controls_label.setText(
+            self.tr("dashboard_zoom_controls_position", "Zoom controls position")
+        )
+        self.viewer.zoom_in_button.setToolTip(
+            "Powiększ obraz" if str(self.language).lower().startswith("pl") else "Zoom in"
+        )
+        self.viewer.zoom_out_button.setToolTip(
+            "Pomniejsz obraz" if str(self.language).lower().startswith("pl") else "Zoom out"
+        )
+        self.viewer.zoom_fit_button.setToolTip(
+            "Dopasuj obraz do okna" if str(self.language).lower().startswith("pl") else "Fit image to window"
+        )
+        for index, (key, fallback) in enumerate((
+            ("dashboard_zoom_position_top", "Top"),
+            ("dashboard_zoom_position_bottom", "Bottom"),
+            ("dashboard_zoom_position_left", "Left"),
+            ("dashboard_zoom_position_right", "Right"),
+        )):
+            self.dashboard_zoom_controls_combo.setItemText(index, self.tr(key, fallback))
         self.dashboard_white_sur_checkbox.setText(
             self.tr("white_sur_toggle", "Use WhiteSur window decorations")
         )
@@ -27396,6 +27700,13 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             f"QWidget#imageDashboard {{ background: {'#151a22' if is_dark else '#f4f6f8'}; }}"
             "QLabel { border: none; background: transparent; }"
         )
+        altair_background = "#151a22" if is_dark else "#f4f6f8"
+        altair_foreground = "#f0f3f8" if is_dark else "#20252b"
+        self.altair_tab.setStyleSheet(
+            f"QWidget#dashboardAltairTab {{ background: {altair_background}; color: {altair_foreground}; }}"
+        )
+        if hasattr(self, "dashboard_altair_chat"):
+            self.dashboard_altair_chat.set_app_theme(is_dark)
         self.dashboard_title_label.setStyleSheet(
             f"font-size: 30px; font-weight: 650; color: {foreground};"
         )
@@ -28323,10 +28634,18 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         right_panel.setMaximumWidth(600)
 
         self.viewer = BlendViewer()
+        self.viewer.set_zoom_controls_position(self.zoom_controls_position)
         self.viewer.view.set_image_size_provider(self._viewer_image_size)
         self.viewer.view.zoom_changed_signal.connect(self.update_viewer_overlay)
         self.viewer.view.zoom_changed_signal.connect(lambda _zoom: self._update_viewer_status())
+        self.viewer.view.zoom_changed_signal.connect(
+            lambda _zoom: self.viewer._position_zoom_controls()
+        )
         self.viewer.view.image_changed_signal.connect(self._update_viewer_status)
+        self.viewer.view.image_changed_signal.connect(self.viewer._position_zoom_controls)
+        self.viewer.view.pan_changed_signal.connect(
+            lambda *_coordinates: self.viewer._position_zoom_controls()
+        )
         self.viewer.view.imageHovered.connect(self._update_viewer_status)
         self.viewer.view.imageClicked.connect(self.on_viewer_image_clicked)
         self.viewer.view.roiDragStarted.connect(self._on_roi_drag_started)
@@ -28484,18 +28803,6 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         self.btn_stretch_channels.setToolTip("Channels currently linked; click to unlink")
         self.btn_stretch_channels.toggled.connect(self._on_stretch_channels_link_toggled)
         bottom_layout.addWidget(self.btn_stretch_channels)
-        self.btn_zoom_out_bottom = QPushButton("−")
-        self.btn_zoom_out_bottom.setToolTip("Pomniejsz podglad")
-        self.btn_zoom_out_bottom.clicked.connect(lambda: self.viewer.view.zoom_out())
-        bottom_layout.addWidget(self.btn_zoom_out_bottom)
-        self.btn_zoom_in_bottom = QPushButton("+")
-        self.btn_zoom_in_bottom.setToolTip("Powiększ podgląd")
-        self.btn_zoom_in_bottom.clicked.connect(lambda: self.viewer.view.zoom_in())
-        bottom_layout.addWidget(self.btn_zoom_in_bottom)
-        self.btn_zoom_fit_bottom = QPushButton("Dopasuj do okna")
-        self.btn_zoom_fit_bottom.setToolTip("Dopasuj obraz do rozmiaru okna")
-        self.btn_zoom_fit_bottom.clicked.connect(lambda: self.viewer.view.fit_to_window())
-        bottom_layout.addWidget(self.btn_zoom_fit_bottom)
         self.btn_grid_overlay_bottom = QCheckBox("Siatka")
         self.btn_grid_overlay_bottom.setEnabled(False)
         self.btn_grid_overlay_bottom.setChecked(True)
@@ -28815,6 +29122,9 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         elif index == 8:
             self._add_easy_action_button("action_save", "Save image")
             self._add_easy_action_button("action_save_as", "Save as…")
+            self._add_easy_callback_button(
+                "easy_add_to_gallery", "Add to Gallery", self._add_current_image_to_gallery
+            )
         elif index == 9:
             self._add_easy_action_button("action_3d_fly", "3D FLY")
             self._add_easy_action_button("action_add_watermark", "Add signature", label_key="easy_add_signature")
@@ -28832,9 +29142,56 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         self.easy_actions_layout.addWidget(button)
         self.easy_action_buttons.append((button, action))
 
+    def _add_easy_callback_button(self, key, fallback, callback):
+        button = QPushButton(self.tr(key, fallback), self.easy_actions_widget)
+        button.setMinimumHeight(36)
+        button.setEnabled(isinstance(self.processed_img, np.ndarray))
+        button.clicked.connect(callback)
+        self.easy_actions_layout.addWidget(button)
+        self.easy_action_buttons.append((button, None))
+
+    @staticmethod
+    def _user_gallery_dir():
+        return os.path.join(os.path.expanduser("~"), ".astroaiprocessor", "gallery")
+
+    def _add_current_image_to_gallery(self):
+        if not isinstance(self.processed_img, np.ndarray):
+            self.log("Gallery add skipped: no processed image.", "warning")
+            return
+        try:
+            if getattr(self, "_full_processing_dirty", False):
+                self.apply_full_processing()
+            gallery_dir = self._user_gallery_dir()
+            os.makedirs(gallery_dir, exist_ok=True)
+            source_name = os.path.splitext(os.path.basename(self.current_save_path or ""))[0]
+            safe_name = re.sub(r"[^A-Za-z0-9._-]+", "_", source_name).strip("._-")
+            if not safe_name:
+                safe_name = "astro_image"
+            destination = os.path.join(
+                gallery_dir, f"{safe_name}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.tif"
+            )
+            if not safe_imwrite(destination, self.processed_img):
+                raise RuntimeError("Image could not be written")
+            if hasattr(self, "dashboard_page") and hasattr(self, "gallery_grid"):
+                card = self._dashboard_image_card(destination)
+                self.dashboard_cards_by_tab["gallery"].insert(0, card)
+                for index, existing in enumerate(self.dashboard_cards_by_tab["gallery"]):
+                    self._add_dashboard_card(self.gallery_grid, existing, index)
+                self.dashboard_gallery_empty_label.setVisible(False)
+                if hasattr(self, "dashboard_search"):
+                    self._filter_dashboard_cards(self.dashboard_search.text())
+            self.log(self.tr("easy_gallery_added", "Added image to gallery: {name}").format(name=os.path.basename(destination)), "success")
+        except Exception as exc:
+            self.log(self.tr("easy_gallery_add_failed", "Could not add image to gallery: {error}").format(error=exc), "error")
+
     def _refresh_easy_action_availability(self):
         for button, action in getattr(self, "easy_action_buttons", []):
-            if sip.isdeleted(button) or sip.isdeleted(action):
+            if sip.isdeleted(button):
+                continue
+            if action is None:
+                button.setEnabled(isinstance(self.processed_img, np.ndarray))
+                continue
+            if sip.isdeleted(action):
                 continue
             button.setEnabled(action.isEnabled())
         panel = getattr(self, "easy_sharpen_panel", None)
@@ -29368,6 +29725,13 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             active_subwindow.setWindowTitle(image_title)
         if not hasattr(self, "status_coordinates_label"):
             return
+        has_image = isinstance(getattr(self, "magic_img", None), np.ndarray) or isinstance(
+            getattr(self, "original_img", None), np.ndarray
+        )
+        self.status_coordinates_label.setVisible(has_image)
+        self.status_pixel_label.setVisible(has_image)
+        if not has_image:
+            coordinates = None
         english = str(getattr(self, "language", "pl")).lower().startswith("en")
         if coordinates is None:
             self.status_coordinates_label.setText("X: —  Y: —")
@@ -29404,6 +29768,17 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         self.status_stretch_label.setText(
             f"{'Stretch' if english else 'Tryb stretch'}: {mode}"
         )
+        for label, max_width in (
+            (self.status_coordinates_label, 105),
+            (self.status_pixel_label, 170),
+            (self.status_zoom_label, 105),
+            (self.status_size_label, 90),
+            (self.status_stretch_label, 125),
+        ):
+            full_text = label.text()
+            label.setToolTip(full_text)
+            label.setMaximumWidth(max_width)
+            label.setText(QFontMetrics(label.font()).elidedText(full_text, Qt.ElideRight, max_width))
 
     def _set_status_operation(self, message):
         if hasattr(self, "status_operation_label"):
@@ -31356,11 +31731,57 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         source = self.magic_img.copy()
+        progress = QProgressDialog(
+            self.tr("star_spikes_progress_prepare", "Preparing image…"),
+            self.tr("action_cancel", "Cancel"),
+            0,
+            100,
+            self,
+        )
+        progress.setWindowTitle(self.tr("star_spikes_progress_title", "Adding diffraction spikes"))
+        progress.setWindowModality(Qt.WindowModal)
+        progress.setMinimumDuration(0)
+        progress.setAutoClose(False)
+        progress.setAutoReset(False)
+        progress.setMinimumWidth(380)
+        progress.setValue(0)
+        progress.show()
+        QApplication.processEvents()
+
+        progress_labels = {
+            "prepare": ("star_spikes_progress_prepare", "Preparing image…"),
+            "background": ("star_spikes_progress_background", "Analyzing image background…"),
+            "measure": ("star_spikes_progress_measure", "Detecting and measuring bright stars…"),
+            "done": ("star_spikes_progress_done", "Finishing…"),
+        }
+
+        def update_progress(percent, stage, current=0, total=0):
+            if stage == "render":
+                label = self.tr(
+                    "star_spikes_progress_render",
+                    "Adding diffraction spikes ({current}/{total})…",
+                ).format(current=current, total=total)
+            else:
+                key, fallback = progress_labels.get(stage, progress_labels["prepare"])
+                label = self.tr(key, fallback)
+            progress.setLabelText(label)
+            progress.setValue(int(np.clip(percent, 0, 100)))
+            QApplication.processEvents()
+            return not progress.wasCanceled()
+
         try:
-            result, star_count = add_star_spikes(source, **dialog.values())
+            result, star_count = add_star_spikes(
+                source, **dialog.values(), progress_callback=update_progress
+            )
+        except InterruptedError:
+            progress.close()
+            self.log("Star Spikes canceled.", "warning")
+            return
         except Exception as exc:
+            progress.close()
             QMessageBox.warning(self, self.tr("action_star_spikes", "Star Spikes"), str(exc))
             return
+        progress.close()
         if star_count <= 0 or np.array_equal(source, result):
             self.log("Star Spikes found no suitable bright stars.", "warning")
             return

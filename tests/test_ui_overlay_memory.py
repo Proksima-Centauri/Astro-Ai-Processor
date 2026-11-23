@@ -20,13 +20,7 @@ sys.modules[spec.name] = module
 spec.loader.exec_module(module)
 app = module.QApplication([])
 os.environ["GTK_THEME"] = "WhiteSur-Dark"
-assert module.is_white_sur_desktop_theme_active()
-white_sur_dialog = module.QDialog()
-module.apply_dialog_window_flags(white_sur_dialog)
-white_sur_flags = white_sur_dialog.windowFlags()
-assert white_sur_flags & module.Qt.WindowMinimizeButtonHint
-assert white_sur_flags & module.Qt.WindowMaximizeButtonHint
-white_sur_dialog.close()
+assert not module.is_white_sur_desktop_theme_active()
 
 class CanvasFactory:
     _overlay_render_size = staticmethod(module.AstroApp._overlay_render_size)
@@ -75,7 +69,8 @@ assert window.dashboard_page.layout().count() == 2
 assert window.dashboard_sidebar.isVisible()
 assert window.dashboard_sidebar.width() == 220
 assert window.dashboard_sidebar.height() > 0
-assert window.dashboard_search.parentWidget() is window.dashboard_sidebar
+assert window.dashboard_search.parentWidget() is window.dashboard_search_container
+assert window.dashboard_search_container.parentWidget() is window.dashboard_sidebar
 assert window.dashboard_title_label.parentWidget().objectName() != "dashboardSidebar"
 assert len(window.dashboard_tab_buttons) == 5
 assert window.dashboard_stack.count() == 5
@@ -96,14 +91,19 @@ assert window.dashboard_layers_info.isVisible()
 assert window.dashboard_settings_scroll.height() > 600
 window.dashboard_cpu_cores.setValue(1)
 window.dashboard_onnx_provider.setCurrentText("CPU only")
+window.dashboard_zoom_controls_combo.setCurrentIndex(
+    window.dashboard_zoom_controls_combo.findData("right")
+)
 window.dashboard_save_settings_button.click()
 assert window.processor_cores == 1
 assert window.onnx_provider == "CPU only"
+assert window.viewer._zoom_controls_position == "right"
 assert not hasattr(window, "openrouter_api_key")
 with open(module.get_config_path(), encoding="utf-8") as config_file:
     saved_settings = json.load(config_file)
 assert saved_settings["processor_cores"] == 1
 assert saved_settings["onnx_provider"] == "CPU only"
+assert saved_settings["zoom_controls_position"] == "right"
 assert saved_settings["astro_ai_backend_url"] == module.DEFAULT_BACKEND_URL
 assert "openrouter_api_key" not in saved_settings
 window._set_dashboard_tab(1)
@@ -118,10 +118,9 @@ assert sum(not card.isHidden() for card in window.dashboard_cards_by_tab["galler
 window.dashboard_search.clear()
 window._set_dashboard_tab(3)
 assert window.dashboard_stack.currentWidget().findChild(module.AIAssistantPanel) is window.dashboard_altair_chat
-assert window.dashboard_page.styleSheet().find("background: #000000") >= 0
-assert window.dashboard_sidebar.styleSheet().find("background: #000000") >= 0
-assert window.dashboard_content.styleSheet().find("background: #000000") >= 0
-assert window.dashboard_tab_buttons[3].styleSheet().find("background: #000000") >= 0
+assert window.dashboard_page.styleSheet().find("background: #151a22") >= 0
+assert window.dashboard_sidebar.styleSheet().find("background: #1b222c") >= 0
+assert window.dashboard_altair_chat.welcome_page.styleSheet().find("background: #151a22") >= 0
 assert window.dashboard_altair_chat.btn_analyze.isHidden()
 script_request = "Wygeneruj skrypt, który otworzy obraz M27 i wykona Astro Upscale x2"
 assert window.dashboard_altair_chat._is_script_generation_request(script_request)
@@ -134,10 +133,11 @@ class SignalStub:
     def connect(self, _callback):
         pass
 class WorkerStub:
-    def __init__(self, message, payload, api_key=""):
+    def __init__(self, message, payload, api_key="", **kwargs):
         self.message = message
         self.payload = payload
         self.api_key = api_key
+        self.kwargs = kwargs
         self.finished_signal = SignalStub()
         self.chunk_signal = SignalStub()
     def start(self):
@@ -204,21 +204,23 @@ window.dashboard_altair_chat.append_assistant_message("**Gotowe**\n\n- Wczytaj M
 assistant_row = window.dashboard_altair_chat.chat_layout.itemAt(
     window.dashboard_altair_chat.chat_layout.count() - 2
 ).widget()
-assistant_text = next(
-    label for label in assistant_row.findChildren(module.QLabel)
-    if "<span" in label.text()
-)
+assistant_text = assistant_row.findChild(module.MarkdownMessageView)
 assert assistant_text is not None
-assert assistant_text.textFormat() == module.Qt.RichText
-assert "<span" in assistant_text.text() and "font-weight:600" in assistant_text.text()
+assert assistant_text._markdown_source == "**Gotowe**\n\n- Wczytaj M27\n- Zwiększ skalę 2×"
+assert "Gotowe" in assistant_text.toPlainText()
+assert "Wczytaj M27" in assistant_text.toPlainText()
 assert not isinstance(assistant_text.parentWidget(), module.QFrame)
 window.dashboard_altair_chat.streaming_response = ""
 window.dashboard_altair_chat.streaming_message_label = None
+window.dashboard_altair_chat._last_rendered_streaming_response = ""
 window.dashboard_altair_chat.on_ai_chunk("Altair ")
 streaming_label = window.dashboard_altair_chat.streaming_message_label
 window.dashboard_altair_chat.on_ai_chunk("**odpowiada**")
 assert window.dashboard_altair_chat.streaming_message_label is streaming_label
-assert "font-weight:600" in streaming_label.text()
+window.dashboard_altair_chat._stream_render_timer.stop()
+window.dashboard_altair_chat._render_streaming_response()
+assert streaming_label._markdown_source == "Altair **odpowiada**"
+assert "odpowiada" in streaming_label.toPlainText()
 execution_calls = []
 original_execute_script = module.astroap.execute_script
 module.astroap.execute_script = lambda source: execution_calls.append(source)

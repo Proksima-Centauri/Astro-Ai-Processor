@@ -65,3 +65,33 @@ def test_spikes_leave_pixels_outside_their_local_extent_unchanged():
     assert xx.min() >= 45 - radius and xx.max() <= 45 + radius
     assert yy.min() >= 55 - radius and yy.max() <= 55 + radius
     assert result[10, 10] == image[10, 10]
+
+
+def test_progress_callback_reports_rendering_and_completion():
+    events = []
+    _result, count = add_star_spikes(
+        _star_field(),
+        brightness_percent=10,
+        base_length=20,
+        halo=False,
+        progress_callback=lambda percent, stage, current, total: events.append(
+            (percent, stage, current, total)
+        ) or True,
+    )
+
+    assert count > 0
+    assert any(stage == "render" for _, stage, _, _ in events)
+    assert events[-1][0] == 100 and events[-1][1] == "done"
+    assert [percent for percent, *_ in events] == sorted(percent for percent, *_ in events)
+
+
+def test_progress_callback_can_cancel_without_returning_partial_image():
+    def cancel_at_render(_percent, stage, _current, _total):
+        return stage != "render"
+
+    try:
+        add_star_spikes(_star_field(), progress_callback=cancel_at_render)
+    except InterruptedError:
+        pass
+    else:
+        raise AssertionError("The renderer should stop when its progress callback cancels")

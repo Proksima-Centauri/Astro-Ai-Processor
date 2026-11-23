@@ -30,6 +30,7 @@ def detect_bright_stars(
     max_stars: int = 500,
     aperture_radius: int = 5,
     linear_input: bool = True,
+    progress_callback=None,
 ) -> list[dict[str, float]]:
     """Return the brightest point sources ranked by background-subtracted flux.
 
@@ -42,6 +43,8 @@ def detect_bright_stars(
         raise ValueError("Expected a non-empty grayscale or color image")
     if source.ndim == 3 and source.shape[2] not in (3, 4):
         raise ValueError("Expected an image with 3 or 4 channels")
+    if progress_callback is not None and progress_callback(2, "prepare", 0, 1) is False:
+        raise InterruptedError("Star Spikes canceled")
     unit, _ = _to_unit(source)
     if not linear_input:
         unit = np.where(unit <= 0.04045, unit / 12.92, ((unit + 0.055) / 1.055) ** 2.4).astype(np.float32)
@@ -51,6 +54,8 @@ def detect_bright_stars(
         return []
 
     sigma = float(np.clip(min(h, w) / 1200.0, 2.0, 6.0))
+    if progress_callback is not None and progress_callback(8, "background", 0, 1) is False:
+        raise InterruptedError("Star Spikes canceled")
     background = cv2.GaussianBlur(gray, (0, 0), sigma)
     residual = np.maximum(gray - background, 0.0)
     positive = residual[residual > 0]
@@ -70,6 +75,8 @@ def detect_bright_stars(
     count, labels, stats, centroids = cv2.connectedComponentsWithStats(
         peak_mask.astype(np.uint8), connectivity=8
     )
+    if progress_callback is not None and progress_callback(18, "measure", 0, max(1, count - 1)) is False:
+        raise InterruptedError("Star Spikes canceled")
     if count <= 1:
         return []
 
@@ -77,6 +84,7 @@ def detect_bright_stars(
     yy, xx = np.ogrid[-radius:radius + 1, -radius:radius + 1]
     aperture = xx * xx + yy * yy <= radius * radius
     candidates: list[dict[str, float]] = []
+    update_stride = max(1, (count - 1) // 20)
     for label in range(1, count):
         x, y = centroids[label]
         if stats[label, cv2.CC_STAT_AREA] <= 0:
@@ -94,6 +102,10 @@ def detect_bright_stars(
         peak = float(peak_region[peak_labels == label].max())
         if flux > 0:
             candidates.append({"x": float(x), "y": float(y), "flux": flux, "peak": peak})
+        if progress_callback is not None and label % update_stride == 0:
+            percentage = 18 + int(22 * label / max(1, count - 1))
+            if progress_callback(percentage, "measure", label, count - 1) is False:
+                raise InterruptedError("Star Spikes canceled")
     if not candidates:
         return []
 
@@ -128,7 +140,10 @@ def detect_bright_stars(
             duplicate["peak"] = max(duplicate["peak"], candidate["peak"])
             cells[cell].append(duplicate)
     selected_count = max(1, int(np.ceil(len(unique) * np.clip(brightness_percent, 0.1, 100.0) / 100.0)))
-    return unique[:min(selected_count, max(1, int(max_stars)))]
+    selected = unique[:min(selected_count, max(1, int(max_stars)))]
+    if progress_callback is not None and progress_callback(48, "render", 0, len(selected)) is False:
+        raise InterruptedError("Star Spikes canceled")
+    return selected
 
 
 def scale_spike_length(
@@ -176,6 +191,7 @@ def add_star_spikes(
     halo: bool = True,
     max_stars: int = 500,
     linear_input: bool = True,
+    progress_callback=None,
 ) -> tuple[np.ndarray, int]:
     """Add tapered, colored, antialiased spikes locally around selected stars.
 
@@ -192,7 +208,7 @@ def add_star_spikes(
         unit = np.where(unit <= 0.04045, unit / 12.92, ((unit + 0.055) / 1.055) ** 2.4).astype(np.float32)
     stars = detect_bright_stars(
         source, brightness_percent=brightness_percent, max_stars=max_stars,
-        linear_input=linear_input,
+        linear_input=linear_input, progress_callback=progress_callback,
     )
     if not stars or float(intensity) <= 0:
         return source.copy(), 0
@@ -210,7 +226,8 @@ def add_star_spikes(
     overlay = np.zeros((h, w, 3), dtype=np.float32) if unit.ndim == 3 else np.zeros((h, w), dtype=np.float32)
     count_added = 0
 
-    for star in stars:
+    update_stride = max(1, len(stars) // 40)
+    for star_index, star in enumerate(stars, start=1):
         x, y = star["x"], star["y"]
         length = scale_spike_length(
             star["flux"], ref_flux, base_length, length_scaling,
@@ -264,6 +281,10 @@ def add_star_spikes(
             else:
                 overlay[y0:y1, x0:x1] += halo_gain
         count_added += 1
+        if progress_callback is not None and star_index % update_stride == 0:
+            percentage = 48 + int(50 * star_index / len(stars))
+            if progress_callback(percentage, "render", star_index, len(stars)) is False:
+                raise InterruptedError("Star Spikes canceled")
 
     if count_added == 0:
         return source.copy(), 0
@@ -296,4 +317,6 @@ def add_star_spikes(
         else:
             blended_values = blended_values.astype(source.dtype, copy=False)
         result[changed, :3] = blended_values[:, :3]
+    if progress_callback is not None:
+        progress_callback(100, "done", count_added, count_added)
     return result, count_added
