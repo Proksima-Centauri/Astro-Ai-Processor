@@ -1,0 +1,18 @@
+name = "astro-ai-api"
+main = "src/index.js"
+compatibility_date = "2026-11-19"
+workers_dev = true
+
+[vars]
+OPENROUTER_MODEL = "nvidia/nemotron-3.5-lightning:free"
+APP_URL = "https://github.com/Proksima-Centauri/Astro-Ai-Processor"
+ALLOWED_ORIGINS = ""
+
+# Per-IP abuse control. Choose a unique integer namespace ID for your account.
+[[ratelimits]]
+name = "RATE_LIMITER"
+namespace_id = "1001"
+
+[ratelimits.simple]
+limit = 20
+period = 60

@@ -128,8 +128,9 @@ try:
     assert not window.ai_assistant_panel.input_text.isReadOnly()
     window.show_preferences_dialog()
     app.processEvents()
-    assert window.preferences_dialog.lbl_altair_model.text() == "NVIDIA Nemotron 3 Super (OpenRouter)"
-    assert window.preferences_dialog.edit_openrouter_api_key.echoMode() == module.QLineEdit.Password
+    assert window.preferences_dialog.lbl_altair_model.text() == "NVIDIA Nemotron 3.5 Lightning (OpenRouter)"
+    assert window.astro_ai_backend_url == module.DEFAULT_BACKEND_URL
+    assert not hasattr(window.preferences_dialog, "edit_openrouter_api_key")
     window.preferences_dialog.close()
     app.processEvents()
     with tempfile.TemporaryDirectory() as directory:

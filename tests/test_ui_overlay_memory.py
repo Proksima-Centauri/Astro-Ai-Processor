@@ -86,7 +86,7 @@ window._set_dashboard_tab(2)
 assert window.dashboard_settings_scroll.isVisible()
 assert window.dashboard_cpu_cores.value() == window.processor_cores
 assert window.dashboard_onnx_provider.currentText() == window.onnx_provider
-assert window.dashboard_api_key.echoMode() == module.QLineEdit.Password
+assert not hasattr(window, "dashboard_api_key")
 assert window.dashboard_select_models_button.isVisible()
 assert window.dashboard_select_starnet_button.isVisible()
 assert window.dashboard_select_deepsnr_button.isVisible()
@@ -96,16 +96,16 @@ assert window.dashboard_layers_info.isVisible()
 assert window.dashboard_settings_scroll.height() > 600
 window.dashboard_cpu_cores.setValue(1)
 window.dashboard_onnx_provider.setCurrentText("CPU only")
-window.dashboard_api_key.setText("test-openrouter-key")
 window.dashboard_save_settings_button.click()
 assert window.processor_cores == 1
 assert window.onnx_provider == "CPU only"
-assert window.openrouter_api_key == "test-openrouter-key"
+assert not hasattr(window, "openrouter_api_key")
 with open(module.get_config_path(), encoding="utf-8") as config_file:
     saved_settings = json.load(config_file)
 assert saved_settings["processor_cores"] == 1
 assert saved_settings["onnx_provider"] == "CPU only"
-assert saved_settings["openrouter_api_key"] == "test-openrouter-key"
+assert saved_settings["astro_ai_backend_url"] == module.DEFAULT_BACKEND_URL
+assert "openrouter_api_key" not in saved_settings
 window._set_dashboard_tab(1)
 first_gallery_card = window.dashboard_cards_by_tab["gallery"][0]
 assert first_gallery_card.parentWidget() is window.gallery_page

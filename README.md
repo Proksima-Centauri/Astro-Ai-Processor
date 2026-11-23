@@ -11,6 +11,12 @@ Astro AI Processor processes and analyzes astrophotography images with FITS supp
 
 This repository keeps its documentation in this README.
 
+## Altair cloud service
+
+Altair uses the Cloudflare Worker in [`worker/README.md`](worker/README.md). It sends recent conversation turns and the active image context needed for the request to the configured Worker, which streams the fixed free OpenRouter model response. Chat history remains local in SQLite under `~/.astroaiprocessor/altair_chats.sqlite3`; existing JSON history files are imported and kept for compatibility. The desktop does not need or store an OpenRouter API key.
+
+All installations use the production Worker URL by default. Developers can override it with `ASTRO_AI_BACKEND_URL` or the local `astro_ai_backend_url` application setting. Users do not need to configure the service URL or an OpenRouter key. See the Worker guide for local development, requests, availability limits, and anonymous-client security limitations. A distributed desktop client cannot authenticate itself with an embedded shared secret.
+
 ## What is Astro AI Processor?
 
 Astro AI Processor is a desktop application for processing and analyzing astrophotography images. It combines traditional image-processing tools with astronomy-specific analysis and AI-powered processing features.
@@ -30,7 +36,7 @@ Astro AI Processor combines classic editing tools (Levels, Curves, Histogram, Bl
   - deepSNR external denoise,
   - frame mosaic stitching,
   - 3D FLY clip rendering (optional audio).
-- Altair AI assistant using NVIDIA Nemotron 3 Super through OpenRouter.
+- Altair AI assistant using NVIDIA Nemotron 3.5 Lightning through OpenRouter.
 - PL/EN UI with configurable preferences and workspaces.
 
 ## Requirements
@@ -115,14 +121,14 @@ Result file is generated as `dist/astro-ai-processor_<version>_amd64.deb`.
 
 ## Configuration
 
-Settings are stored in the user's application config directory. The OpenRouter key can also be read from `OPENROUTER_API_KEY`.
+Settings are stored in the user's application config directory. The desktop does not read or store an OpenRouter key. The public Worker URL defaults to the production Astro AI service; developers can override it with `ASTRO_AI_BACKEND_URL`.
 
 Example fields:
 
 - tool paths (`starnet_path`, `deepsnr_path`),
 - deepSNR args (`deepsnr_args`),
 - plate solving (`skyshot_binary`, `skyshot_index`),
-- AI setting (`openrouter_api_key`),
+- AI reasoning effort (`altair_reasoning_effort`),
 - language, theme, core count, workspace.
 
 Security note: keep private paths and local workspace data out of public repositories.

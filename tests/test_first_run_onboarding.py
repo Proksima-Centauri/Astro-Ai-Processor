@@ -81,7 +81,6 @@ window.denoise_model_path = "/tmp/custom-denoise.onnx"
 window.apply_preferences(
     theme_name="Midnight",
     language="pl",
-    openrouter_api_key="test-key",
 )
 with patch.object(
     module.QMessageBox,
@@ -90,7 +89,7 @@ with patch.object(
 ):
     window._clear_application_config()
 assert window.theme_name == "Midnight"
-assert window.openrouter_api_key == "test-key"
+assert not hasattr(window, "openrouter_api_key")
 
 with patch.object(
     module.QMessageBox,
@@ -101,7 +100,7 @@ with patch.object(
 assert window.theme_name == "Fusion Dark"
 assert window.language == "pl"
 assert window.denoise_model_path is None
-assert window.openrouter_api_key == ""
+assert not hasattr(window, "openrouter_api_key")
 assert window.onboarding_completed is False
 with open(config_path, encoding="utf-8") as config_file:
     reset_config = json.load(config_file)
@@ -109,7 +108,8 @@ assert reset_config["theme_name"] == "Fusion Dark"
 assert reset_config["accent_name"] == "Ultra Blue"
 assert reset_config["language"] == "pl"
 assert reset_config["denoise_model_path"] is None
-assert reset_config["openrouter_api_key"] == ""
+assert "openrouter_api_key" not in reset_config
+assert reset_config["astro_ai_backend_url"] == module.DEFAULT_BACKEND_URL
 assert reset_config["recent_images"] == []
 assert reset_config["onboarding_completed"] is False
 restarted_window = module.AstroApp()

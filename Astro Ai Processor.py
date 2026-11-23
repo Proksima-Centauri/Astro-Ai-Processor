@@ -11,6 +11,7 @@ import subprocess
 import tempfile
 import time
 import threading
+import queue
 import uuid
 import re
 import shlex
@@ -34,10 +35,13 @@ from processing.preview import PreviewCache, parameter_key
 from processing.export import normalized_to_uint16
 from processing.pipeline import process_image
 from processing.openrouter import (
+    DEFAULT_BACKEND_URL,
     OPENROUTER_DEFAULT_MODEL,
     OpenRouterConnectionError,
     create_chat_completion,
+    resolve_backend_url,
 )
+from processing.chat_history import ChatHistoryStore
 from processing.plate_solver import resolve_skyshot, solve_with_skyshot
 from processing.image_analysis import compute_image_analysis_metrics
 from processing.image_effects import _normalize_mask01, local_contrast_enhancement, neutralize_background
@@ -61,6 +65,8 @@ except ImportError:
     PIL_AVAILABLE = False
 
 AI_ASSISTANT_NAME = "Altair"
+ALTAIR_REASONING_EFFORTS = ("low", "medium", "high")
+ALTAIR_DEFAULT_REASONING_EFFORT = "medium"
 ALTAIR_3D_FLY_GUIDE_FILE = "3d_fly_help.md"
 DEFAULT_DEEPSNR_ARGS = "-i \"{input}\" -o \"{output}\" -q -m 2"
 DEFAULT_DEEPSNR_STRENGTH = 2
@@ -173,13 +179,14 @@ from PyQt6.QtWidgets import (
     QMenuBar, QMenu, QDialog, QStyle, QSpinBox,
     QDoubleSpinBox, QTextEdit, QLineEdit, QComboBox, QCompleter, QSplitter, QDialogButtonBox,
     QScrollArea, QStackedLayout, QTabBar, QListWidget, QListWidgetItem, QStackedWidget, QPlainTextEdit, QSizeGrip,
-    QSplashScreen, QStyledItemDelegate, QButtonGroup,
+    QSplashScreen, QStyledItemDelegate, QButtonGroup, QToolButton,
     QMdiArea, QMdiSubWindow,
 )
-from PyQt6.QtGui import QAction, QImage, QPixmap, QPainter, QIcon, QColor, QFont, QFontDatabase, QPolygon, QPolygonF, QPen, QPalette, QRegion, QLinearGradient, QDrag, QCursor, QTransform, QImageReader, QTextDocument
+from PyQt6.QtGui import QAction, QImage, QPixmap, QPainter, QIcon, QColor, QFont, QFontDatabase, QPolygon, QPolygonF, QPen, QPalette, QRegion, QLinearGradient, QDrag, QCursor, QTransform, QImageReader, QTextDocument, QSyntaxHighlighter, QTextCharFormat
 from PyQt6.QtCore import Qt as _Qt, QPoint, QPointF, QRect, QRectF, QThread, pyqtSignal, QTimer, QSize, QByteArray, QEvent, qInstallMessageHandler, QMimeData
 from PyQt6.QtWidgets import QSizePolicy, QCheckBox, QInputDialog, QMessageBox, QGraphicsItem, QProgressBar
 from PyQt6.QtGui import QPainterPath, QBrush
+from PyQt6 import sip
 
 
 class _QtNamespaceCompat:
@@ -272,6 +279,19 @@ I18N = {
     "app_title": {"pl": "Astro AI Processor", "en": "Astro AI Processor"},
     "dashboard_title": {"pl": "Witaj w Astro AI Processor", "en": "Welcome to Astro AI Processor"},
     "dashboard_subtitle": {"pl": "Otwórz obraz albo wybierz jeden z ostatnio używanych.", "en": "Open an image or choose one of your recent files."},
+    "open_folder_title": {"pl": "Otwórz folder z obrazami", "en": "Open image folder"},
+    "dashboard_folder": {"pl": "Folder z obrazami", "en": "Image folder"},
+    "action_open_folder": {"pl": "Otwórz folder…", "en": "Open Folder…"},
+    "altair_script_ready": {"pl": "Wygenerowany skrypt AstroAP", "en": "Generated AstroAP script"},
+    "altair_run_code": {"pl": "Uruchom Python", "en": "Run Python"},
+    "altair_view_code": {"pl": "Pokaż kod", "en": "View code"},
+    "altair_hide_code": {"pl": "Ukryj kod", "en": "Hide code"},
+    "altair_effort_title": {"pl": "Wysiłek rozumowania", "en": "Reasoning effort"},
+    "altair_effort_minimal": {"pl": "Minimalny", "en": "Minimal"},
+    "altair_effort_low": {"pl": "Niski", "en": "Low"},
+    "altair_effort_medium": {"pl": "Średni", "en": "Medium"},
+    "altair_effort_high": {"pl": "Wysoki", "en": "High"},
+    "altair_effort_max": {"pl": "Maksymalny", "en": "Maximum"},
     "dashboard_open_image": {"pl": "Otwórz obraz", "en": "Open image"},
     "dashboard_empty": {"pl": "Ostatnio otwierane obrazy pojawią się tutaj.", "en": "Recently opened images will appear here."},
     "dashboard_search": {"pl": "Szukaj obiektu lub pliku…", "en": "Search objects or files…"},
@@ -286,6 +306,9 @@ I18N = {
     "dashboard_theme": {"pl": "Motyw", "en": "Theme"},
     "dashboard_accent": {"pl": "Kolor", "en": "Accent"},
     "dashboard_language": {"pl": "Język", "en": "Language"},
+    "white_sur_toggle": {"pl": "Używaj dekoracji okien WhiteSur", "en": "Use WhiteSur window decorations"},
+    "white_sur_restart_hint": {"pl": "Zmiana zacznie działać po ponownym uruchomieniu aplikacji.", "en": "Restart the app for this change to take effect."},
+    "white_sur_config_label": {"pl": "Dekoracje okien", "en": "Window decorations"},
     "dashboard_apply_settings": {"pl": "Zastosuj ustawienia", "en": "Apply settings"},
     "dashboard_saved": {"pl": "Ustawienia zapisane", "en": "Settings saved"},
     "dashboard_clear_config": {"pl": "Wyczyść konfigurację", "en": "Clear configuration"},
@@ -332,18 +355,20 @@ I18N = {
     "easy_scale_down": {"pl": "Zmniejsz zawartość", "en": "Scale content down"},
     "easy_scale_up": {"pl": "Powiększ zawartość", "en": "Scale content up"},
     "easy_stage_load": {"pl": "1. Wczytaj obraz", "en": "1. Load Image"},
-    "easy_stage_background": {"pl": "2. Usuń tło", "en": "2. Extract background"},
-    "easy_stage_calibration": {"pl": "3. Kalibracja kolorów", "en": "3. Color calibration"},
+    "easy_stage_crop": {"pl": "2. Kadruj", "en": "2. Crop"},
+    "easy_stage_background": {"pl": "3. Usuń tło", "en": "3. Extract background"},
     "easy_stage_stretch": {"pl": "4. Rozciągnij histogram", "en": "4. Stretch"},
     "easy_stage_denoise": {"pl": "5. Odszumianie", "en": "5. Denoise"},
-    "easy_stage_sharpen": {"pl": "6. Wyostrzanie", "en": "6. Sharpen"},
-    "easy_stage_correction": {"pl": "7. Korekta", "en": "7. Correction"},
-    "easy_stage_save": {"pl": "8. Zapisz", "en": "8. Save"},
+    "easy_stage_star_shrink": {"pl": "6. Zmniejsz gwiazdy", "en": "6. Star Shrink"},
+    "easy_stage_sharpen": {"pl": "7. Wyostrzanie", "en": "7. Sharpen"},
+    "easy_stage_correction": {"pl": "8. Korekta", "en": "8. Correction"},
+    "easy_stage_save": {"pl": "9. Zapisz", "en": "9. Save"},
     "easy_stage_load_description": {"pl": "Wczytaj zdjęcie astronomiczne, aby rozpocząć.", "en": "Choose an astronomical image to begin."},
+    "easy_stage_crop_description": {"pl": "Wybierz kadr, przeciągając jego krawędzie na obrazie.", "en": "Choose the image area by dragging its crop handles."},
     "easy_stage_background_description": {"pl": "Usuń gradienty i nierówne tło nieba.", "en": "Remove gradients and uneven sky background."},
-    "easy_stage_calibration_description": {"pl": "Ustaw naturalny balans kolorów obrazu.", "en": "Set a natural color balance for the image."},
     "easy_stage_stretch_description": {"pl": "Rozjaśnij obraz liniowy, aby wydobyć szczegóły.", "en": "Brighten the linear image to reveal its details."},
     "easy_stage_denoise_description": {"pl": "Ogranicz szum na zdjęciu.", "en": "Reduce noise in the image."},
+    "easy_stage_star_shrink_description": {"pl": "Zmniejsz rozmiar gwiazd na obrazie.", "en": "Reduce the size of stars in the image."},
     "easy_stage_sharpen_description": {"pl": "Wydobądź drobne szczegóły obrazu.", "en": "Bring out fine image details."},
     "easy_stage_correction_description": {"pl": "Wprowadź końcowe korekty obrazu i gwiazd.", "en": "Make final image and star corrections."},
     "easy_stage_save_description": {"pl": "Zapisz gotowy obraz lub jego kopię.", "en": "Save the finished image or a copy."},
@@ -726,45 +751,16 @@ def top_bar_svg_icon_with_accent(svg_path: str, accent_color: str, size: int = 6
 
 
 _WHITE_SUR_THEME_ACTIVE = None
+_WHITE_SUR_CONTROLS_ENABLED = False
 
 
 def is_white_sur_desktop_theme_active() -> bool:
-    """Detect a WhiteSur GTK theme so the main Qt window can draw matching controls."""
-    global _WHITE_SUR_THEME_ACTIVE
-    env_theme = str(os.environ.get("GTK_THEME", "") or "").strip().lower()
-    if env_theme:
-        return "whitesur" in env_theme.replace("-", "").replace("_", "")
-    if _WHITE_SUR_THEME_ACTIVE is not None:
-        return _WHITE_SUR_THEME_ACTIVE
-
-    active = False
-    if sys.platform.startswith("linux") and shutil.which("gsettings"):
-        try:
-            result = subprocess.run(
-                ["gsettings", "get", "org.gnome.desktop.interface", "gtk-theme"],
-                capture_output=True,
-                text=True,
-                timeout=1.0,
-                check=False,
-            )
-            theme_name = str(result.stdout or "").strip().strip("'").lower()
-            active = "whitesur" in theme_name.replace("-", "").replace("_", "")
-        except Exception:
-            active = False
-    _WHITE_SUR_THEME_ACTIVE = active
-    return active
+    """WhiteSur client-side decorations are disabled; use native Qt decorations."""
+    return False
 
 
 def apply_dialog_window_flags(widget, white_sur_active=None):
     flags = widget.windowFlags() & ~Qt.WindowContextHelpButtonHint
-    use_white_sur_controls = (
-        is_white_sur_desktop_theme_active() if white_sur_active is None else bool(white_sur_active)
-    )
-    if use_white_sur_controls:
-        flags |= Qt.WindowMinimizeButtonHint | Qt.WindowMaximizeButtonHint
-        if isinstance(widget, QMainWindow):
-            widget._white_sur_titlebar_enabled = True
-            flags |= Qt.FramelessWindowHint
     widget.setWindowFlags(flags)
 
 
@@ -776,7 +772,10 @@ class WhiteSurTitleBar(QWidget):
         self._drag_offset = None
         self.setObjectName("whiteSurTitleBar")
         self.setFixedHeight(38)
-        self.setStyleSheet("QWidget#whiteSurTitleBar { background: #1e1e1e; }")
+        self.setStyleSheet(
+            "QWidget#whiteSurTitleBar { background: #1e1e1e; "
+            "border-top-left-radius: 14px; border-top-right-radius: 14px; }"
+        )
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(12, 0, 12, 0)
@@ -881,6 +880,204 @@ class WhiteSurTitleBar(QWidget):
             event.accept()
             return
         super().mouseDoubleClickEvent(event)
+
+
+def _apply_rounded_window_mask(window, radius=14):
+    if window is None or window.width() < 2 or window.height() < 2:
+        return
+    if window.isMaximized() or window.isFullScreen():
+        window.clearMask()
+        return
+    path = QPainterPath()
+    path.addRoundedRect(QRectF(window.rect()), float(radius), float(radius))
+    window.setMask(QRegion(path.toFillPolygon().toPolygon()))
+
+
+class WhiteSurDialogTitleBar(QWidget):
+    """WhiteSur traffic-light controls for frameless dialogs."""
+
+    def __init__(self, window):
+        super().__init__(window)
+        self.window = window
+        self._drag_offset = None
+        self.setObjectName("whiteSurDialogTitleBar")
+        self.setFixedHeight(38)
+        self.setStyleSheet(
+            "QWidget#whiteSurDialogTitleBar { background: #1e1e1e; "
+            "border-top-left-radius: 14px; border-top-right-radius: 14px; }"
+        )
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(12, 0, 12, 0)
+        layout.setSpacing(8)
+        controls = QWidget(self)
+        controls.setFixedWidth(70)
+        controls_layout = QHBoxLayout(controls)
+        controls_layout.setContentsMargins(0, 0, 0, 0)
+        controls_layout.setSpacing(8)
+
+        language = getattr(window, "language", "pl")
+        button_specs = (
+            ("whiteSurDialogCloseButton", "#ff5f57", tr_text(language, "window_close", "Close"), window.close),
+            ("whiteSurDialogMinimizeButton", "#febc2e", tr_text(language, "window_minimize", "Minimize"), window.showMinimized),
+            ("whiteSurDialogMaximizeButton", "#28c840", tr_text(language, "window_maximize", "Maximize or restore"), self._toggle_maximized),
+        )
+        self.maximize_button = None
+        for object_name, color, tooltip, callback in button_specs:
+            button = QPushButton(controls)
+            button.setObjectName(object_name)
+            button.setToolTip(tooltip)
+            button.setFixedSize(14, 14)
+            button.setFocusPolicy(Qt.NoFocus)
+            button.setStyleSheet(
+                f"QPushButton#{object_name} {{ background: {color}; border: none; border-radius: 7px; padding: 0; }}"
+                f"QPushButton#{object_name}:hover {{ background: {color}; border: 1px solid rgba(0,0,0,0.35); }}"
+                f"QPushButton#{object_name}:pressed {{ background: #d5d5d5; }}"
+            )
+            button.clicked.connect(callback)
+            controls_layout.addWidget(button)
+            if object_name == "whiteSurDialogMaximizeButton":
+                self.maximize_button = button
+        can_resize = (
+            window.minimumWidth() < window.maximumWidth()
+            or window.minimumHeight() < window.maximumHeight()
+        )
+        if self.maximize_button is not None:
+            self.maximize_button.setEnabled(can_resize)
+
+        layout.addWidget(controls)
+        self.title_label = QLabel(window.windowTitle(), self)
+        self.title_label.setAlignment(Qt.AlignCenter)
+        self.title_label.setStyleSheet("color: #eeeeee; background: transparent; font-weight: 600;")
+        layout.addWidget(self.title_label, 1)
+
+        self.window.installEventFilter(self)
+        self._sync_window_geometry()
+
+    def _toggle_maximized(self):
+        if self.maximize_button is not None and not self.maximize_button.isEnabled():
+            return
+        if self.window.isMaximized():
+            self.window.showNormal()
+        else:
+            self.window.showMaximized()
+
+    def _sync_window_geometry(self):
+        self.setGeometry(0, 0, self.window.width(), self.height())
+        self.raise_()
+        _apply_rounded_window_mask(self.window)
+        _position_white_sur_dialog_resize_handles(self.window)
+
+    def eventFilter(self, watched, event):
+        if watched is self.window:
+            if event.type() in (QEvent.Type.Resize, QEvent.Type.WindowStateChange):
+                QTimer.singleShot(0, self._sync_window_geometry)
+            elif event.type() == QEvent.Type.WindowTitleChange:
+                self.title_label.setText(self.window.windowTitle())
+        return super().eventFilter(watched, event)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            handle = self.window.windowHandle()
+            if handle is not None and hasattr(handle, "startSystemMove") and handle.startSystemMove():
+                event.accept()
+                return
+            self._drag_offset = event.globalPosition().toPoint() - self.window.frameGeometry().topLeft()
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if self._drag_offset is not None and event.buttons() & Qt.LeftButton:
+            self.window.move(event.globalPosition().toPoint() - self._drag_offset)
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        self._drag_offset = None
+        super().mouseReleaseEvent(event)
+
+    def mouseDoubleClickEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self._toggle_maximized()
+            event.accept()
+            return
+        super().mouseDoubleClickEvent(event)
+
+
+def _position_white_sur_dialog_resize_handles(window):
+    handles = getattr(window, "_white_sur_dialog_resize_handles", None)
+    if not handles:
+        return
+    if window.isMaximized() or window.isFullScreen():
+        for handle in handles.values():
+            handle.hide()
+        return
+    corner = 14
+    edge = 6
+    width = window.width()
+    height = window.height()
+    geometries = {
+        "top_left": (0, 0, corner, corner),
+        "top": (corner, 0, max(0, width - 2 * corner), edge),
+        "top_right": (width - corner, 0, corner, corner),
+        "right": (width - edge, corner, edge, max(0, height - 2 * corner)),
+        "bottom_right": (width - corner, height - corner, corner, corner),
+        "bottom": (corner, height - edge, max(0, width - 2 * corner), edge),
+        "bottom_left": (0, height - corner, corner, corner),
+        "left": (0, corner, edge, max(0, height - 2 * corner)),
+    }
+    for name, geometry in geometries.items():
+        handle = handles.get(name)
+        if handle is not None:
+            handle.setGeometry(*geometry)
+            handle.show()
+            handle.raise_()
+
+
+def install_white_sur_dialog_chrome(window):
+    if (
+        window is None
+        or not getattr(window, "_white_sur_dialog_chrome_enabled", False)
+        or sip.isdeleted(window)
+        or getattr(window, "_white_sur_dialog_titlebar", None) is not None
+    ):
+        return
+    layout = window.layout()
+    if layout is not None:
+        margins = layout.contentsMargins()
+        layout.setContentsMargins(
+            margins.left(), max(margins.top(), 38), margins.right(), margins.bottom()
+        )
+    window.setProperty("whiteSurDialogChrome", True)
+    background = window.palette().color(QPalette.ColorRole.Window).name(QColor.NameFormat.HexRgb)
+    current_stylesheet = window.styleSheet()
+    window.setStyleSheet(
+        current_stylesheet
+        + "\nQDialog[whiteSurDialogChrome=\"true\"] { "
+        + f"background-color: {background}; border: 1px solid rgba(120, 130, 145, 0.55); border-radius: 14px; }}"
+    )
+    titlebar = WhiteSurDialogTitleBar(window)
+    window._white_sur_dialog_titlebar = titlebar
+
+    specs = {
+        "top_left": (Qt.LeftEdge | Qt.TopEdge, Qt.SizeFDiagCursor),
+        "top": (Qt.TopEdge, Qt.SizeVerCursor),
+        "top_right": (Qt.RightEdge | Qt.TopEdge, Qt.SizeBDiagCursor),
+        "right": (Qt.RightEdge, Qt.SizeHorCursor),
+        "bottom_right": (Qt.RightEdge | Qt.BottomEdge, Qt.SizeFDiagCursor),
+        "bottom": (Qt.BottomEdge, Qt.SizeVerCursor),
+        "bottom_left": (Qt.LeftEdge | Qt.BottomEdge, Qt.SizeBDiagCursor),
+        "left": (Qt.LeftEdge, Qt.SizeHorCursor),
+    }
+    if titlebar.maximize_button is not None and titlebar.maximize_button.isEnabled():
+        window._white_sur_dialog_resize_handles = {
+            name: WhiteSurResizeHandle(window, edges, cursor)
+            for name, (edges, cursor) in specs.items()
+        }
+    _apply_rounded_window_mask(window)
+    titlebar._sync_window_geometry()
 
 
 class WhiteSurResizeHandle(QWidget):
@@ -2200,7 +2397,7 @@ class WatermarkDialog(QDialog):
         form.addWidget(QLabel(translate("watermark_font", "Font")), row, 0)
         self.font_combo = QComboBox()
         self.font_combo.setObjectName("watermarkFontCombo")
-        self.font_combo.addItems(sorted(set(QFontDatabase().families()), key=str.casefold))
+        self.font_combo.addItems(sorted(set(QFontDatabase.families()), key=str.casefold))
         self.font_combo.setMaxVisibleItems(16)
         current_family = QFont().family()
         if current_family:
@@ -3025,6 +3222,7 @@ class CropPreviewWidget(QWidget):
 class CropDialog(QDialog):
     previewRectChanged = pyqtSignal(int, int, int, int)
     gridChanged = pyqtSignal(str)
+    resetRequested = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -3043,6 +3241,7 @@ class CropDialog(QDialog):
         self.combo_grid.addItem("Złoty podział", "golden")
         self.combo_grid.addItem("Krzyż", "cross")
         self.combo_grid.addItem("Diagonale", "diagonals")
+        self.combo_grid.setCurrentIndex(self.combo_grid.findData("thirds"))
         options_row.addWidget(self.combo_grid)
         options_row.addSpacing(12)
         options_row.addWidget(QLabel("Proporcje:"))
@@ -3090,13 +3289,19 @@ class CropDialog(QDialog):
         self.combo_ratio.currentTextChanged.connect(self._on_ratio_changed)
 
         buttons = QHBoxLayout()
+        self.btn_reset = QPushButton("Reset selection")
         self.btn_apply = QPushButton("Apply")
         self.btn_apply.setProperty("accent", True)
         self.btn_cancel = QPushButton("Cancel")
+        self.btn_reset.setToolTip("Restore the full image area")
+        buttons.addWidget(self.btn_reset)
+        buttons.addStretch(1)
         buttons.addWidget(self.btn_apply)
         buttons.addWidget(self.btn_cancel)
         layout.addLayout(buttons)
 
+        self.btn_reset.clicked.connect(self.reset_defaults)
+        self.btn_reset.clicked.connect(self.resetRequested.emit)
         self.btn_apply.clicked.connect(self.accept)
         self.btn_cancel.clicked.connect(self.reject)
 
@@ -3121,10 +3326,14 @@ class CropDialog(QDialog):
         self.spin_y.setRange(0, max(0, self._img_h - 1))
         self.spin_x.setValue(x)
         self.spin_y.setValue(y)
+        # Expand width/height limits for the new origin before assigning the
+        # requested size. Otherwise resetting from an offset crop is clamped
+        # to the old, smaller limits.
+        self._update_limits()
         self.spin_w.setValue(w)
         self.spin_h.setValue(h)
-        self._updating = False
         self._update_limits()
+        self._updating = False
         if emit_signal:
             self.previewRectChanged.emit(int(x), int(y), int(w), int(h))
 
@@ -3206,12 +3415,26 @@ class CropDialog(QDialog):
     def reset_defaults(self):
         self.combo_grid.blockSignals(True)
         self.combo_ratio.blockSignals(True)
-        self.combo_grid.setCurrentIndex(0)
+        self.combo_grid.setCurrentIndex(self.combo_grid.findData("thirds"))
         self.combo_ratio.setCurrentIndex(0)
         self.combo_grid.blockSignals(False)
         self.combo_ratio.blockSignals(False)
         self._aspect_ratio = None
-        self._set_rect(0, 0, self._img_w, self._img_h, emit_signal=False)
+        self.set_full_image_rect()
+
+    def set_full_image_rect(self):
+        """Set the crop to the complete image, regardless of previous limits."""
+        self._updating = True
+        self.spin_x.setRange(0, max(0, self._img_w - 1))
+        self.spin_y.setRange(0, max(0, self._img_h - 1))
+        self.spin_w.setRange(1, max(1, self._img_w))
+        self.spin_h.setRange(1, max(1, self._img_h))
+        self.spin_x.setValue(0)
+        self.spin_y.setValue(0)
+        self.spin_w.setValue(max(1, self._img_w))
+        self.spin_h.setValue(max(1, self._img_h))
+        self._update_limits()
+        self._updating = False
 
 
 class StarNetDialog(QDialog):
@@ -3481,7 +3704,7 @@ class BackgroundExtractionProgressDialog(QDialog):
 
 
 class BackgroundExtractionDialog(QDialog):
-    def __init__(self, parent=None, model_path: str = "", smoothing: int = 20, image=None):
+    def __init__(self, parent=None, model_path: str = "", smoothing: int = 50, image=None):
         super().__init__(parent)
         apply_dialog_window_flags(self)
         self.setWindowTitle("Background Extraction")
@@ -3500,6 +3723,7 @@ class BackgroundExtractionDialog(QDialog):
         self.combo_method = QComboBox()
         for method in ("RBF", "Splines", "Kriging", "AI"):
             self.combo_method.addItem(method, method)
+        self.combo_method.setCurrentIndex(self.combo_method.findData("AI"))
         if not ONNX_AVAILABLE:
             ai_index = self.combo_method.findData("AI")
             ai_item = self.combo_method.model().item(ai_index)
@@ -3520,7 +3744,7 @@ class BackgroundExtractionDialog(QDialog):
         correction_row.addWidget(self.combo_correction, 1)
         layout.addLayout(correction_row)
 
-        self.lbl_smoothing = QLabel("Smoothing: 0.20")
+        self.lbl_smoothing = QLabel("Smoothing: 0.50")
         layout.addWidget(self.lbl_smoothing)
         self.sld_smoothing = QSlider(Qt.Horizontal)
         self.sld_smoothing.setRange(0, 100)
@@ -3582,7 +3806,7 @@ class BackgroundExtractionDialog(QDialog):
 
         self.set_parameters(model_path=model_path, smoothing=smoothing, image=image)
 
-    def set_parameters(self, model_path: str = "", smoothing: int = 20, image=None):
+    def set_parameters(self, model_path: str = "", smoothing: int = 50, image=None):
         if image is not None:
             self.image_data = image
         basename = os.path.basename(str(model_path or "").strip())
@@ -7920,6 +8144,30 @@ class AltairStartupWidget(QWidget):
         painter.drawPixmap(target, logo, source_logo)
 
 
+class PythonCodeHighlighter(QSyntaxHighlighter):
+    """Small Python syntax highlighter for Altair's read-only script preview."""
+
+    def __init__(self, document):
+        super().__init__(document)
+        self.rules = []
+        self._add_rule(r"\b(?:and|as|assert|async|await|break|class|continue|def|del|elif|else|except|False|finally|for|from|global|if|import|in|is|lambda|nonlocal|not|or|pass|raise|return|True|try|while|with|yield|None)\b", "#c792ea")
+        self._add_rule(r"\b(?:astroap|image|np|math|len|range|enumerate|zip|min|max|sum|round|str|int|float|bool|print)\b", "#82aaff")
+        self._add_rule(r"\b[A-Za-z_]\w*(?=\s*\()", "#82d9a0")
+        self._add_rule(r"\b\d+(?:\.\d+)?\b", "#f78c6c")
+        self._add_rule(r"(?:\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*')", "#ecc48d")
+        self._add_rule(r"#.*$", "#7f8c98")
+
+    def _add_rule(self, pattern, color):
+        char_format = QTextCharFormat()
+        char_format.setForeground(QColor(color))
+        self.rules.append((re.compile(pattern), char_format))
+
+    def highlightBlock(self, text):
+        for pattern, char_format in self.rules:
+            for match in pattern.finditer(text):
+                self.setFormat(match.start(), match.end() - match.start(), char_format)
+
+
 class AIAssistantPanel(QFrame):
     script_generated = pyqtSignal(str)
 
@@ -8086,6 +8334,53 @@ class AIAssistantPanel(QFrame):
         prompt_action_layout = QHBoxLayout()
         prompt_action_layout.setContentsMargins(0, 0, 0, 0)
         prompt_action_layout.addStretch(1)
+        current_effort = str(getattr(app, "altair_reasoning_effort", ALTAIR_DEFAULT_REASONING_EFFORT) or ALTAIR_DEFAULT_REASONING_EFFORT)
+        if current_effort not in ALTAIR_REASONING_EFFORTS:
+            current_effort = ALTAIR_DEFAULT_REASONING_EFFORT
+        self.altair_reasoning_effort = current_effort
+        self.btn_effort = QPushButton(self._effort_label(current_effort), self.prompt_box)
+        self.btn_effort.setObjectName("altairEffortButton")
+        self.btn_effort.setFixedHeight(30)
+        self.btn_effort.setToolTip(self._tr("altair_effort_title", "Reasoning effort"))
+        self.btn_effort.setStyleSheet(
+            "QPushButton#altairEffortButton { color: #c8d9ec; background: #222b36; "
+            "border: 1px solid #394858; border-radius: 15px; padding: 3px 12px; }"
+            "QPushButton#altairEffortButton:hover { background: #2b3949; }"
+        )
+        self.effort_popup = QFrame(self, Qt.Popup)
+        self.effort_popup.setObjectName("altairEffortPopup")
+        self.effort_popup.setStyleSheet(
+            "QFrame#altairEffortPopup { background: #20242c; border: 1px solid #363b44; border-radius: 14px; }"
+            "QLabel { color: #e6e9ef; background: transparent; border: 0; }"
+            "QSlider::groove:horizontal { height: 6px; background: #484c53; border-radius: 3px; }"
+            "QSlider::sub-page:horizontal { background: #3b82f6; border-radius: 3px; }"
+            "QSlider::handle:horizontal { width: 22px; margin: -8px 0; border-radius: 11px; background: white; }"
+        )
+        effort_layout = QVBoxLayout(self.effort_popup)
+        effort_layout.setContentsMargins(14, 10, 14, 10)
+        effort_layout.setSpacing(8)
+        effort_header = QHBoxLayout()
+        effort_header.addWidget(QLabel(self._tr("altair_effort_title", "Reasoning effort")))
+        effort_header.addStretch(1)
+        self.effort_value_label = QLabel(self._effort_label(current_effort))
+        effort_header.addWidget(self.effort_value_label)
+        effort_layout.addLayout(effort_header)
+        self.effort_slider = QSlider(Qt.Horizontal, self.effort_popup)
+        self.effort_slider.setRange(0, len(ALTAIR_REASONING_EFFORTS) - 1)
+        self.effort_slider.setSingleStep(1)
+        self.effort_slider.setPageStep(1)
+        self.effort_slider.setTickInterval(1)
+        self.effort_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self.effort_slider.setFixedWidth(224)
+        self.effort_slider.setValue(ALTAIR_REASONING_EFFORTS.index(current_effort))
+        effort_layout.addWidget(self.effort_slider)
+        self._effort_save_timer = QTimer(self)
+        self._effort_save_timer.setSingleShot(True)
+        self._effort_save_timer.timeout.connect(self._save_effort_preference)
+        self.btn_effort.clicked.connect(self._toggle_effort_popup)
+        self.effort_slider.valueChanged.connect(self._on_effort_changed)
+        self.effort_slider.sliderReleased.connect(self._save_effort_preference)
+        prompt_action_layout.addWidget(self.btn_effort)
         self.btn_voice = QPushButton("")
         self.btn_voice.setToolTip("Voice to Text")
         self.btn_voice.setFixedSize(34, 30)
@@ -8107,7 +8402,7 @@ class AIAssistantPanel(QFrame):
 
         button_layout = QHBoxLayout()
         self.btn_analyze = QPushButton("Analizuj")
-        self.btn_run_python = QPushButton()
+        self.btn_run_python = QPushButton(self.chat_page)
         self.btn_run_python.setIcon(svg_icon_from_text(
             '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M7 4.5a1 1 0 0 1 1.5-.86l11 7a1.6 1.6 0 0 1 0 2.72l-11 7A1 1 0 0 1 7 19.5z" fill="#d8e8f7"/></svg>', 18
         ))
@@ -8117,7 +8412,7 @@ class AIAssistantPanel(QFrame):
         self.btn_run_python.setAccessibleName("Run Python")
 
         button_layout.addWidget(self.btn_analyze)
-        button_layout.addWidget(self.btn_run_python)
+        self.btn_run_python.hide()
         composer_layout.addLayout(button_layout)
 
         self.status_label = QLabel("", self.chat_page)
@@ -8164,6 +8459,7 @@ class AIAssistantPanel(QFrame):
         self.streaming_response = ""
         self.streaming_message_label = None
         self.chat_history_dir = os.path.join(os.path.expanduser("~"), ".astroaiprocessor", "altair_chats")
+        self.chat_history_store = ChatHistoryStore(os.path.join(os.path.expanduser("~"), ".astroaiprocessor", "altair_chats.sqlite3"))
         self.current_chat_id = ""
         self.current_chat_messages = []
         self._chat_history_cache = {}
@@ -8181,7 +8477,7 @@ class AIAssistantPanel(QFrame):
             self.append_assistant_message("Przepraszamy, Asystent AI jest niedostępny w wersji Windows.")
 
     def _refresh_model_label(self):
-        self.lbl_local_model.setText("Nemotron 3 Super (OpenRouter)")
+        self.lbl_local_model.setText("Nemotron 3.5 Lightning (OpenRouter)")
     def _chat_history_file(self, chat_id: str) -> str:
         return os.path.join(self.chat_history_dir, f"{chat_id}.json")
 
@@ -8211,6 +8507,19 @@ class AIAssistantPanel(QFrame):
             title = str(history.get("title") or "Altair chat")
             updated = str(history.get("updated_at") or "")
             history_items.append((updated, chat_id, title, history))
+            try:
+                self.chat_history_store.save(history, OPENROUTER_DEFAULT_MODEL, ALTAIR_DEFAULT_REASONING_EFFORT)
+            except Exception as exc:
+                self._log_chat_history_error(f"Could not migrate Altair chat history to SQLite: {exc}")
+        try:
+            known_ids = {item[1] for item in history_items}
+            for record in self.chat_history_store.list():
+                if record["id"] not in known_ids:
+                    history = self.chat_history_store.load(record["id"])
+                    if history:
+                        history_items.append((record["updated_at"], record["id"], record["title"], history))
+        except Exception as exc:
+            self._log_chat_history_error(f"Could not load Altair SQLite chat history: {exc}")
         history_items.sort(key=lambda item: item[0], reverse=True)
         self.chat_history_combo.blockSignals(True)
         for _updated, chat_id, title, history in history_items:
@@ -8257,6 +8566,14 @@ class AIAssistantPanel(QFrame):
             self._log_chat_history_error(f"Could not save Altair chat history: {exc}")
             return
         self._chat_history_cache[self.current_chat_id] = history
+        try:
+            self.chat_history_store.save(
+                history,
+                OPENROUTER_DEFAULT_MODEL,
+                getattr(self, "altair_reasoning_effort", ALTAIR_DEFAULT_REASONING_EFFORT),
+            )
+        except Exception as exc:
+            self._log_chat_history_error(f"Could not save Altair SQLite chat history: {exc}")
         self._refresh_current_chat_history_title(title)
 
     def _refresh_current_chat_history_title(self, title: str):
@@ -8314,7 +8631,12 @@ class AIAssistantPanel(QFrame):
         self._load_chat_history(chat_id)
 
     def _load_chat_history(self, chat_id: str):
-        history = self._chat_history_cache.get(chat_id)
+        history = None
+        try:
+            history = self.chat_history_store.load(chat_id)
+        except Exception as exc:
+            self._log_chat_history_error(f"Could not read Altair SQLite chat history: {exc}")
+        history = history or self._chat_history_cache.get(chat_id)
         if history is None:
             path = self._chat_history_file(chat_id)
             try:
@@ -8379,6 +8701,47 @@ class AIAssistantPanel(QFrame):
         self.composer_widget.setMaximumWidth(740)
         self.conversation_stack.setCurrentWidget(self.welcome_page)
         QTimer.singleShot(0, self.input_text.setFocus)
+
+    def _tr(self, key: str, default: str) -> str:
+        if self.app is not None and hasattr(self.app, "tr"):
+            return self.app.tr(key, default)
+        return tr_text(getattr(self.app, "language", "pl") if self.app is not None else "pl", key, default)
+
+    def _effort_label(self, value: str) -> str:
+        key = f"altair_effort_{value}"
+        fallback = {"minimal": "Minimal", "low": "Low", "medium": "Medium", "high": "High", "max": "Maximum"}.get(value, "Medium")
+        return self._tr(key, fallback)
+
+    def _toggle_effort_popup(self):
+        if self.effort_popup.isVisible():
+            self.effort_popup.hide()
+            return
+        self.effort_popup.adjustSize()
+        button = self.btn_effort
+        available = button.screen().availableGeometry()
+        x = max(available.left(), min(button.mapToGlobal(QPoint(0, 0)).x(), available.right() - self.effort_popup.width()))
+        top = button.mapToGlobal(QPoint(0, 0)).y() - self.effort_popup.height() - 8
+        if top < available.top():
+            top = button.mapToGlobal(QPoint(0, button.height() + 8)).y()
+        self.effort_popup.move(x, top)
+        self.effort_popup.show()
+
+    def _on_effort_changed(self, index: int):
+        effort = ALTAIR_REASONING_EFFORTS[max(0, min(len(ALTAIR_REASONING_EFFORTS) - 1, int(index)))]
+        self.altair_reasoning_effort = effort
+        label = self._effort_label(effort)
+        self.effort_value_label.setText(label)
+        self.btn_effort.setText(label)
+        if self.app is not None:
+            self.app.altair_reasoning_effort = effort
+        APP_PREFERENCES["altair_reasoning_effort"] = effort
+        self._effort_save_timer.start(400)
+
+    def _save_effort_preference(self):
+        save_config(
+            dark_mode=bool(getattr(self.app, "dark_mode", True)),
+            theme_name=getattr(self.app, "theme_name", None),
+        )
 
     def _show_chat_panel(self, focus=True):
         if self._composer_layout is not self.chat_page_layout:
@@ -8502,6 +8865,8 @@ class AIAssistantPanel(QFrame):
         if not chunk:
             return
         self.streaming_response += chunk
+        if getattr(self, "_current_request_is_script", False):
+            return
         if self.streaming_message_label is None:
             self.streaming_message_label = self._create_assistant_response_label()
         self._set_assistant_response_text(self.streaming_message_label, self.streaming_response)
@@ -8510,6 +8875,7 @@ class AIAssistantPanel(QFrame):
     def _append_message(self, role: str, text: str):
         role_key = (role or AI_ASSISTANT_NAME).strip().lower()
         is_user = role_key == "user"
+        script_code = self._extract_python_from_text(text) if role_key == AI_ASSISTANT_NAME.casefold() else ""
         accent = get_active_accent_colors()
         if not self._loading_chat_history:
             self._show_chat_panel(focus=False)
@@ -8538,13 +8904,68 @@ class AIAssistantPanel(QFrame):
             row_layout.addStretch(1)
             row_layout.addWidget(bubble, 0)
         else:
-            message_label = self._create_assistant_response_label(row, role)
-            self._set_assistant_response_text(message_label, str(text or ""))
+            if script_code:
+                self._add_script_tile(row, str(text or ""), script_code, role)
+            else:
+                message_label = self._create_assistant_response_label(row, role)
+                self._set_assistant_response_text(message_label, str(text or ""))
 
         self.chat_layout.insertWidget(max(0, self.chat_layout.count() - 1), row)
         if not self._loading_chat_history and self.current_chat_id:
-            self.current_chat_messages.append({"role": role, "content": str(text or "")})
+            self.current_chat_messages.append({
+                "role": role,
+                "content": str(text or ""),
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            })
             self._save_chat_history()
+
+    def _add_script_tile(self, row, response_text: str, code: str, role=AI_ASSISTANT_NAME):
+        accent = get_active_accent_colors()
+        tile = QFrame(row)
+        tile.setObjectName("altairScriptTile")
+        tile.setStyleSheet(
+            f"QFrame#altairScriptTile {{ background: #171f29; border: 1px solid {accent['border']}; border-radius: 10px; }}"
+            "QLabel { color: #edf2f7; background: transparent; border: none; }"
+        )
+        layout = QVBoxLayout(tile)
+        layout.setContentsMargins(12, 9, 12, 10)
+        layout.setSpacing(8)
+        role_label = QLabel(role, tile)
+        role_label.setStyleSheet(f"color: {accent['border']}; font-size: 10px; font-weight: 600;")
+        summary = re.sub(r"```(?:python)?\s*[\s\S]*?```", "", str(response_text or ""), flags=re.IGNORECASE).strip()
+        if summary.strip() == str(code or "").strip():
+            summary = ""
+        summary = summary or self._tr("altair_script_ready", "Generated AstroAP script")
+        title = QLabel(summary, tile)
+        title.setWordWrap(True)
+        layout.addWidget(role_label)
+        layout.addWidget(title)
+        code_view = QPlainTextEdit(tile)
+        code_view.setPlainText(code)
+        code_view.setReadOnly(True)
+        code_view.setMaximumHeight(220)
+        code_view.setStyleSheet(
+            "QPlainTextEdit { background: #10161d; color: #d6deeb; border: 1px solid #364250; "
+            "border-radius: 6px; padding: 6px; font-family: monospace; font-size: 12px; }"
+        )
+        code_view._altair_highlighter = PythonCodeHighlighter(code_view.document())
+        code_view.setVisible(False)
+        layout.addWidget(code_view)
+        buttons = QHBoxLayout()
+        run_button = QPushButton(self._tr("altair_run_code", "Run Python"), tile)
+        view_button = QPushButton(self._tr("altair_view_code", "View code"), tile)
+        run_button.clicked.connect(lambda _checked=False, script=code: self._run_python_code(script))
+        def toggle_code():
+            visible = not code_view.isVisible()
+            code_view.setVisible(visible)
+            view_button.setText(self._tr("altair_hide_code", "Hide code") if visible else self._tr("altair_view_code", "View code"))
+        view_button.clicked.connect(toggle_code)
+        buttons.addWidget(run_button)
+        buttons.addWidget(view_button)
+        buttons.addStretch(1)
+        layout.addLayout(buttons)
+        row_layout = row.layout()
+        row_layout.addWidget(tile, 1)
         self._scroll_chat_to_bottom()
 
     def _clear_chat_messages(self):
@@ -8617,6 +9038,11 @@ class AIAssistantPanel(QFrame):
             row.deleteLater()
 
     def on_send_message(self):
+        if self.ai_worker is not None and self.ai_worker.isRunning():
+            self.ai_worker.requestInterruption()
+            self.btn_send.setEnabled(False)
+            self.status_label.setText("Stopping generation…")
+            return
         message = self.input_text.toPlainText().strip()
         if not message:
             return
@@ -8648,18 +9074,28 @@ class AIAssistantPanel(QFrame):
         self._start_ai_request(message)
 
     def _start_ai_request(self, message: str):
+        self._current_request_is_script = self._is_script_generation_request(message)
         payload = self.get_context_payload()
+        payload = dict(payload) if isinstance(payload, dict) else {}
+        payload["conversation"] = [
+            {"role": "assistant" if str(item.get("role", "")).casefold() == AI_ASSISTANT_NAME.casefold() else "user", "content": str(item.get("content", ""))}
+            for item in self.current_chat_messages[:-1]
+            if str(item.get("role", "")).casefold() in {"user", AI_ASSISTANT_NAME.casefold()} and item.get("content")
+        ][-30:]
         self.status_label.setText("")
         self.streaming_response = ""
         self.streaming_message_label = None
         self.stacked_layout.setCurrentWidget(self.content_widget)
         self._show_assistant_typing_indicator()
         self.btn_send.setEnabled(False)
+        self.btn_send.setText("Stop")
+        self.btn_send.setEnabled(True)
         self.btn_run_python.setEnabled(False)
         self.ai_worker = AltairAIWorker(
             message,
             payload,
-            api_key=(getattr(self.app, "openrouter_api_key", "") or os.environ.get("OPENROUTER_API_KEY", "")),
+            reasoning_effort=getattr(self.app, "altair_reasoning_effort", ALTAIR_DEFAULT_REASONING_EFFORT),
+            backend_url=getattr(self.app, "astro_ai_backend_url", ""),
         )
         self.ai_worker.chunk_signal.connect(self.on_ai_chunk)
         self.ai_worker.finished_signal.connect(self.on_ai_finished)
@@ -8900,6 +9336,7 @@ class AIAssistantPanel(QFrame):
 
     def on_ai_finished(self, response: str, error: str, token_meta: dict):
         self.btn_send.setEnabled(True)
+        self.btn_send.setText("")
         self.btn_run_python.setEnabled(True)
         self.status_label.setText("")
         self._hide_assistant_typing_indicator()
@@ -8908,23 +9345,51 @@ class AIAssistantPanel(QFrame):
             self._discard_streaming_assistant_message()
             self.stacked_layout.setCurrentWidget(self.network_error_page)
             return
+        if isinstance(token_meta, dict) and token_meta.get("cancelled"):
+            partial = self.streaming_response.strip()
+            self._discard_streaming_assistant_message()
+            if partial:
+                self.append_assistant_message(partial)
+            self.status_label.setText("Generation stopped.")
+            return
         if error:
+            self._discard_streaming_assistant_message()
             self._refresh_model_label()
             self.append_assistant_message(f"Błąd Altair: {error}")
         else:
             self._refresh_model_label()
             self.last_assistant_message = response
-            if self.streaming_message_label is None:
+            code = self._extract_python_from_text(response)
+            self.last_generated_python = code
+            if code and self.streaming_message_label is not None:
+                label = self.streaming_message_label
+                response_widget = label.parentWidget()
+                row = response_widget.parentWidget() if response_widget is not None else None
+                if row is not None:
+                    self.chat_layout.removeWidget(row)
+                    row.deleteLater()
+                row = QWidget()
+                row_layout = QHBoxLayout(row)
+                row_layout.setContentsMargins(0, 0, 0, 0)
+                row_layout.setSpacing(8)
+                self._add_script_tile(row, response, code)
+                self.chat_layout.insertWidget(max(0, self.chat_layout.count() - 1), row)
+                self.current_chat_messages.append({"role": AI_ASSISTANT_NAME, "content": response, "created_at": datetime.now(timezone.utc).isoformat()})
+                self._save_chat_history()
+            elif self.streaming_message_label is None:
                 self.append_assistant_message(response)
             else:
-                self._set_assistant_response_text(self.streaming_message_label, response)
+                label = self.streaming_message_label
+                response_widget = label.parentWidget()
+                row = response_widget.parentWidget() if response_widget is not None else None
+                if row is not None:
+                    self._set_assistant_response_text(label, response)
                 self.current_chat_messages.append({
                     "role": AI_ASSISTANT_NAME,
                     "content": response,
+                    "created_at": datetime.now(timezone.utc).isoformat(),
                 })
                 self._save_chat_history()
-            code = self._extract_python_from_text(response)
-            self.last_generated_python = code
             if code:
                 self.script_generated.emit(code)
         self.streaming_response = ""
@@ -8959,6 +9424,10 @@ class AIAssistantPanel(QFrame):
         code = self._extract_python_from_text(self.last_assistant_message)
         if not code:
             code = self.last_generated_python.strip()
+        self._run_python_code(code)
+
+    def _run_python_code(self, code: str):
+        code = str(code or "").strip()
         if not code:
             self.append_assistant_message("Brak wygenerowanego skryptu Python AstroAP.")
             return
@@ -9471,8 +9940,8 @@ class AIAssistantPanel(QFrame):
             "analysis_metrics": analysis_metrics,
             "available_astroap_functions": [
                 'astroap.load("image name or /path/to/image.fit")',
-                'astroap.bge(type="ai", correction="subtraction", smoothing=20)',
-                'astroap.bge(type="rfb", sample_size=25, kernel="thin_plate", spline_order=3, background_sample_points=15, correction="subtraction", smoothing=20, show_dialog=False)',
+                'astroap.bge(type="ai", correction="subtraction", smoothing=50)',
+                'astroap.bge(type="rfb", sample_size=25, kernel="thin_plate", spline_order=3, background_sample_points=15, correction="subtraction", smoothing=50, show_dialog=False)',
                 "astroap.denoise(model=2)",
                 "astroap.astroupscale(amount=2)",
                 'astroap.save("/path/to/output.tif")',
@@ -10108,26 +10577,33 @@ class AltairAIWorker(QThread):
     finished_signal = pyqtSignal(str, str, object)
     chunk_signal = pyqtSignal(str)
 
-    def __init__(self, message: str, payload: dict, api_key: str = ""):
+    def __init__(self, message: str, payload: dict, reasoning_effort: str = ALTAIR_DEFAULT_REASONING_EFFORT,
+                 backend_url: str = ""):
         super().__init__()
         self.message = str(message or "")
         self.payload = payload if isinstance(payload, dict) else {}
-        self.api_key = str(api_key or "").strip()
+        self.reasoning_effort = reasoning_effort if reasoning_effort in ALTAIR_REASONING_EFFORTS else ALTAIR_DEFAULT_REASONING_EFFORT
+        self.backend_url = str(backend_url or "").strip()
 
     def run(self):
         try:
-            context_text = json.dumps(self.payload, ensure_ascii=False, separators=(",", ":"))
+            context_payload = {key: value for key, value in self.payload.items() if key != "conversation"}
+            context_text = json.dumps(context_payload, ensure_ascii=False, separators=(",", ":"))
+            conversation = [
+                {"role": "system", "content": build_altair_system_prompt()},
+            ]
+            for item in self.payload.get("conversation", []) if isinstance(self.payload.get("conversation"), list) else []:
+                role = str(item.get("role", "")).casefold()
+                if role in {"user", "assistant"} and item.get("content"):
+                    conversation.append({"role": role, "content": str(item["content"])})
+            conversation.append({"role": "user", "content": f"{self.message.strip()}\n\nKONTEKST JSON:\n{context_text}"})
+            conversation = [conversation[0], *conversation[1:][-30:]]
             response, usage = create_chat_completion(
-                self.api_key,
-                [
-                    {"role": "system", "content": build_altair_system_prompt()},
-                    {"role": "user", "content": f"{self.message.strip()}\n\nKONTEKST JSON:\n{context_text}"},
-                ],
-                model=OPENROUTER_DEFAULT_MODEL,
-                max_tokens=ALTAIR_DEFAULT_MAX_TOKENS,
-                temperature=ALTAIR_DEFAULT_TEMPERATURE,
+                conversation,
+                reasoning_effort=self.reasoning_effort,
                 stream=True,
-                on_chunk=self.chunk_signal.emit,
+                on_chunk=self._emit_chunk_unless_cancelled,
+                backend_url=self.backend_url,
             )
             self.finished_signal.emit(response, "", {
                 "engine": "OpenRouter",
@@ -10135,10 +10611,17 @@ class AltairAIWorker(QThread):
                 "usage": usage,
                 "max_tokens": ALTAIR_DEFAULT_MAX_TOKENS,
             })
-        except OpenRouterConnectionError:
-            self.finished_signal.emit("", "", {"network_error": True})
+        except InterruptedError:
+            self.finished_signal.emit("", "", {"cancelled": True})
+        except OpenRouterConnectionError as e:
+            self.finished_signal.emit("", str(e), {"network_error": True})
         except Exception as e:
             self.finished_signal.emit("", str(e), {})
+
+    def _emit_chunk_unless_cancelled(self, chunk: str):
+        if self.isInterruptionRequested():
+            raise InterruptedError
+        self.chunk_signal.emit(chunk)
 
 
 class ImageFileSearchWorker(QThread):
@@ -10682,6 +11165,7 @@ class StarNetWorker(QThread):
 
 class DeepSNRWorker(QThread):
     finished_signal = pyqtSignal(int, str, str, str)
+    progress_signal = pyqtSignal(str, int, int)
 
     def __init__(self, command: list, command_cwd: str = None, output_path: str = ""):
         super().__init__()
@@ -10691,23 +11175,100 @@ class DeepSNRWorker(QThread):
 
     def run(self):
         creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
-        try:
-            result = subprocess.run(
-                self.command,
+        def execute(command):
+            process = subprocess.Popen(
+                command,
                 cwd=self.command_cwd,
-                capture_output=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
                 text=True,
-                timeout=7200,
+                bufsize=1,
                 creationflags=creationflags,
             )
-            self.finished_signal.emit(
-                int(result.returncode or 0),
-                str(result.stdout or ""),
-                str(result.stderr or ""),
-                self.output_path,
-            )
-        except subprocess.TimeoutExpired:
-            self.finished_signal.emit(-999, "", "deepSNR timed out after 2 hours.", self.output_path)
+            lines = queue.Queue()
+
+            def read_output():
+                try:
+                    for output_line in process.stdout:
+                        lines.put(output_line)
+                finally:
+                    lines.put(None)
+
+            reader = threading.Thread(target=read_output, daemon=True)
+            reader.start()
+            output = []
+            saw_progress = False
+            started_at = time.monotonic()
+            stream_closed = False
+            while not stream_closed or process.poll() is None:
+                if time.monotonic() - started_at > 7200:
+                    process.kill()
+                    process.wait()
+                    raise subprocess.TimeoutExpired(command, 7200, output="".join(output))
+                try:
+                    line = lines.get(timeout=0.2)
+                except queue.Empty:
+                    continue
+                if line is None:
+                    stream_closed = True
+                    continue
+                output.append(line)
+                try:
+                    payload = json.loads(line.strip())
+                except (TypeError, ValueError):
+                    continue
+                if not isinstance(payload, dict):
+                    continue
+                event_type = str(payload.get("type", payload.get("event", ""))).lower()
+                progress_data = payload.get("progress", payload)
+                if not isinstance(progress_data, dict):
+                    progress_data = payload
+                progress_value = next((
+                    progress_data[key] for key in (
+                        "percent", "percentage", "progress_percent", "overall_percent", "overall", "progress"
+                    ) if key in progress_data
+                ), None)
+                if progress_value is None and "completed" in progress_data and "total" in progress_data:
+                    try:
+                        total = float(progress_data["total"])
+                        progress_value = 100.0 * float(progress_data["completed"]) / total if total > 0 else None
+                    except (TypeError, ValueError):
+                        progress_value = None
+                try:
+                    numeric_progress = float(progress_value)
+                except (TypeError, ValueError):
+                    numeric_progress = -1.0
+                if 0.0 <= numeric_progress <= 1.0 and "percent" not in " ".join(progress_data.keys()).lower():
+                    numeric_progress *= 100.0
+                if 0.0 <= numeric_progress <= 100.0 and (
+                    "progress" in event_type or "percent" in progress_data or "completed" in progress_data
+                ):
+                    stage = str(
+                        progress_data.get("stage") or progress_data.get("phase") or
+                        progress_data.get("message") or "deepSNR: denoising..."
+                    )
+                    value = max(0, min(100, int(round(numeric_progress))))
+                    self.progress_signal.emit(stage, value, value)
+                    saw_progress = True
+            process.wait()
+            return int(process.returncode or 0), "".join(output), saw_progress
+
+        try:
+            command = self.command + ["--machine-progress"]
+            return_code, output, saw_progress = execute(command)
+            output_lower = output.lower()
+            unsupported = any(marker in output_lower for marker in (
+                "unrecognized option", "unknown option", "unknown argument", "unrecognized arguments",
+                "invalid option", "unknown flag", "couldn't find match for argument",
+            ))
+            if return_code != 0 and not saw_progress and unsupported and "--machine-progress" in command:
+                return_code, output, _saw_progress = execute(self.command)
+            self.finished_signal.emit(return_code, output, output, self.output_path)
+        except subprocess.TimeoutExpired as exc:
+            partial_output = exc.output or ""
+            if isinstance(partial_output, bytes):
+                partial_output = partial_output.decode(errors="replace")
+            self.finished_signal.emit(-999, "", str(partial_output) + "\ndeepSNR timed out after 2 hours.", self.output_path)
         except Exception as e:
             self.finished_signal.emit(-998, "", str(e), self.output_path)
 
@@ -12179,12 +12740,25 @@ class PreferencesDialog(QDialog):
         self.check_mdi_sync_zoom_pan.setChecked(bool(getattr(self.app, "mdi_sync_zoom_pan", True)))
         appearance_layout.addWidget(self.check_mdi_sync_zoom_pan, 3, 0, 1, 2)
 
-        appearance_layout.addWidget(QLabel("PodglÄ…d:"), 4, 0)
+        self.check_white_sur_theme = QCheckBox(
+            self.app.tr("white_sur_toggle", "Use WhiteSur window decorations")
+        )
+        self.check_white_sur_theme.setChecked(
+            bool(getattr(self.app, "white_sur_theme_enabled", False))
+        )
+        self.check_white_sur_theme.hide()
+        self.white_sur_restart_hint = QLabel(
+            self.app.tr("white_sur_restart_hint", "Restart the app for this change to take effect.")
+        )
+        self.white_sur_restart_hint.setWordWrap(True)
+        self.white_sur_restart_hint.hide()
+
+        appearance_layout.addWidget(QLabel("PodglÄ…d:"), 6, 0)
         self.appearance_info = QLabel(
             "Styl zastÄ™puje prosty przeĹ‚Ä…cznik dark mode i jest zapamiÄ™tywany miÄ™dzy uruchomieniami."
         )
         self.appearance_info.setWordWrap(True)
-        appearance_layout.addWidget(self.appearance_info, 4, 1)
+        appearance_layout.addWidget(self.appearance_info, 6, 1)
         tabs.addTab(appearance_tab, "WyglÄ…d")
 
 
@@ -12245,24 +12819,16 @@ class PreferencesDialog(QDialog):
         ai_chat_layout.setHorizontalSpacing(10)
         ai_chat_layout.setVerticalSpacing(10)
         ai_chat_layout.addWidget(QLabel("Model Altair:"), 0, 0)
-        self.lbl_altair_model = QLabel("NVIDIA Nemotron 3 Super (OpenRouter)")
+        self.lbl_altair_model = QLabel("NVIDIA Nemotron 3.5 Lightning (OpenRouter)")
         self.lbl_altair_model.setWordWrap(True)
         ai_chat_layout.addWidget(self.lbl_altair_model, 0, 1)
-        ai_chat_layout.addWidget(QLabel("OpenRouter API key:"), 1, 0)
-        self.edit_openrouter_api_key = QLineEdit(str(getattr(self.app, "openrouter_api_key", "") or ""))
-        self.edit_openrouter_api_key.setEchoMode(QLineEdit.Password)
-        self.edit_openrouter_api_key.setPlaceholderText(
-            "OPENROUTER_API_KEY środowiska" if os.environ.get("OPENROUTER_API_KEY") else "sk-or-v1-…"
-        )
-        ai_chat_layout.addWidget(self.edit_openrouter_api_key, 1, 1)
         self.lbl_openrouter_hint = QLabel(
             f"Model: {OPENROUTER_DEFAULT_MODEL}\n"
-            "Wiadomości i kontekst Altaira są wysyłane do OpenRouter. Model może podlegać limitom lub opłatom. "
-            "Klucz jest zapisywany w lokalnej konfiguracji użytkownika. "
-            "Utwórz go na openrouter.ai/settings/keys."
+            "Requests are sent through Astro AI's cloud service to OpenRouter. Conversation history remains on this device; only recent messages needed for the current response are sent. "
+            "The free model is subject to availability, rate limits, and NVIDIA data handling terms."
         )
         self.lbl_openrouter_hint.setWordWrap(True)
-        ai_chat_layout.addWidget(self.lbl_openrouter_hint, 2, 0, 1, 2)
+        ai_chat_layout.addWidget(self.lbl_openrouter_hint, 1, 0, 1, 2)
         tabs.addTab(ai_chat_tab, "Ai Chat")
 
         buttons = QHBoxLayout()
@@ -12332,7 +12898,6 @@ class PreferencesDialog(QDialog):
         language = self.combo_language.currentText().strip() or "pl"
         provider = self.combo_onnx_provider.currentText().strip() or "Auto"
         cpu_cores = int(self.spin_cpu_cores.value())
-        openrouter_api_key = self.edit_openrouter_api_key.text().strip() if hasattr(self, "edit_openrouter_api_key") else ""
         mdi_sync_zoom_pan = self.check_mdi_sync_zoom_pan.isChecked()
 
         self.app.apply_preferences(
@@ -12341,8 +12906,8 @@ class PreferencesDialog(QDialog):
             language=language,
             processor_cores=cpu_cores,
             onnx_provider=provider,
-            openrouter_api_key=openrouter_api_key,
             mdi_sync_zoom_pan=mdi_sync_zoom_pan,
+            white_sur_theme_enabled=self.check_white_sur_theme.isChecked(),
         )
         self.app.log("Preferences updated.", "success")
         self.accept()
@@ -13996,10 +14561,13 @@ def get_default_config() -> dict:
         "starnet_stride": 16,
         "dark_mode": True,
         "theme_name": "Fusion Dark",
+        "white_sur_theme_enabled": False,
+        "white_sur_theme_configured": False,
         "accent_name": "Ultra Blue",
         "skyshot_binary": "",
         "skyshot_index": "",
-        "openrouter_api_key": "",
+        "astro_ai_backend_url": DEFAULT_BACKEND_URL,
+        "altair_reasoning_effort": ALTAIR_DEFAULT_REASONING_EFFORT,
         "language": "pl",
         "onboarding_completed": False,
         "mode_selector_tour_completed": False,
@@ -14070,6 +14638,11 @@ def load_config() -> dict:
             config = default_config.copy()
             if isinstance(loaded_config, dict):
                 config.update(loaded_config)
+                # Earlier development builds stored the automatic WhiteSur
+                # detection as if it were an explicit user preference. Treat
+                # that old value as disabled unless the user chose it directly.
+                if not bool(loaded_config.get("white_sur_theme_configured", False)):
+                    config["white_sur_theme_enabled"] = False
                 config["onboarding_completed"] = bool(
                     loaded_config.get("onboarding_completed", True)
                 )
@@ -14113,7 +14686,12 @@ def load_config() -> dict:
             # Discard settings left by previous versions that offered local GGUF.
             config.pop("local_ai_model_file", None)
             config.pop("ai_provider", None)
-            config["openrouter_api_key"] = str(config.get("openrouter_api_key") or "").strip()
+            # Legacy releases stored a personal OpenRouter key locally. Remove it on load;
+            # the desktop client now talks only to the shared Worker gateway.
+            config.pop("openrouter_api_key", None)
+            config["astro_ai_backend_url"] = resolve_backend_url(config.get("astro_ai_backend_url"))
+            if config.get("altair_reasoning_effort") not in ALTAIR_REASONING_EFFORTS:
+                config["altair_reasoning_effort"] = ALTAIR_DEFAULT_REASONING_EFFORT
 
             if not isinstance(config.get("topbar_button_order"), list):
                 config["topbar_button_order"] = []
@@ -14133,10 +14711,24 @@ def load_config() -> dict:
                 if not isinstance(path, str) or not path.strip():
                     continue
                 normalized_path = os.path.abspath(os.path.expanduser(path.strip()))
+                if normalized_path in seen_recent_images:
+                    continue
+                if os.path.isdir(normalized_path):
+                    has_supported_images = any(
+                        os.path.splitext(name)[1].lower() in (".fits", ".fit", ".fts", ".tif", ".tiff")
+                        for _root, _dirs, names in os.walk(normalized_path)
+                        for name in names
+                    )
+                    if not has_supported_images:
+                        continue
+                    seen_recent_images.add(normalized_path)
+                    cleaned_recent_images.append(normalized_path)
+                    if len(cleaned_recent_images) >= 8:
+                        break
+                    continue
                 extension = os.path.splitext(normalized_path)[1].lower()
                 if (
-                    normalized_path in seen_recent_images
-                    or extension not in IMAGE_EXTENSIONS
+                    extension not in IMAGE_EXTENSIONS
                     or not os.path.isfile(normalized_path)
                 ):
                     continue
@@ -14182,7 +14774,7 @@ def save_config(denoise_path: str = None, bg_removal_path: str = None,
                 deconvolution_path: str = None,
                 deconvolution_stellar_path: str = None,
                 deconvolution_object_path: str = None,
-                openrouter_api_key: str = None):
+                ):
     if theme_name is None:
         theme_name = APP_PREFERENCES.get("theme_name", "Fusion Dark" if dark_mode else "Light")
     if language is None:
@@ -14212,8 +14804,6 @@ def save_config(denoise_path: str = None, bg_removal_path: str = None,
     if deconvolution_object_path is None:
         deconvolution_object_path = APP_PREFERENCES.get("deconvolution_object_model_path") or deconvolution_path
     deconvolution_path = deconvolution_stellar_path
-    if openrouter_api_key is None:
-        openrouter_api_key = APP_PREFERENCES.get("openrouter_api_key", "")
     recent_images = APP_PREFERENCES.get("recent_images", [])
 
     config = {
@@ -14229,10 +14819,13 @@ def save_config(denoise_path: str = None, bg_removal_path: str = None,
         "starnet_stride": starnet_stride,
         "dark_mode": dark_mode,
         "theme_name": theme_name,
+        "white_sur_theme_enabled": bool(APP_PREFERENCES.get("white_sur_theme_enabled", False)),
+        "white_sur_theme_configured": bool(APP_PREFERENCES.get("white_sur_theme_configured", False)),
         "accent_name": normalize_accent_name(accent_name),
         "skyshot_binary": APP_PREFERENCES.get("skyshot_binary", ""),
         "skyshot_index": APP_PREFERENCES.get("skyshot_index", ""),
-        "openrouter_api_key": str(openrouter_api_key or "").strip(),
+        "astro_ai_backend_url": resolve_backend_url(APP_PREFERENCES.get("astro_ai_backend_url")),
+        "altair_reasoning_effort": APP_PREFERENCES.get("altair_reasoning_effort", ALTAIR_DEFAULT_REASONING_EFFORT),
         "language": language,
         "onboarding_completed": bool(APP_PREFERENCES.get("onboarding_completed", False)),
         "mode_selector_tour_completed": bool(APP_PREFERENCES.get("mode_selector_tour_completed", False)),
@@ -14266,6 +14859,8 @@ APP_PREFERENCES = {
     "skyshot_binary": "",
     "skyshot_index": "",
     "theme_name": "Fusion Dark",
+    "white_sur_theme_enabled": False,
+    "white_sur_theme_configured": False,
     "accent_name": "Ultra Blue",
     "language": "pl",
     "onboarding_completed": False,
@@ -14277,10 +14872,11 @@ APP_PREFERENCES = {
     "topbar_button_order": [],
     "recent_images": [],
     "mdi_sync_zoom_pan": True,
+    "astro_ai_backend_url": DEFAULT_BACKEND_URL,
     "deepsnr_path": None,
     "deepsnr_args": DEFAULT_DEEPSNR_ARGS,
     "deepsnr_strength": DEFAULT_DEEPSNR_STRENGTH,
-    "openrouter_api_key": "",
+    "altair_reasoning_effort": ALTAIR_DEFAULT_REASONING_EFFORT,
     "deconvolution_model_path": None,
     "deconvolution_stellar_model_path": None,
     "deconvolution_object_model_path": None,
@@ -14638,7 +15234,7 @@ class HistogramWidget(QFrame):
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton and self._zoom_factor > 1.0:
             self._panning = True
-            self._last_pan_x = int(event.x())
+            self._last_pan_x = int(event.position().x())
             self.setCursor(Qt.ClosedHandCursor)
             event.accept()
             return
@@ -14646,8 +15242,8 @@ class HistogramWidget(QFrame):
 
     def mouseMoveEvent(self, event):
         if self._panning:
-            dx = int(event.x()) - self._last_pan_x
-            self._last_pan_x = int(event.x())
+            dx = int(event.position().x()) - self._last_pan_x
+            self._last_pan_x = int(event.position().x())
             if self.width() > 1:
                 view_min, view_max = self._visible_range()
                 span = max(1e-6, view_max - view_min)
@@ -15212,14 +15808,14 @@ class LevelsWidget(QFrame):
 
     def mousePressEvent(self, e):
         left, _top, right, _bottom = self._plot_rect()
-        if e.button() == Qt.MiddleButton and self._zoom_factor > 1.0 and left <= e.x() <= right:
+        if e.button() == Qt.MiddleButton and self._zoom_factor > 1.0 and left <= e.position().x() <= right:
             self._panning = True
-            self._last_pan_x = int(e.x())
+            self._last_pan_x = int(e.position().x())
             self.setCursor(Qt.ClosedHandCursor)
             e.accept()
             return
 
-        x = e.x()
+        x = e.position().x()
         view_min, view_max = self._visible_range()
         view_span = max(1e-6, view_max - view_min)
 
@@ -15241,8 +15837,8 @@ class LevelsWidget(QFrame):
     def mouseMoveEvent(self, e):
         left, _top, right, _bottom = self._plot_rect()
         if self._panning:
-            dx = int(e.x()) - self._last_pan_x
-            self._last_pan_x = int(e.x())
+            dx = int(e.position().x()) - self._last_pan_x
+            self._last_pan_x = int(e.position().x())
             if right > left:
                 view_min, view_max = self._visible_range()
                 span = max(1e-6, view_max - view_min)
@@ -15255,7 +15851,7 @@ class LevelsWidget(QFrame):
             return
 
         if not self.dragging:
-            if self._zoom_factor > 1.0 and left <= e.x() <= right:
+            if self._zoom_factor > 1.0 and left <= e.position().x() <= right:
                 self.setCursor(Qt.OpenHandCursor)
             else:
                 self.unsetCursor()
@@ -15263,7 +15859,7 @@ class LevelsWidget(QFrame):
 
         view_min, view_max = self._visible_range()
         view_span = max(1e-6, view_max - view_min)
-        x = int(np.clip(e.x(), left, right))
+        x = int(np.clip(e.position().x(), left, right))
         val = int(round(view_min + ((x - left) / max(1, right - left)) * view_span))
         val = max(0, min(255, val))
 
@@ -15631,15 +16227,15 @@ class CurvesWidget(QFrame):
 
     def mousePressEvent(self, e):
         left, _top, right, _bottom = self._plot_rect()
-        if e.button() == Qt.MiddleButton and self._zoom_factor > 1.0 and left <= e.x() <= right:
+        if e.button() == Qt.MiddleButton and self._zoom_factor > 1.0 and left <= e.position().x() <= right:
             self._panning = True
-            self._last_pan_x = int(e.x())
+            self._last_pan_x = int(e.position().x())
             self.setCursor(Qt.ClosedHandCursor)
             e.accept()
             return
 
         if e.button() == Qt.RightButton:
-            nearest = self._nearest_point_index(e.x(), e.y())
+            nearest = self._nearest_point_index(e.position().x(), e.position().y())
             if nearest is not None:
                 self.points.pop(nearest)
                 self.drag_index = None
@@ -15649,12 +16245,12 @@ class CurvesWidget(QFrame):
             return
 
         left, top, right, bottom = self._plot_rect()
-        if self.freehand_enabled and e.button() == Qt.LeftButton and left <= e.x() <= right and top <= e.y() <= bottom:
+        if self.freehand_enabled and e.button() == Qt.LeftButton and left <= e.position().x() <= right and top <= e.position().y() <= bottom:
             self.drag_index = None
             self._freehand_drawing = True
             self._freehand_last_input = None
             self._freehand_last_output = None
-            self._apply_freehand_point(e.x(), e.y())
+            self._apply_freehand_point(e.position().x(), e.position().y())
             e.accept()
             return
 
@@ -15662,7 +16258,7 @@ class CurvesWidget(QFrame):
         nearest_dist = 999
         for index, point in enumerate(self.points):
             x, y = self._point_to_pos(point)
-            dist = abs(e.x() - x) + abs(e.y() - y)
+            dist = abs(e.position().x() - x) + abs(e.position().y() - y)
             if dist < nearest_dist:
                 nearest = index
                 nearest_dist = dist
@@ -15670,11 +16266,11 @@ class CurvesWidget(QFrame):
             self.drag_index = nearest
             return
 
-        if left <= e.x() <= right and top <= e.y() <= bottom:
-            input_value = self._pos_to_input(e.x())
+        if left <= e.position().x() <= right and top <= e.position().y() <= bottom:
+            input_value = self._pos_to_input(e.position().x())
             output_value = self._curve_value_at_x(input_value)
             curve_y = self._point_to_pos((input_value, output_value))[1]
-            if abs(e.y() - curve_y) > 18:
+            if abs(e.position().y() - curve_y) > 18:
                 return
             self.points.append((input_value, output_value))
             self.points.sort(key=lambda point: point[0])
@@ -15686,8 +16282,8 @@ class CurvesWidget(QFrame):
     def mouseMoveEvent(self, e):
         left, _top, right, _bottom = self._plot_rect()
         if self._panning:
-            dx = int(e.x()) - self._last_pan_x
-            self._last_pan_x = int(e.x())
+            dx = int(e.position().x()) - self._last_pan_x
+            self._last_pan_x = int(e.position().x())
             if right > left:
                 view_min, view_max = self._visible_range()
                 span = max(1e-6, view_max - view_min)
@@ -15700,17 +16296,17 @@ class CurvesWidget(QFrame):
             return
 
         if self._freehand_drawing:
-            self._apply_freehand_point(e.x(), e.y())
+            self._apply_freehand_point(e.position().x(), e.position().y())
             e.accept()
             return
 
         if self.drag_index is None:
-            if self._zoom_factor > 1.0 and left <= e.x() <= right:
+            if self._zoom_factor > 1.0 and left <= e.position().x() <= right:
                 self.setCursor(Qt.OpenHandCursor)
             else:
                 self.unsetCursor()
             return
-        self.set_point(self.drag_index, self._pos_to_input(e.x()), self._pos_to_value(e.y()))
+        self.set_point(self.drag_index, self._pos_to_input(e.position().x()), self._pos_to_value(e.position().y()))
 
     def mouseReleaseEvent(self, e):
         if self._panning and e.button() == Qt.MiddleButton:
@@ -16581,8 +17177,8 @@ class ZoomRangeSlider(QFrame):
         if event.button() != Qt.LeftButton:
             return super().mousePressEvent(event)
 
-        x = float(event.x())
-        y = float(event.y())
+        x = float(event.position().x())
+        y = float(event.position().y())
         center_y = self.height() * 0.5
         left_handle_x = self._value_to_x(self._left_value)
         right_handle_x = self._value_to_x(self._right_value)
@@ -16615,7 +17211,7 @@ class ZoomRangeSlider(QFrame):
         event.accept()
 
     def mouseMoveEvent(self, event):
-        x = float(event.x())
+        x = float(event.position().x())
         if self._drag_mode == "left":
             self.set_values(self._x_to_value(x), self._right_value, emit_signal=True)
             event.accept()
@@ -20866,6 +21462,7 @@ class AstroApp(QMainWindow):
 
         self._start_deepsnr_progress_dialog()
         self.deepsnr_worker = DeepSNRWorker(command, command_cwd=command_cwd, output_path=output_path)
+        self.deepsnr_worker.progress_signal.connect(self._on_deepsnr_progress)
         self.deepsnr_worker.finished_signal.connect(self._on_deepsnr_finished)
         self.deepsnr_worker.finished.connect(self._on_deepsnr_worker_thread_finished)
         self.deepsnr_worker.start()
@@ -20878,6 +21475,14 @@ class AstroApp(QMainWindow):
         self.progress_dialog.set_current_indeterminate(True, "deepSNR: denoising...")
         self.progress_dialog.progress_overall.setRange(0, 0)
         self.progress_dialog.show()
+
+    def _on_deepsnr_progress(self, stage: str, overall: int, current: int):
+        dialog = getattr(self, "progress_dialog", None)
+        if dialog is None:
+            return
+        dialog.progress_overall.setRange(0, 100)
+        dialog.progress_current.setRange(0, 100)
+        dialog.update_progress(str(stage), int(overall), int(current))
 
     def _stop_deepsnr_progress_dialog(self):
         if hasattr(self, "progress_dialog") and self.progress_dialog is not None:
@@ -20947,7 +21552,6 @@ class AstroApp(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        apply_dialog_window_flags(self)
         self.setAcceptDrops(True)
         self.update_check_result_ready.connect(self._handle_update_result)
         self.update_download_progress.connect(self._handle_update_download_progress)
@@ -21123,6 +21727,11 @@ class AstroApp(QMainWindow):
         self._crop_overlay_active = False
         self._crop_overlay_rect = (0, 0, 1, 1)
         self._crop_overlay_grid = "none"
+        self._crop_compare_enabled_before = None
+        self._crop_overlay_refresh_timer = QTimer(self)
+        self._crop_overlay_refresh_timer.setSingleShot(True)
+        self._crop_overlay_refresh_timer.setInterval(16)
+        self._crop_overlay_refresh_timer.timeout.connect(self._refresh_crop_overlay)
         self._crop_pick_active = False
         self._crop_pick_anchor = None
         self._crop_pick_operation = None
@@ -21190,6 +21799,11 @@ class AstroApp(QMainWindow):
 
         # ---------- config ----------
         config = load_config()
+        self.white_sur_theme_enabled = False
+        APP_PREFERENCES["white_sur_theme_enabled"] = False
+        APP_PREFERENCES["white_sur_theme_configured"] = True
+        globals()["_WHITE_SUR_CONTROLS_ENABLED"] = False
+        apply_dialog_window_flags(self)
 
         self.denoise_model_path = config.get("denoise_model_path")
         self.bg_removal_model_path = config.get("bg_removal_model_path")
@@ -21218,7 +21832,12 @@ class AstroApp(QMainWindow):
         self.skyshot_index = str(config.get("skyshot_index") or "")
         APP_PREFERENCES["skyshot_binary"] = self.skyshot_binary
         APP_PREFERENCES["skyshot_index"] = self.skyshot_index
-        self.openrouter_api_key = str(config.get("openrouter_api_key") or "").strip()
+        self.altair_reasoning_effort = config.get("altair_reasoning_effort", ALTAIR_DEFAULT_REASONING_EFFORT)
+        if self.altair_reasoning_effort not in ALTAIR_REASONING_EFFORTS:
+            self.altair_reasoning_effort = ALTAIR_DEFAULT_REASONING_EFFORT
+        APP_PREFERENCES["altair_reasoning_effort"] = self.altair_reasoning_effort
+        self.astro_ai_backend_url = resolve_backend_url(config.get("astro_ai_backend_url"))
+        APP_PREFERENCES["astro_ai_backend_url"] = self.astro_ai_backend_url
         self.update_api_base = str(
             config.get("update_api_base") or os.environ.get("ASTRO_UPDATE_API_BASE", "https://proksima-centauri.github.io/Astro-Ai-Processor")
         ).strip().rstrip("/")
@@ -21242,7 +21861,6 @@ class AstroApp(QMainWindow):
         APP_PREFERENCES["deepsnr_path"] = self.deepsnr_path
         APP_PREFERENCES["deepsnr_args"] = self.deepsnr_args
         APP_PREFERENCES["deepsnr_strength"] = self.deepsnr_strength
-        APP_PREFERENCES["openrouter_api_key"] = self.openrouter_api_key
         APP_PREFERENCES["deconvolution_model_path"] = self.deconvolution_model_path
         APP_PREFERENCES["deconvolution_stellar_model_path"] = self.deconvolution_stellar_model_path
         APP_PREFERENCES["deconvolution_object_model_path"] = self.deconvolution_object_model_path
@@ -21820,6 +22438,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             self.crop_dialog = CropDialog(self)
             self.crop_dialog.previewRectChanged.connect(self._on_crop_rect_from_dialog_changed)
             self.crop_dialog.gridChanged.connect(self._set_crop_overlay_grid)
+            self.crop_dialog.resetRequested.connect(self._reset_crop_overlay_from_dialog)
             self.crop_dialog.finished.connect(self._on_crop_dialog_closed)
         return self.crop_dialog
 
@@ -23299,8 +23918,6 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             self.preferences_dialog.combo_language.setCurrentText(self.language)
             self.preferences_dialog.spin_cpu_cores.setValue(int(self.processor_cores))
             self.preferences_dialog.combo_onnx_provider.setCurrentText(self.onnx_provider)
-            if hasattr(self.preferences_dialog, "edit_openrouter_api_key"):
-                self.preferences_dialog.edit_openrouter_api_key.setText(self.openrouter_api_key)
         self.preferences_dialog.refresh_select_paths()
         self.preferences_dialog.refresh_joystick_controls()
         self.preferences_dialog.show()
@@ -23474,9 +24091,21 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             return
 
         source_img = self.magic_img.copy()
-        source_pix = np_to_qpixmap(source_img)
+        # Keep the exact rendered image as the comparison baseline. Converting
+        # magic_img directly can show a white frame for linear/FITS sources,
+        # while the viewer already has the correctly stretched display pixmap.
+        visible_source_pix = self.viewer.pix_after or self.viewer.pix_before
+        source_pix = (
+            QPixmap(visible_source_pix)
+            if visible_source_pix is not None and not visible_source_pix.isNull()
+            else np_to_qpixmap(source_img)
+        )
         previous_processed_img = None if self.processed_img is None else self.processed_img.copy()
-        previous_after_pix = None if previous_processed_img is None else np_to_qpixmap(previous_processed_img)
+        previous_after_pix = (
+            QPixmap(visible_source_pix)
+            if visible_source_pix is not None and not visible_source_pix.isNull()
+            else None if previous_processed_img is None else np_to_qpixmap(previous_processed_img)
+        )
         last_preview = {"sigma": None, "magic_img": None, "processed_img": None}
 
         def preview_blur(sigma):
@@ -23785,22 +24414,32 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             self.log("Crop dialog is already open.", "info")
             return
 
+        self._prepare_crop_dialog(dialog)
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
+        self.log("Crop edit mode enabled. Drag handles on image to resize crop.", "info")
+
+    def _prepare_crop_dialog(self, dialog):
         h, w = self.magic_img.shape[:2]
         dialog.set_image(self.magic_img)
+        if self._crop_compare_enabled_before is None:
+            self._crop_compare_enabled_before = bool(self.viewer.compare_enabled)
+        self.viewer.set_compare_enabled(False)
         self._crop_overlay_active = True
         self._crop_pick_active = True
         self._crop_pick_anchor = None
         self._crop_pick_operation = None
         self._crop_pick_start_rect = None
         self._crop_pick_last_point = None
-        self._set_crop_overlay_state(0, 0, w, h)
+        crop_x = crop_y = 0
+        crop_w, crop_h = w, h
+        dialog.set_rect_from_overlay(crop_x, crop_y, crop_w, crop_h)
+        self._set_crop_overlay_state(crop_x, crop_y, crop_w, crop_h)
         self._set_crop_overlay_grid(dialog.combo_grid.currentData())
         self._sync_roi_pick_mode()
-        self._begin_dialog_compare(dialog)
-        dialog.show()
-        dialog.raise_()
-        dialog.activateWindow()
-        self.log("Crop edit mode enabled. Drag handles on image to resize crop.", "info")
+        self._crop_overlay_refresh_timer.stop()
+        self.update_viewer_overlay()
 
     def _apply_crop_rect(self, x: int, y: int, cw: int, ch: int):
         if cw <= 0 or ch <= 0:
@@ -23845,8 +24484,15 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         self._crop_pick_last_point = None
         self._sync_roi_pick_mode()
         self._crop_overlay_active = False
+        self._crop_overlay_refresh_timer.stop()
         self.update_viewer_overlay()
         self._end_dialog_compare(dialog)
+        if self._crop_compare_enabled_before is not None:
+            restore_compare = (
+                bool(self._crop_compare_enabled_before) if result != QDialog.Accepted else False
+            ) or bool(self.compare_dialogs)
+            self._crop_compare_enabled_before = None
+            self.viewer.set_compare_enabled(restore_compare)
 
         if result == QDialog.Accepted:
             self._apply_crop_rect(int(x), int(y), int(cw), int(ch))
@@ -23924,6 +24570,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
 
         action_map = [
             ("action_open", "action_open", "Open"),
+            ("action_open_folder", "action_open_folder", "Open Folder"),
             ("action_save", "action_save", "Save"),
             ("action_save_as", "action_save_as", "Save As..."),
             ("action_exit", "action_exit", "Exit"),
@@ -24174,7 +24821,8 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         self.log(f"Theme switched to {self.theme_name}.")
 
     def apply_preferences(self, theme_name=None, accent_name=None, language=None, processor_cores=None,
-                          onnx_provider=None, openrouter_api_key=None, mdi_sync_zoom_pan=None):
+                          onnx_provider=None, mdi_sync_zoom_pan=None, astro_ai_backend_url=None,
+                          white_sur_theme_enabled=None):
         if theme_name is not None:
             self.theme_name = theme_name
         if accent_name is not None:
@@ -24185,9 +24833,11 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             self.processor_cores = max(1, int(processor_cores))
         if onnx_provider is not None:
             self.onnx_provider = onnx_provider
-        if openrouter_api_key is not None:
-            self.openrouter_api_key = str(openrouter_api_key or "").strip()
-            APP_PREFERENCES["openrouter_api_key"] = self.openrouter_api_key
+        self.white_sur_theme_enabled = False
+        APP_PREFERENCES["white_sur_theme_configured"] = True
+        if astro_ai_backend_url is not None:
+            self.astro_ai_backend_url = resolve_backend_url(astro_ai_backend_url)
+            APP_PREFERENCES["astro_ai_backend_url"] = self.astro_ai_backend_url
         if mdi_sync_zoom_pan is not None:
             self.mdi_sync_zoom_pan = bool(mdi_sync_zoom_pan)
             APP_PREFERENCES["mdi_sync_zoom_pan"] = self.mdi_sync_zoom_pan
@@ -24201,8 +24851,16 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             "language": self.language,
             "processor_cores": self.processor_cores,
             "onnx_provider": self.onnx_provider,
+            "astro_ai_backend_url": self.astro_ai_backend_url,
             "mdi_sync_zoom_pan": self.mdi_sync_zoom_pan,
+            "white_sur_theme_enabled": False,
+            "white_sur_theme_configured": True,
         })
+        dashboard_white_sur = getattr(self, "dashboard_white_sur_checkbox", None)
+        if dashboard_white_sur is not None:
+            dashboard_white_sur.blockSignals(True)
+            dashboard_white_sur.setChecked(self.white_sur_theme_enabled)
+            dashboard_white_sur.blockSignals(False)
 
         app = QApplication.instance()
         if app is not None:
@@ -24228,7 +24886,6 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             processor_cores=self.processor_cores,
             onnx_provider=self.onnx_provider,
             workspaces=getattr(self, "workspaces", []),
-            openrouter_api_key=self.openrouter_api_key,
         )
 
     def save_workspace_config(self):
@@ -24407,7 +25064,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
 
     def show_correction_panels(self):
         if getattr(self, "interface_mode", "pro") == "easy":
-            self._set_easy_stage(6)
+            self._set_easy_stage(7)
             return
         self._restore_easy_stage_dialogs()
         self._begin_dialog_compare(self.correction_dialog)
@@ -24418,7 +25075,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
 
     def show_star_correction_dialog(self):
         if getattr(self, "interface_mode", "pro") == "easy":
-            self._set_easy_stage(6)
+            self._set_easy_stage(7)
             return
         self._restore_easy_stage_dialogs()
         dialog = self._get_star_correction_dialog()
@@ -24457,8 +25114,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
 
     def show_color_calibration_dialog(self):
         if getattr(self, "interface_mode", "pro") == "easy":
-            self._set_easy_stage(2)
-            return
+            self._restore_easy_stage_dialogs()
         dialog = self._get_color_calibration_dialog()
         base_img = self._get_bn_source_image()
         if isinstance(base_img, np.ndarray) and base_img.ndim >= 2:
@@ -24556,9 +25212,19 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         h = max(1, min(img_h - y, int(h)))
         return (x, y, w, h)
 
-    def _crop_hit_test(self, x: int, y: int, threshold: int = 10):
+    def _crop_hit_test(self, x: int, y: int, threshold: int | None = None):
         if not self._crop_overlay_active:
             return "outside"
+        if threshold is None:
+            threshold = 10
+            pixmap_item = getattr(self.viewer.view, "_pixmap_item", None)
+            if pixmap_item is not None and isinstance(self.magic_img, np.ndarray):
+                display_width = max(1, pixmap_item.pixmap().width())
+                image_width = max(1, self.magic_img.shape[1])
+                screen_scale = display_width / float(image_width) * max(
+                    0.01, float(getattr(self.viewer.view, "scale_factor", 1.0))
+                )
+                threshold = int(np.clip(round(14.0 / max(0.01, screen_scale)), 10, 160))
         rx, ry, rw, rh = (int(v) for v in self._crop_overlay_rect)
         left = rx
         top = ry
@@ -24591,6 +25257,25 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         if inside_x and inside_y:
             return "inside"
         return "outside"
+
+    def _reset_crop_overlay_from_dialog(self):
+        dialog = getattr(self, "crop_dialog", None)
+        if dialog is None or not isinstance(self.magic_img, np.ndarray):
+            return
+        height, width = self.magic_img.shape[:2]
+        dialog.set_image(self.magic_img)
+        dialog.reset_defaults()
+        dialog.set_full_image_rect()
+        self._crop_overlay_grid = str(dialog.combo_grid.currentData() or "thirds")
+        self._crop_overlay_rect = (0, 0, width, height)
+        self._crop_overlay_active = True
+        self._crop_pick_active = True
+        self._crop_pick_anchor = None
+        self._crop_pick_operation = None
+        self._crop_pick_start_rect = None
+        self._crop_pick_last_point = None
+        self._crop_overlay_refresh_timer.stop()
+        self.update_viewer_overlay()
 
     def _sync_crop_overlay_to_dialog(self):
         dialog = getattr(self, "crop_dialog", None)
@@ -25197,6 +25882,13 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         self.log("Toolbar order restored to default.")
 
     def _position_whitesur_resize_handles(self):
+        _apply_rounded_window_mask(self)
+        frame = getattr(self, "_white_sur_main_frame", None)
+        if frame is not None:
+            frame.setGeometry(self.rect())
+            frame.setVisible(not self.isMaximized() and not self.isFullScreen())
+            if frame.isVisible():
+                frame.raise_()
         handles = getattr(self, "_whitesur_resize_handles", None)
         if not handles:
             return
@@ -25532,6 +26224,17 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         language_index = self.dashboard_language_combo.findData(self.language)
         if language_index >= 0:
             self.dashboard_language_combo.setCurrentIndex(language_index)
+        self.dashboard_white_sur_checkbox = QCheckBox(
+            self.tr("white_sur_toggle", "Use WhiteSur window decorations"), settings_tab
+        )
+        self.dashboard_white_sur_checkbox.setChecked(self.white_sur_theme_enabled)
+        self.dashboard_white_sur_hint = QLabel(
+            self.tr("white_sur_restart_hint", "Restart the app for this change to take effect."),
+            settings_tab,
+        )
+        self.dashboard_white_sur_hint.setWordWrap(True)
+        self.dashboard_white_sur_checkbox.hide()
+        self.dashboard_white_sur_hint.hide()
         add_setting_row(appearance_layout, self.dashboard_theme_label.text(), self.dashboard_theme_combo)
         add_setting_row(appearance_layout, self.dashboard_accent_label.text(), self.dashboard_accent_combo)
         add_setting_row(appearance_layout, self.dashboard_language_label.text(), self.dashboard_language_combo)
@@ -25608,22 +26311,15 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
 
         ai_layout = add_settings_section("AI Assistant")
         self.dashboard_ai_model_info = QLabel(
-            f"Altair model: NVIDIA Nemotron 3 Super (OpenRouter)\nModel ID: {OPENROUTER_DEFAULT_MODEL}",
+            f"Altair model: NVIDIA Nemotron 3.5 Lightning (OpenRouter)\nModel ID: {OPENROUTER_DEFAULT_MODEL}",
             settings_content,
         )
         self.dashboard_ai_model_info.setWordWrap(True)
-        self.dashboard_api_key = QLineEdit(str(self.openrouter_api_key or ""), settings_content)
-        self.dashboard_api_key.setEchoMode(QLineEdit.Password)
-        self.dashboard_api_key.setPlaceholderText(
-            "Provided by OPENROUTER_API_KEY environment variable"
-            if os.environ.get("OPENROUTER_API_KEY") else "OpenRouter API key"
-        )
         self.dashboard_ai_hint = QLabel(
-            "Altair sends messages and context to OpenRouter. The key is stored in your local application configuration.",
+            "Altair sends recent conversation messages to Astro AI's cloud service, which forwards them to OpenRouter. Local chat history stays on this device. The free model may be unavailable or rate limited.",
             settings_content,
         )
         self.dashboard_ai_hint.setWordWrap(True)
-        add_setting_row(ai_layout, "API key", self.dashboard_api_key)
         ai_layout.addWidget(self.dashboard_ai_model_info)
         ai_layout.addWidget(self.dashboard_ai_hint)
 
@@ -26017,7 +26713,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             smoothing.setRange(0, 100)
             smoothing.setDecimals(1)
             smoothing.setSuffix("%")
-            smoothing.setValue(float(value("smoothing", 20)))
+            smoothing.setValue(float(value("smoothing", 50)))
             add_field("smoothing", "Smoothing", smoothing)
             sample_size = QSpinBox(block["parameters"])
             sample_size.setRange(5, 50)
@@ -26379,9 +27075,13 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             language=str(self.dashboard_language_combo.currentData() or "pl"),
             processor_cores=self.dashboard_cpu_cores.value(),
             onnx_provider=self.dashboard_onnx_provider.currentText(),
-            openrouter_api_key=self.dashboard_api_key.text(),
+            white_sur_theme_enabled=self.dashboard_white_sur_checkbox.isChecked(),
         )
-        self.dashboard_settings_status.setText(self.tr("dashboard_saved", "Settings saved"))
+        self.dashboard_settings_status.setText(
+            self.tr("white_sur_restart_hint", "Restart the app for this change to take effect.")
+            if self.dashboard_white_sur_checkbox.isChecked() != _WHITE_SUR_CONTROLS_ENABLED
+            else self.tr("dashboard_saved", "Settings saved")
+        )
 
     def _clear_application_config(self):
         answer = QMessageBox.question(
@@ -26414,7 +27114,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         self.deepsnr_strength = defaults["deepsnr_strength"]
         self.skyshot_binary = defaults["skyshot_binary"]
         self.skyshot_index = defaults["skyshot_index"]
-        self.openrouter_api_key = defaults["openrouter_api_key"]
+        self.astro_ai_backend_url = resolve_backend_url(defaults.get("astro_ai_backend_url"))
         self.onboarding_completed = False
         self.mode_selector_tour_completed = False
         APP_PREFERENCES["onboarding_completed"] = False
@@ -26430,9 +27130,10 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             language=defaults["language"],
             processor_cores=defaults["processor_cores"],
             onnx_provider=defaults["onnx_provider"],
-            openrouter_api_key=defaults["openrouter_api_key"],
             mdi_sync_zoom_pan=defaults["mdi_sync_zoom_pan"],
+            white_sur_theme_enabled=defaults["white_sur_theme_enabled"],
         )
+        self.dashboard_white_sur_checkbox.setChecked(defaults["white_sur_theme_enabled"])
         APP_PREFERENCES["skyshot_binary"] = self.skyshot_binary
         APP_PREFERENCES["skyshot_index"] = self.skyshot_index
         APP_PREFERENCES["deepsnr_path"] = self.deepsnr_path
@@ -26449,7 +27150,6 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         self._save_topbar_button_order()
         self._refresh_dashboard_settings_paths()
         self._refresh_dashboard_recent_images()
-        self.dashboard_api_key.clear()
         self.dashboard_settings_status.setText(
             self.tr("dashboard_config_cleared", "Configuration defaults restored")
         )
@@ -26525,6 +27225,12 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         self.dashboard_theme_label.setText(self.tr("dashboard_theme", "Theme"))
         self.dashboard_accent_label.setText(self.tr("dashboard_accent", "Accent"))
         self.dashboard_language_label.setText(self.tr("dashboard_language", "Language"))
+        self.dashboard_white_sur_checkbox.setText(
+            self.tr("white_sur_toggle", "Use WhiteSur window decorations")
+        )
+        self.dashboard_white_sur_hint.setText(
+            self.tr("white_sur_restart_hint", "Restart the app for this change to take effect.")
+        )
         self.dashboard_save_settings_button.setText(
             self.tr("dashboard_apply_settings", "Apply settings")
         )
@@ -26564,7 +27270,6 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         self.dashboard_accent_combo.setCurrentText(self.accent_name)
         self.dashboard_cpu_cores.setValue(int(self.processor_cores))
         self.dashboard_onnx_provider.setCurrentText(self.onnx_provider)
-        self.dashboard_api_key.setText(self.openrouter_api_key)
         language_index = self.dashboard_language_combo.findData(self.language)
         if language_index >= 0:
             self.dashboard_language_combo.setCurrentIndex(language_index)
@@ -26582,10 +27287,16 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             if widget is not None and widget is not self.dashboard_empty_label:
                 widget.deleteLater()
 
-        recent_paths = [
-            path for path in getattr(self, "recent_image_paths", [])
-            if isinstance(path, str) and os.path.isfile(path)
-        ][:8]
+        recent_paths = []
+        for path in getattr(self, "recent_image_paths", []):
+            if not isinstance(path, str):
+                continue
+            if os.path.isfile(path) and _is_supported_image_path(path):
+                recent_paths.append(path)
+            elif os.path.isdir(path):
+                if self._folder_image_paths(path):
+                    recent_paths.append(path)
+        recent_paths = recent_paths[:8]
         if not recent_paths:
             self.dashboard_empty_label.setVisible(True)
             layout.addWidget(self.dashboard_empty_label, 0, 0, 1, 2)
@@ -26593,7 +27304,23 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             return
         self.dashboard_empty_label.setVisible(False)
         for index, path in enumerate(recent_paths):
-            card = self._dashboard_image_card(path)
+            if os.path.isdir(path):
+                image_paths = self._folder_image_paths(path)
+                try:
+                    pixmap, auto_stretched = self._dashboard_image_pixmap(image_paths[0])
+                except Exception:
+                    pixmap = QPixmap(168, 96)
+                    pixmap.fill(QColor("#263648"))
+                    auto_stretched = False
+                folder_name = os.path.basename(os.path.normpath(path)) or path
+                card = DashboardImageCard(
+                    path, self.tr("dashboard_folder", "Image folder"),
+                    f"{folder_name} · {len(image_paths)} images", "folder", pixmap,
+                    f"{folder_name} folder {path} fits tiff", auto_stretched, self.dashboard_page,
+                )
+                card.activated.connect(self.open_folder_path)
+            else:
+                card = self._dashboard_image_card(path)
             card.set_dashboard_theme(bool(self.dark_mode))
             self._add_dashboard_card(layout, card, index)
             self.dashboard_cards_by_tab["projects"].append(card)
@@ -26629,9 +27356,47 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             deconvolution_path=self.deconvolution_model_path,
             deconvolution_stellar_path=self.deconvolution_stellar_model_path,
             deconvolution_object_path=self.deconvolution_object_model_path,
-            openrouter_api_key=self.openrouter_api_key,
         )
         self._refresh_dashboard_recent_images()
+
+    def _folder_image_paths(self, folder_path: str):
+        supported = (".fits", ".fit", ".fts", ".tif", ".tiff")
+        found = []
+        for root, _dirs, names in os.walk(folder_path):
+            for name in names:
+                if os.path.splitext(name)[1].lower() in supported:
+                    found.append(os.path.join(root, name))
+        return sorted(found, key=lambda item: item.casefold())
+
+    def open_folder(self):
+        if getattr(self, "interface_mode", "easy") != "pro":
+            return
+        folder = QFileDialog.getExistingDirectory(
+            self, self.tr("open_folder_title", "Open image folder"), self._get_default_dialog_directory(),
+            get_safe_file_dialog_options(),
+        )
+        if folder:
+            self.open_folder_path(folder)
+
+    def open_folder_path(self, folder_path: str):
+        if getattr(self, "interface_mode", "easy") != "pro":
+            return False
+        folder = os.path.abspath(os.path.expanduser(str(folder_path or "")))
+        if not os.path.isdir(folder):
+            self.log(f"Folder not found: {folder}", "warning")
+            return False
+        paths = self._folder_image_paths(folder)
+        if not paths:
+            self.log(f"No FITS or TIFF images found in: {folder}", "warning")
+            return False
+        loaded = 0
+        for path in paths:
+            if self.load_image_from_path(path):
+                loaded += 1
+        if loaded:
+            self._remember_recent_image(folder)
+        self.log(f"Loaded {loaded}/{len(paths)} FITS and TIFF images from folder.", "success" if loaded else "warning")
+        return loaded > 0
 
     def init_ui(self):
         root_widget = QWidget(self)
@@ -26685,6 +27450,9 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         self.action_open = QAction("Open", self)
         self.action_open.setShortcut("Ctrl+O")
         self.action_open.triggered.connect(self.load_image)
+
+        self.action_open_folder = QAction("Open Folder…", self)
+        self.action_open_folder.triggered.connect(self.open_folder)
 
         self.action_save = QAction("Save", self)
         self.action_save.setShortcut("Ctrl+S")
@@ -27207,29 +27975,43 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         )
 
         self.command_palette_button = QPushButton(self)
-        self.command_palette_button.setObjectName("commandPaletteTrigger")
-        self.command_palette_button.setMinimumWidth(220)
-        self.command_palette_button.setMaximumWidth(300)
-        self.command_palette_button.setFixedHeight(30)
-        self.command_palette_button.setCursor(Qt.PointingHandCursor)
-        self.command_palette_button.setIcon(svg_icon_from_text(
-            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">'
-            '<circle cx="10.5" cy="10.5" r="6.5" stroke="#55c6ed" stroke-width="1.8"/>'
-            '<path d="m15.5 15.5 5 5" stroke="#55c6ed" stroke-width="1.8" stroke-linecap="round"/>'
-            '</svg>', 18
-        ))
-        self.command_palette_button.setIconSize(QSize(18, 18))
         self.command_palette_button.setToolTip("Paleta poleceń · Ctrl+Shift+P")
-        self.command_palette_button.setStyleSheet(
-            "QPushButton#commandPaletteTrigger { text-align: left; padding: 0 12px; "
-            "background: #151a24; color: #aab8cb; border: 1px solid #303d53; border-radius: 9px; }"
-            "QPushButton#commandPaletteTrigger:hover { border-color: #55c6ed; color: #e8edf6; }"
-        )
         self.command_palette_button.clicked.connect(lambda _checked=False: self.show_command_palette())
         self._update_command_palette_button_text()
         titlebar = getattr(self, "whitesur_titlebar", None)
         if titlebar is not None:
             titlebar.add_command_palette_button(self.command_palette_button)
+        elif sys.platform.startswith("linux"):
+            # Keep the palette and panel toggles in the existing application
+            # toolbar. Use ordinary Qt controls and leave the native window frame alone.
+            toolbar_layout = self.top_actions_layout
+            if toolbar_layout.count() and toolbar_layout.itemAt(toolbar_layout.count() - 1).spacerItem():
+                toolbar_layout.takeAt(toolbar_layout.count() - 1)
+            toolbar_layout.addStretch(1)
+            toolbar_layout.addWidget(self.command_palette_button)
+            toolbar_layout.addStretch(1)
+            self.linux_panel_controls = QWidget(self.top_actions_bar)
+            linux_panel_layout = QHBoxLayout(self.linux_panel_controls)
+            linux_panel_layout.setContentsMargins(0, 0, 0, 0)
+            linux_panel_layout.setSpacing(4)
+            self.linux_easy_left_panel_button = QToolButton(self.linux_panel_controls)
+            self.linux_easy_left_panel_button.setIcon(svg_icon_from_text(
+                '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="#cbd5e1" stroke-width="1.7"/><path d="M9 4v16" stroke="#70c4e7" stroke-width="2.5"/><path d="m6 10 2 2-2 2" fill="none" stroke="#70c4e7" stroke-width="1.5"/></svg>', 16
+            ))
+            self.linux_easy_left_panel_button.setToolTip(self.tr("easy_hide_left_panel", "Hide workflow panel"))
+            self.linux_easy_left_panel_button.setAccessibleName(self.linux_easy_left_panel_button.toolTip())
+            self.linux_easy_left_panel_button.clicked.connect(self._toggle_easy_left_panel)
+            self.linux_easy_right_panel_button = QToolButton(self.linux_panel_controls)
+            self.linux_easy_right_panel_button.setIcon(svg_icon_from_text(
+                '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="#cbd5e1" stroke-width="1.7"/><path d="M15 4v16" stroke="#70c4e7" stroke-width="2.5"/><path d="m18 10-2 2 2 2" fill="none" stroke="#70c4e7" stroke-width="1.5"/></svg>', 16
+            ))
+            self.linux_easy_right_panel_button.setToolTip(self.tr("easy_hide_right_panel", "Hide assistant panel"))
+            self.linux_easy_right_panel_button.setAccessibleName(self.linux_easy_right_panel_button.toolTip())
+            self.linux_easy_right_panel_button.clicked.connect(self._toggle_easy_right_panel)
+            linux_panel_layout.addWidget(self.linux_easy_left_panel_button)
+            linux_panel_layout.addWidget(self.linux_easy_right_panel_button)
+            toolbar_layout.addWidget(self.linux_panel_controls)
+            self.linux_panel_controls.hide()
 
         self.action_command_palette = QAction("Command Palette", self)
         self.action_command_palette.setShortcut("Ctrl+Shift+P")
@@ -27238,7 +28020,10 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
 
         menu_bar = QMenuBar()
         menu_bar.setObjectName("app_menu_bar")
-        menu_bar.setNativeMenuBar(False)
+        # macOS owns the menu bar at screen level; Windows/Linux render it
+        # inside the application, directly below the window title bar.
+        native_menu_bar = sys.platform == "darwin"
+        menu_bar.setNativeMenuBar(native_menu_bar)
         self.top_menus = {}
 
         def _add_top_menu(key, title, actions):
@@ -27249,6 +28034,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
 
         _add_top_menu("file", "File", [
             self.action_open,
+            self.action_open_folder,
             self.action_save,
             self.action_save_as,
             self.action_dashboard,
@@ -27324,7 +28110,8 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         ])
         self.app_menu_bar = menu_bar
         menu_bar.setVisible(False)
-        root_layout.insertWidget(1 if hasattr(self, "whitesur_titlebar") else 0, menu_bar)
+        if not native_menu_bar:
+            root_layout.insertWidget(1 if hasattr(self, "whitesur_titlebar") else 0, menu_bar)
         top_panel = QFrame()
         self.top_panel = top_panel
         top_panel_layout = QVBoxLayout(top_panel)
@@ -27480,9 +28267,9 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         # Easy mode keeps the same image workspace but guides the user through
         # a short sequence of common processing steps in a dedicated sidebar.
         self.easy_sidebar = self._build_easy_sidebar()
-        self.easy_sidebar.setMinimumWidth(340)
-        self.easy_sidebar.setMaximumWidth(380)
-        self.easy_sidebar.setFixedWidth(360)
+        self.easy_sidebar.setMinimumWidth(400)
+        self.easy_sidebar.setMaximumWidth(460)
+        self.easy_sidebar.setFixedWidth(420)
         self.easy_workspace = QWidget()
         easy_workspace_layout = QVBoxLayout(self.easy_workspace)
         easy_workspace_layout.setContentsMargins(0, 0, 0, 0)
@@ -27627,6 +28414,16 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         root_layout.addWidget(self.screen_stack, 1)
         self.setCentralWidget(root_widget)
         if getattr(self, "_white_sur_titlebar_enabled", False):
+            frame = QFrame(self)
+            frame.setObjectName("whiteSurMainWindowFrame")
+            frame.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+            frame.setAttribute(Qt.WA_NoSystemBackground, True)
+            frame.setFocusPolicy(Qt.NoFocus)
+            frame.setStyleSheet(
+                "QFrame#whiteSurMainWindowFrame { background: transparent; "
+                "border: 1px solid rgba(120, 130, 145, 0.62); border-radius: 14px; }"
+            )
+            self._white_sur_main_frame = frame
             corner = 14
             edge = 6
             handle_specs = {
@@ -27687,13 +28484,14 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
 
         self.easy_stage_names = [
             ("easy_stage_load", "1. Load Image"),
-            ("easy_stage_background", "2. Extract background"),
-            ("easy_stage_calibration", "3. Color calibration"),
+            ("easy_stage_crop", "2. Crop"),
+            ("easy_stage_background", "3. Extract background"),
             ("easy_stage_stretch", "4. Stretch"),
             ("easy_stage_denoise", "5. Denoise"),
-            ("easy_stage_sharpen", "6. Sharpen"),
-            ("easy_stage_correction", "7. Correction"),
-            ("easy_stage_save", "8. Save"),
+            ("easy_stage_star_shrink", "6. Star Shrink"),
+            ("easy_stage_sharpen", "7. Sharpen"),
+            ("easy_stage_correction", "8. Correction"),
+            ("easy_stage_save", "9. Save"),
         ]
         self.easy_current_stage = 0
         self.easy_stage_buttons = []
@@ -27703,7 +28501,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         self._easy_hidden_dialog_buttons = []
         self.easy_progress_row = QHBoxLayout()
         self.easy_progress_row.setContentsMargins(0, 2, 0, 2)
-        self.easy_progress_row.setSpacing(4)
+        self.easy_progress_row.setSpacing(5)
         for index, (key, fallback) in enumerate(self.easy_stage_names):
             button = QPushButton(str(index + 1), panel)
             button.setObjectName("easyStageNumber")
@@ -27776,6 +28574,9 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         if getattr(self, "interface_mode", "easy") != "easy":
             return
         self._restore_easy_stage_dialogs()
+        # A stage-specific panel is discarded below; do not keep its wrapper
+        # while deleteLater() waits for the next Qt event-loop turn.
+        self.easy_sharpen_panel = None
         while self.easy_actions_layout.count():
             item = self.easy_actions_layout.takeAt(0)
             widget = item.widget()
@@ -27785,10 +28586,11 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
 
         stages = [
             ("easy_stage_load", "Load Image", "Choose an astronomical image to begin."),
+            ("easy_stage_crop", "Crop", "Choose the image area by dragging its crop handles."),
             ("easy_stage_background", "Extract background", "Remove gradients and uneven sky background."),
-            ("easy_stage_calibration", "Color calibration", "Set a natural color balance for the image."),
             ("easy_stage_stretch", "Stretch", "Brighten the linear image to reveal its details."),
             ("easy_stage_denoise", "Denoise", "Reduce noise in the image."),
+            ("easy_stage_star_shrink", "Star Shrink", "Reduce the size of stars in the image."),
             ("easy_stage_sharpen", "Sharpen", "Bring out fine image details."),
             ("easy_stage_correction", "Correction", "Make final image and star corrections."),
             ("easy_stage_save", "Save", "Save the finished image or a copy."),
@@ -27801,6 +28603,15 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         if index == 0:
             self._add_easy_action_button("action_open", "Open image")
         elif index == 1:
+            if not isinstance(self.magic_img, np.ndarray):
+                self._add_easy_action_button("action_open", "Load an image first")
+            else:
+                dialog = self._get_crop_dialog()
+                dialog.set_image(self.magic_img)
+                dialog.reset_defaults()
+                self._prepare_crop_dialog(dialog)
+                self._embed_easy_dialog(dialog)
+        elif index == 2:
             dialog = self._get_background_extraction_dialog()
             dialog.btn_run.setEnabled(self.action_background_extraction.isEnabled())
             self._hide_easy_dialog_button(dialog.btn_pick_points)
@@ -27811,22 +28622,6 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
                     parameters=current.get_parameters(), show_dialog=False
                 ),
             )
-            self._embed_easy_dialog(dialog)
-        elif index == 2:
-            dialog = self._get_color_calibration_dialog()
-            base_img = self._get_bn_source_image()
-            if isinstance(base_img, np.ndarray) and base_img.ndim >= 2:
-                dialog.set_image_shape(*base_img.shape[:2])
-            dialog.set_manual_roi_ready(False)
-            dialog.btn_pick_roi.setEnabled(self.action_color_calibration.isEnabled())
-            self._stop_bn_roi_pick()
-            self._bn_overlay_active = False
-            self.update_viewer_overlay()
-            if not self._color_calibration_compare_suppressed:
-                self._compare_enabled_before_color_calibration = bool(self.viewer.compare_enabled)
-            self._color_calibration_compare_suppressed = True
-            self.viewer.set_compare_enabled(False)
-            self._hide_easy_dialog_button(dialog.btn_close)
             self._embed_easy_dialog(dialog)
         elif index == 3:
             if self.magic_img is not None:
@@ -27846,6 +28641,13 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             )
             self._embed_easy_dialog(dialog)
         elif index == 5:
+            if not isinstance(self.magic_img, np.ndarray):
+                self._add_easy_action_button("action_open", "Load an image first")
+            else:
+                dialog = self._get_star_shrink_dialog()
+                self.run_star_shrink(show_dialog=False)
+                self._embed_easy_dialog(dialog)
+        elif index == 6:
             panel = EasySharpenPanel(self.easy_actions_widget)
             panel.btn_apply.setEnabled(isinstance(self.magic_img, np.ndarray))
             panel.btn_apply.clicked.connect(
@@ -27853,14 +28655,14 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             )
             self.easy_sharpen_panel = panel
             self.easy_actions_layout.addWidget(panel)
-        elif index == 6:
+        elif index == 7:
             self._hide_easy_dialog_button(self.correction_dialog.btn_close)
             self._hide_easy_dialog_button(self.correction_dialog.btn_ok)
             self._embed_easy_dialog(self.correction_dialog)
             star_dialog = self._get_star_correction_dialog()
             self._hide_easy_dialog_button(star_dialog.btn_close)
             self._embed_easy_dialog(star_dialog)
-        elif index == 7:
+        elif index == 8:
             self._add_easy_action_button("action_3d_fly", "3D FLY")
             self._add_easy_action_button("action_add_watermark", "Add watermark")
             self._add_easy_action_button("action_save", "Save image")
@@ -27880,10 +28682,14 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
 
     def _refresh_easy_action_availability(self):
         for button, action in getattr(self, "easy_action_buttons", []):
+            if sip.isdeleted(button) or sip.isdeleted(action):
+                continue
             button.setEnabled(action.isEnabled())
         panel = getattr(self, "easy_sharpen_panel", None)
-        if panel is not None:
-            panel.btn_apply.setEnabled(isinstance(self.magic_img, np.ndarray))
+        if panel is not None and not sip.isdeleted(panel):
+            apply_button = getattr(panel, "btn_apply", None)
+            if apply_button is not None and not sip.isdeleted(apply_button):
+                apply_button.setEnabled(isinstance(self.magic_img, np.ndarray))
 
     def _embed_easy_dialog(self, dialog):
         if dialog not in self._easy_dialog_originals:
@@ -27904,6 +28710,13 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
 
     def _restore_easy_stage_dialogs(self):
         for dialog in list(getattr(self, "_easy_embedded_dialogs", [])):
+            if dialog is getattr(self, "star_shrink_dialog", None) and self._star_shrink_context is not None:
+                dialog.reject()
+            if (
+                dialog is getattr(self, "crop_dialog", None)
+                and getattr(self, "_crop_pick_active", False)
+            ):
+                self._on_crop_dialog_closed(QDialog.Rejected)
             self.easy_actions_layout.removeWidget(dialog)
             dialog.hide()
             if dialog is self.levels_window:
@@ -27944,7 +28757,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         self.easy_sidebar.setVisible(self._easy_left_panel_visible)
         label = self.tr("easy_hide_left_panel", "Hide workflow panel") if self._easy_left_panel_visible else self.tr("easy_show_left_panel", "Show workflow panel")
         titlebar = getattr(self, "whitesur_titlebar", None)
-        button = getattr(titlebar, "easy_left_panel_button", None)
+        button = getattr(titlebar, "easy_left_panel_button", None) or getattr(self, "linux_easy_left_panel_button", None)
         if button is not None:
             button.setToolTip(label)
             button.setAccessibleName(label)
@@ -27954,7 +28767,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         self.right_panel.setVisible(self._easy_right_panel_visible)
         label = self.tr("easy_hide_right_panel", "Hide assistant panel") if self._easy_right_panel_visible else self.tr("easy_show_right_panel", "Show assistant panel")
         titlebar = getattr(self, "whitesur_titlebar", None)
-        button = getattr(titlebar, "easy_right_panel_button", None)
+        button = getattr(titlebar, "easy_right_panel_button", None) or getattr(self, "linux_easy_right_panel_button", None)
         if button is not None:
             button.setToolTip(label)
             button.setAccessibleName(label)
@@ -27968,12 +28781,20 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
                 screen_stack.currentWidget() is editor_page
                 and getattr(self, "interface_mode", "easy") == "easy"
             )
+        linux_controls = getattr(self, "linux_panel_controls", None)
+        if linux_controls is not None and screen_stack is not None:
+            linux_controls.setVisible(
+                screen_stack.currentWidget() is editor_page
+                and getattr(self, "interface_mode", "easy") == "easy"
+            )
 
     def set_interface_mode(self, mode):
         if not hasattr(self, "topbar_splitter"):
             return
         easy = str(mode).lower() == "easy"
         self.interface_mode = "easy" if easy else "pro"
+        if hasattr(self, "action_open_folder"):
+            self.action_open_folder.setVisible(not easy)
         active_subwindow = (
             self.mdi_area.activeSubWindow()
             or getattr(self, "_active_image_subwindow", None)
@@ -27985,7 +28806,14 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         self.right_panel.setVisible(easy and self._easy_right_panel_visible if easy else True)
         self.top_panel.setVisible(not easy)
         self.bottom_panel.setVisible(True)
-        self.top_actions_bar.setVisible(not easy)
+        linux_toolbar = sys.platform.startswith("linux")
+        self.top_actions_bar.setVisible(not easy or linux_toolbar)
+        if linux_toolbar:
+            for attr_name in getattr(self, "default_topbar_button_order", ()):
+                button = getattr(self, attr_name, None)
+                if button is not None:
+                    button.setVisible(not easy)
+            self.btn_more_top.setVisible(not easy)
         self.app_menu_bar.setVisible(not easy)
         if easy:
             document_host = self.image_document_hosts.get(active_subwindow)
@@ -27998,7 +28826,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             self.btn_easy_mode.setToolTip(self.tr("mode_easy_active", "Easy mode is active"))
             self.btn_pro_mode.setToolTip(self.tr("mode_pro", "Switch to Pro"))
             self._set_easy_stage(self.easy_current_stage)
-            self.topbar_splitter.setSizes([0, max(500, self.height() - 70)])
+            self.topbar_splitter.setSizes([44 if linux_toolbar else 0, max(500, self.height() - 110)])
         else:
             if self.easy_view_layout.indexOf(active_viewer) >= 0:
                 self.easy_view_layout.removeWidget(active_viewer)
@@ -30025,7 +30853,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
                 if correction_index >= 0:
                     dialog.combo_correction.setCurrentIndex(correction_index)
                 dialog.sld_smoothing.setValue(
-                    max(0, min(100, int(round(float(parameters.get("smoothing", 0.2)) * 100))))
+                    max(0, min(100, int(round(float(parameters.get("smoothing", 0.5)) * 100))))
                 )
                 dialog.spin_sample_size.setValue(int(parameters.get("sample_size", 25)))
                 kernel_index = dialog.combo_rbf_kernel.findText(
@@ -30053,7 +30881,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             params = dict(parameters)
             params.setdefault("method", "AI")
             params.setdefault("correction_type", "Subtraction")
-            params.setdefault("smoothing", 0.2)
+            params.setdefault("smoothing", 0.5)
             params.setdefault("sample_size", 25)
             params.setdefault("rbf_kernel", "thin_plate")
             params.setdefault("spline_order", 3)
@@ -31570,11 +32398,15 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         self.update_viewer_overlay()
 
     def update_viewer_overlay(self):
-        if self.original_img is None:
+        image_size = self._viewer_image_size()
+        if image_size is None:
             return
-        width = self.original_img.shape[1]
-        height = self.original_img.shape[0]
-        render_size = self._overlay_render_size(width, height)
+        width, height = (int(value) for value in image_size)
+        render_size = self._overlay_render_size(
+            width,
+            height,
+            max_side=2048 if self._crop_overlay_active else 4096,
+        )
         overlay, painter = self._new_overlay_canvas(width, height, render_size)
         has_content = False
         for key in ["grid_overlay", "plate_solve_overlay", "object_labels", "constellation_overlay"]:
@@ -31591,7 +32423,9 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
                 self.layer_images[key] = pix
             else:
                 pix = self.layer_images.get(key)
-            if isinstance(pix, QPixmap) and pix.size() == overlay.size():
+            if isinstance(pix, QPixmap) and not pix.isNull():
+                if pix.size() != overlay.size():
+                    pix = pix.scaled(overlay.size(), Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
                 painter.drawPixmap(0, 0, pix)
                 has_content = True
         if self._crop_overlay_active:
@@ -31609,12 +32443,18 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
     def _set_crop_overlay_state(self, x: int, y: int, w: int, h: int):
         self._crop_overlay_rect = (int(x), int(y), int(w), int(h))
         if self._crop_overlay_active:
+            if not self._crop_overlay_refresh_timer.isActive():
+                self._crop_overlay_refresh_timer.start()
+
+    def _refresh_crop_overlay(self):
+        if self._crop_overlay_active:
             self.update_viewer_overlay()
 
     def _set_crop_overlay_grid(self, grid_mode: str):
         self._crop_overlay_grid = str(grid_mode or "none")
         if self._crop_overlay_active:
-            self.update_viewer_overlay()
+            if not self._crop_overlay_refresh_timer.isActive():
+                self._crop_overlay_refresh_timer.start()
 
     def _build_crop_overlay(self, width: int, height: int, render_size=None) -> QPixmap:
         overlay, painter = self._new_overlay_canvas(width, height, render_size)
@@ -31623,21 +32463,41 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         y = max(0, min(height - 1, int(y)))
         w = max(1, min(width - x, int(w)))
         h = max(1, min(height - y, int(h)))
-        rect = QRectF(float(x), float(y), float(w), float(h))
+        selection_rect = QRectF(float(x), float(y), float(w), float(h))
 
         shade = QColor(0, 0, 0, 120)
-        painter.fillRect(QRectF(0.0, 0.0, float(width), max(0.0, rect.top())), shade)
-        painter.fillRect(QRectF(0.0, rect.bottom(), float(width), max(0.0, float(height) - rect.bottom())), shade)
-        painter.fillRect(QRectF(0.0, rect.top(), max(0.0, rect.left()), rect.height()), shade)
-        painter.fillRect(QRectF(rect.right(), rect.top(), max(0.0, float(width) - rect.right()), rect.height()), shade)
+        painter.fillRect(QRectF(0.0, 0.0, float(width), max(0.0, selection_rect.top())), shade)
+        painter.fillRect(QRectF(0.0, selection_rect.bottom(), float(width), max(0.0, float(height) - selection_rect.bottom())), shade)
+        painter.fillRect(QRectF(0.0, selection_rect.top(), max(0.0, selection_rect.left()), selection_rect.height()), shade)
+        painter.fillRect(QRectF(selection_rect.right(), selection_rect.top(), max(0.0, float(width) - selection_rect.right()), selection_rect.height()), shade)
 
-        painter.setPen(QPen(QColor("#00e5ff"), 2))
+        pixmap_item = getattr(self.viewer.view, "_pixmap_item", None)
+        display_width = width
+        if pixmap_item is not None and not pixmap_item.pixmap().isNull():
+            display_width = max(1, pixmap_item.pixmap().width())
+        screen_scale = (display_width / float(max(1, width))) * max(
+            0.01, float(getattr(self.viewer.view, "scale_factor", 1.0))
+        )
+        stroke_width = float(np.clip(4.0 / max(0.01, screen_scale), 8.0, 240.0))
+
+        # Keep the outer edge flush with the image boundary while putting the
+        # stroke inside the image, where it cannot be clipped away.
+        shadow_half = stroke_width
+        left = float(x) + (shadow_half if x <= 0 else 0.0)
+        top = float(y) + (shadow_half if y <= 0 else 0.0)
+        right = float(x + w) - (shadow_half if x + w >= width else 0.0)
+        bottom = float(y + h) - (shadow_half if y + h >= height else 0.0)
+        rect = QRectF(left, top, max(1.0, right - left), max(1.0, bottom - top))
+
+        painter.setPen(QPen(QColor(0, 0, 0, 245), stroke_width * 2.0))
+        painter.drawRect(rect)
+        painter.setPen(QPen(QColor("#00f5ff"), stroke_width))
         painter.drawRect(rect)
         self._draw_crop_grid_overlay(painter, rect)
 
         painter.setBrush(QColor("#00e5ff"))
         painter.setPen(QPen(QColor("#003b42"), 1))
-        handle_size = 12
+        handle_size = float(np.clip(12.0 / max(0.01, screen_scale), 24.0, 360.0))
         handle_half = handle_size / 2.0
         handle_points = {
             "nw": QPointF(rect.left(), rect.top()),
@@ -31722,7 +32582,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         self.preview_override_img = None
         self.apply_full_processing_async()
 
-    def run_star_shrink(self):
+    def run_star_shrink(self, show_dialog=True):
         if self.magic_img is None:
             self.log("Star Shrink skipped: no image loaded.")
             return
@@ -31739,8 +32599,11 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             self.magic_img = self._apply_mask_blend(source_img, shrunk, stars_mask) if stars_mask is not None else shrunk
             self.levels_window.levels_widget.set_image(self.magic_img)
             self.preview_override_img = self.magic_img.copy()
-            self.viewer.set_before(source_pix)
             self.apply_full_processing()
+            # Processing refreshes the viewer's before pixmap with the preview
+            # image, so restore the original after it has produced the after
+            # pixmap. This keeps the compare view on the real before/after pair.
+            self.viewer.set_before(source_pix, clear_after=False)
             last_preview["params"] = (amount, selection)
             last_preview["magic_img"] = self.magic_img.copy()
             last_preview["processed_img"] = None if self.processed_img is None else self.processed_img.copy()
@@ -31759,7 +32622,8 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         self.log("Star Shrink dialog opened.")
         amount, selection = dialog.get_values()
         preview_star_shrink(amount, selection)
-        dialog.exec()
+        if show_dialog:
+            dialog.exec()
 
     def _apply_mask_blend(self, base_img: np.ndarray, layer_img: np.ndarray, mask: np.ndarray) -> np.ndarray:
         if base_img is None:

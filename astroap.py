@@ -171,7 +171,7 @@ def bge(
     type: str = "ai",
     *,
     correction: str = "subtraction",
-    smoothing: float = 20,
+    smoothing: float = 50,
     sample_size: int = 25,
     kernel: str = "thin_plate",
     spline_order: int = 3,
