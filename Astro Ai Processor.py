@@ -4,6 +4,7 @@ import sys
 import os
 import platform
 import json
+import zipfile
 import ast
 import html
 import shutil
@@ -51,6 +52,7 @@ from processing.stretch import stretch_image
 from processing.stacking import integrate_stack_frames, normalize_stack_frames
 from processing.tonal_adjustments import apply_curves_lut, apply_levels, build_curve_lut
 from processing.astro_upscale import AstroUpscaler, available_memory_bytes, rescale_fits_header
+from processing.project_file import PROJECT_EXTENSION, ProjectFileError, load_project, save_project
 
 try:
     import speech_recognition as sr
@@ -436,6 +438,14 @@ I18N = {
     "action_open": {"pl": "Otwórz", "en": "Open"},
     "action_save": {"pl": "Zapisz", "en": "Save"},
     "action_save_as": {"pl": "Zapisz jako...", "en": "Save As..."},
+    "project_save": {"pl": "Zapisz projekt", "en": "Save Project"},
+    "project_save_as": {"pl": "Zapisz projekt jako...", "en": "Save Project As..."},
+    "project_open": {"pl": "Otwórz projekt...", "en": "Open Project..."},
+    "project_filter": {"pl": "Projekt Astro AI Processor (*.aap)", "en": "Astro AI Processor Project (*.aap)"},
+    "project_saved": {"pl": "Projekt zapisano.", "en": "Project saved."},
+    "project_opened": {"pl": "Projekt otwarto.", "en": "Project opened."},
+    "project_save_error": {"pl": "Nie udało się zapisać projektu: {error}", "en": "Could not save project: {error}"},
+    "project_open_error": {"pl": "Nie udało się otworzyć projektu: {error}", "en": "Could not open project: {error}"},
     "action_exit": {"pl": "Wyjście", "en": "Exit"},
     "action_undo": {"pl": "Cofnij", "en": "Undo"},
     "action_redo": {"pl": "Ponów", "en": "Redo"},
@@ -1413,12 +1423,13 @@ def ensure_linux_desktop_entry() -> None:
             "Type=Application",
             "Version=1.0",
             "Name=Astro AI Processor",
-            f"Exec={exec_cmd}",
+            f"Exec={exec_cmd} %F",
             f"Icon={target_icon}",
             "Terminal=false",
             "StartupNotify=true",
             f"StartupWMClass={startup_wm_class}",
             "Categories=Graphics;Science;",
+            "MimeType=application/x-astro-ai-processor-project;",
             "",
         ])
         desktop_path = os.path.join(desktop_dir, "astro-ai-processor.desktop")
@@ -10303,6 +10314,22 @@ class AIAssistantPanel(QFrame):
         return "I can answer general processing recommendations when the analysis payload includes more image metadata."
 
 
+class ProjectSaveWorker(QThread):
+    completed = pyqtSignal(str, str)
+
+    def __init__(self, path, state):
+        super().__init__()
+        self.path = path
+        self.state = state
+
+    def run(self):
+        try:
+            save_project(self.path, self.state)
+            self.completed.emit(self.path, "")
+        except Exception as exc:
+            self.completed.emit(self.path, str(exc))
+
+
 class ImageProcessingWorker(QThread):
     def __init__(self, job: dict):
         super().__init__()
@@ -14846,6 +14873,7 @@ def get_default_config() -> dict:
         "topbar_button_order": [],
         "zoom_controls_position": "bottom",
         "recent_images": [],
+        "recent_projects": [],
         "mdi_sync_zoom_pan": True,
     }
 
@@ -15008,6 +15036,15 @@ def load_config() -> dict:
                 if len(cleaned_recent_images) >= 8:
                     break
             config["recent_images"] = cleaned_recent_images
+            recent_projects = config.get("recent_projects", [])
+            if not isinstance(recent_projects, list):
+                recent_projects = []
+            config["recent_projects"] = [
+                os.path.abspath(os.path.expanduser(item.strip()))
+                for item in recent_projects
+                if isinstance(item, str) and item.strip().lower().endswith(PROJECT_EXTENSION)
+                and os.path.isfile(os.path.expanduser(item.strip()))
+            ][:8]
 
             if source_path in {project_config_path, legacy_config_path} or legacy_plate_config:
                 try:
@@ -15111,6 +15148,7 @@ def save_config(denoise_path: str = None, bg_removal_path: str = None,
         ],
         "zoom_controls_position": APP_PREFERENCES.get("zoom_controls_position", "bottom"),
         "recent_images": list(recent_images)[:8] if isinstance(recent_images, list) else [],
+        "recent_projects": list(APP_PREFERENCES.get("recent_projects", []))[:8],
         "mdi_sync_zoom_pan": bool(APP_PREFERENCES.get("mdi_sync_zoom_pan", True)),
     }
 
@@ -15144,6 +15182,7 @@ APP_PREFERENCES = {
     "topbar_button_order": [],
     "zoom_controls_position": "bottom",
     "recent_images": [],
+    "recent_projects": [],
     "mdi_sync_zoom_pan": True,
     "astro_ai_backend_url": DEFAULT_BACKEND_URL,
     "deepsnr_path": None,
@@ -22025,6 +22064,7 @@ class AstroApp(QMainWindow):
 
         # ---------- save ----------
         self.current_save_path = None
+        self.current_project_path = None
         self.current_image_path = None
         self.image_document_title = None
         self.current_fits_header = None
@@ -22208,12 +22248,14 @@ class AstroApp(QMainWindow):
         self.workspaces = config.get("workspaces", []) if isinstance(config.get("workspaces", []), list) else []
         self.home_folder = str(config.get("home_folder", "") or "").strip()
         self.recent_image_paths = config.get("recent_images", []) if isinstance(config.get("recent_images", []), list) else []
+        self.recent_project_paths = config.get("recent_projects", []) if isinstance(config.get("recent_projects", []), list) else []
         self.topbar_button_order = config.get("topbar_button_order", []) if isinstance(config.get("topbar_button_order", []), list) else []
         if self.home_folder and not os.path.isdir(self.home_folder):
             self.home_folder = ""
         APP_PREFERENCES["workspaces"] = self.workspaces
         APP_PREFERENCES["home_folder"] = self.home_folder
         APP_PREFERENCES["recent_images"] = list(self.recent_image_paths)
+        APP_PREFERENCES["recent_projects"] = list(self.recent_project_paths)
         APP_PREFERENCES["topbar_button_order"] = list(self.topbar_button_order)
         APP_PREFERENCES["accent_name"] = self.accent_name
         APP_PREFERENCES["deepsnr_path"] = self.deepsnr_path
@@ -24931,6 +24973,9 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             ("action_open_folder", "action_open_folder", "Open Folder"),
             ("action_save", "action_save", "Save"),
             ("action_save_as", "action_save_as", "Save As..."),
+            ("action_project_save", "project_save", "Save Project"),
+            ("action_project_save_as", "project_save_as", "Save Project As..."),
+            ("action_project_open", "project_open", "Open Project..."),
             ("action_exit", "action_exit", "Exit"),
             ("action_undo", "action_undo", "Undo"),
             ("action_redo", "action_redo", "Redo"),
@@ -26097,6 +26142,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         self._stop_qthread(getattr(self, "_processing_worker", None), "image processing worker")
         self._stop_qthread(getattr(self, "analysis_worker", None), "image analysis worker")
         self._stop_qthread(getattr(self, "astro_upscale_worker", None), "Astro Upscale worker")
+        self._stop_qthread(getattr(self, "project_save_worker", None), "project save worker")
 
     def _active_background_qthreads(self):
         candidates = [
@@ -26110,6 +26156,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
                 "_processing_worker",
                 "analysis_worker",
                 "astro_upscale_worker",
+                "project_save_worker",
                 "arduino_joystick_worker",
             )
         ]
@@ -27533,6 +27580,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         if zoom_index >= 0:
             self.dashboard_zoom_controls_combo.setCurrentIndex(zoom_index)
         APP_PREFERENCES["recent_images"] = []
+        APP_PREFERENCES["recent_projects"] = []
 
         self.denoise_model_path = defaults["denoise_model_path"]
         self.bg_removal_model_path = defaults["bg_removal_model_path"]
@@ -27554,6 +27602,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         self.workspaces = list(defaults["workspaces"])
         self.home_folder = defaults["home_folder"]
         self.recent_image_paths = list(defaults["recent_images"])
+        self.recent_project_paths = list(defaults["recent_projects"])
         self.topbar_button_order = list(self.default_topbar_button_order)
 
         self.apply_preferences(
@@ -27577,6 +27626,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         APP_PREFERENCES["workspaces"] = self.workspaces
         APP_PREFERENCES["home_folder"] = self.home_folder
         APP_PREFERENCES["recent_images"] = self.recent_image_paths
+        APP_PREFERENCES["recent_projects"] = self.recent_project_paths
         self._apply_saved_topbar_button_order()
         self._ensure_topbar_single_trailing_stretch()
         self._save_topbar_button_order()
@@ -27916,6 +27966,14 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         self.action_save_as = QAction("Save As...", self)
         self.action_save_as.setShortcut("Ctrl+Shift+S")
         self.action_save_as.triggered.connect(self.save_image_as)
+
+        self.action_project_save = QAction("Save Project", self)
+        self.action_project_save.setShortcut("Ctrl+Alt+S")
+        self.action_project_save.triggered.connect(self.save_project)
+        self.action_project_save_as = QAction("Save Project As...", self)
+        self.action_project_save_as.triggered.connect(self.save_project_as)
+        self.action_project_open = QAction("Open Project...", self)
+        self.action_project_open.triggered.connect(self.open_project)
 
         self.action_exit = QAction("Exit", self)
         self.action_exit.setShortcut("Ctrl+Q")
@@ -28495,6 +28553,9 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             self.action_open_folder,
             self.action_save,
             self.action_save_as,
+            self.action_project_save,
+            self.action_project_save_as,
+            self.action_project_open,
             self.action_dashboard,
             self.action_set_home_folder,
             self.action_exit,
@@ -30958,6 +31019,8 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         if not path:
             self.log("Open skipped: path is empty.", "warning")
             return False
+        if str(path).lower().endswith(PROJECT_EXTENSION):
+            return self.open_project_from_path(path)
 
         if getattr(self, "interface_mode", "easy") == "pro" and not self._mdi_loading_document:
             normalized_path = os.path.normcase(os.path.abspath(str(path)))
@@ -31014,6 +31077,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             self.original_img = loaded_img.copy()
             self.processed_img = loaded_img.copy()
             self.current_image_path = path
+            self.current_project_path = None
             self.current_save_path = path
             self.image_document_title = os.path.basename(path)
             self.current_fits_header = loaded_header if _is_fits_path(path) else None
@@ -33409,6 +33473,150 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         if self.preferences_dialog is not None and hasattr(self.preferences_dialog, "refresh_select_paths"):
             self.preferences_dialog.refresh_select_paths()
 
+    def to_project_state(self):
+        state_fields = (
+            "original_img", "_native_loaded_image", "magic_img", "processed_img",
+            "preview_override_img", "display_stretch_mode", "display_stretch_linked",
+            "last_stretch_diagnostics", "layer_images", "layer_titles", "channel_visibility",
+            "layer_visibility", "layer_order", "constellation_lines", "layer_counters",
+            "layer_types", "layer_masks", "selected_layer_key", "mask_pick_target",
+            "mask_pick_tolerance", "current_fits_header", "latest_image_analysis",
+            "analysis_dirty", "plate_solve_object_info", "latest_plate_solve_result",
+            "processing_history", "selected_thumbnail_index", "current_history_node_id",
+            "thumbnail_next_id",
+        )
+        state = {key: getattr(self, key, None) for key in state_fields}
+        overlays = {}
+        for key, pixmap in getattr(self, "overlay_layer_pixmaps", {}).items():
+            if not isinstance(pixmap, QPixmap) or pixmap.isNull():
+                continue
+            image = pixmap.toImage().convertToFormat(QImage.Format.Format_RGBA8888)
+            pointer = image.bits()
+            pointer.setsize(image.sizeInBytes())
+            overlays[key] = np.frombuffer(pointer, dtype=np.uint8).reshape(image.height(), image.width(), 4).copy()
+        state["overlay_layer_pixmaps"] = overlays
+        state["app_version"] = APP_VERSION
+        state["created"] = getattr(self, "project_created_at", None) or None
+        return state
+
+    def apply_project_state(self, state, project_path=""):
+        if not isinstance(state, dict):
+            raise ProjectFileError("Project state is invalid.")
+        fields = (
+            "original_img", "_native_loaded_image", "magic_img", "processed_img",
+            "preview_override_img", "display_stretch_mode", "display_stretch_linked",
+            "last_stretch_diagnostics", "layer_images", "layer_titles", "channel_visibility",
+            "layer_visibility", "layer_order", "constellation_lines", "layer_counters",
+            "layer_types", "layer_masks", "selected_layer_key", "mask_pick_target",
+            "mask_pick_tolerance", "current_fits_header", "latest_image_analysis",
+            "analysis_dirty", "plate_solve_object_info", "latest_plate_solve_result",
+            "processing_history", "selected_thumbnail_index", "current_history_node_id",
+            "thumbnail_next_id",
+        )
+        for key in fields:
+            if key in state:
+                setattr(self, key, state[key])
+        self.overlay_layer_pixmaps = {}
+        for key, rgba in (state.get("overlay_layer_pixmaps") or {}).items():
+            if isinstance(rgba, np.ndarray) and rgba.ndim == 3 and rgba.shape[2] == 4:
+                height, width = rgba.shape[:2]
+                qimage = QImage(rgba.data, width, height, width * 4, QImage.Format.Format_RGBA8888).copy()
+                self.overlay_layer_pixmaps[key] = QPixmap.fromImage(qimage)
+        self.undo_stack = []
+        self.redo_stack = []
+        self.current_image_path = str(project_path or "")
+        self.current_save_path = str(project_path or "")
+        self.image_document_title = os.path.basename(project_path) if project_path else "Project"
+        self.project_created_at = state.get("project_created")
+        if self.magic_img is None:
+            raise ProjectFileError("Project does not contain an editable image.")
+        self.processed_img = state.get("processed_img") if isinstance(state.get("processed_img"), np.ndarray) else self.magic_img.copy()
+        self.viewer.set_before(np_to_qpixmap(self.processed_img))
+        if getattr(self, "levels_window", None) is not None:
+            self.levels_window.levels_widget.set_image(self.magic_img)
+        if hasattr(self, "_update_thumbnails_view"):
+            self._update_thumbnails_view()
+        self.update_menu_actions()
+        self.update_viewer_overlay()
+        self.screen_stack.setCurrentWidget(self.editor_page)
+        if project_path:
+            self._remember_recent_project(project_path)
+        self.log(self.tr("project_opened", "Project opened."), "success")
+
+    def save_project(self):
+        path = getattr(self, "current_project_path", None)
+        if not path:
+            return self.save_project_as()
+        self._write_project(path)
+
+    def save_project_as(self):
+        path, _ = self._show_save_file_dialog(
+            self.tr("project_save_as", "Save Project As..."),
+            self.tr("project_filter", "Astro AI Processor Project (*.aap)"),
+        )
+        path = (path or "").strip()
+        if not path:
+            return
+        if not path.lower().endswith(PROJECT_EXTENSION):
+            path += PROJECT_EXTENSION
+        self._write_project(path)
+
+    def _write_project(self, path):
+        if not isinstance(getattr(self, "magic_img", None), np.ndarray):
+            QMessageBox.warning(self, self.tr("project_save", "Save Project"), self.tr("project_open_error", "No image is loaded.").format(error="No image is loaded."))
+            return False
+        worker = getattr(self, "project_save_worker", None)
+        if worker is not None and worker.isRunning():
+            return False
+        if not getattr(self, "project_created_at", None):
+            self.project_created_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        worker = ProjectSaveWorker(os.path.abspath(path), self.to_project_state())
+        self.project_save_worker = worker
+        worker.completed.connect(self._on_project_save_completed)
+        for name in ("action_project_save", "action_project_save_as", "action_project_open"):
+            action = getattr(self, name, None)
+            if action is not None:
+                action.setEnabled(False)
+        worker.start()
+        return True
+
+    def _on_project_save_completed(self, path, error):
+        for name in ("action_project_save", "action_project_save_as", "action_project_open"):
+            action = getattr(self, name, None)
+            if action is not None:
+                action.setEnabled(True)
+        if error:
+            QMessageBox.critical(self, self.tr("project_save", "Save Project"), self.tr("project_save_error", "Could not save project: {error}").format(error=error))
+            return
+        self.current_project_path = os.path.abspath(path)
+        self._remember_recent_project(self.current_project_path)
+        self.log(self.tr("project_saved", "Project saved."), "success")
+
+    def open_project(self):
+        path, _ = self._show_open_file_dialog(
+            self.tr("project_open", "Open Project..."),
+            self.tr("project_filter", "Astro AI Processor Project (*.aap)"),
+        )
+        if path:
+            self.open_project_from_path(path)
+
+    def open_project_from_path(self, path):
+        try:
+            state = load_project(path)
+            self.apply_project_state(state, path)
+            self.current_project_path = os.path.abspath(path)
+            return True
+        except Exception as exc:
+            QMessageBox.critical(self, self.tr("project_open", "Open Project"), self.tr("project_open_error", "Could not open project: {error}").format(error=exc))
+            return False
+
+    def _remember_recent_project(self, path):
+        normalized = os.path.abspath(os.path.expanduser(str(path)))
+        self.recent_project_paths = [normalized, *(p for p in getattr(self, "recent_project_paths", []) if os.path.abspath(os.path.expanduser(str(p))) != normalized)][:8]
+        APP_PREFERENCES["recent_projects"] = list(self.recent_project_paths)
+        save_config(self.denoise_model_path, self.bg_removal_model_path, self.dark_mode, self.starnet_path, self.starnet_stride)
+        self._refresh_dashboard_recent_images()
+
     def save_image(self):
         if self.processed_img is None:
             self.log("Save skipped: no processed image.", "warning")
@@ -33964,6 +34172,12 @@ def main():
     if not app.windowIcon().isNull():
         window.setWindowIcon(app.windowIcon())
     window.show()
+    startup_project = next(
+        (arg for arg in sys.argv[1:] if str(arg).lower().endswith(PROJECT_EXTENSION) and os.path.isfile(arg)),
+        None,
+    )
+    if startup_project:
+        QTimer.singleShot(0, lambda path=startup_project: window.open_project_from_path(path))
     if splash is not None:
         splash.finish(window)
     if not window.onboarding_completed:

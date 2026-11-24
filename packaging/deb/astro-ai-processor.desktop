@@ -4,6 +4,7 @@ Type=Application
 Name=Astro AI Processor
 Comment=Astrophotography processing application
 Exec=astro-ai-processor %F
+MimeType=application/x-astro-ai-processor-project;
 Icon=/opt/astro-ai-processor/_internal/favicon-32.png
 Terminal=false
 Categories=Graphics;Photography;Science;
