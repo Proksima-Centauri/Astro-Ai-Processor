@@ -446,6 +446,10 @@ I18N = {
     "project_opened": {"pl": "Projekt otwarto.", "en": "Project opened."},
     "project_save_error": {"pl": "Nie udało się zapisać projektu: {error}", "en": "Could not save project: {error}"},
     "project_open_error": {"pl": "Nie udało się otworzyć projektu: {error}", "en": "Could not open project: {error}"},
+    "view_grid_tooltip": {"pl": "Pokaż lub ukryj siatkę współrzędnych", "en": "Show or hide the coordinate grid"},
+    "view_objects_tooltip": {"pl": "Pokaż lub ukryj etykiety obiektów", "en": "Show or hide object labels"},
+    "view_channel_tooltip": {"pl": "Podgląd kanału {channel} w skali szarości", "en": "Preview the {channel} channel in grayscale"},
+    "view_stretch_tooltip": {"pl": "Przełącz Linear, AutoStretch lub Histogram", "en": "Choose Linear, AutoStretch, or Histogram"},
     "action_exit": {"pl": "Wyjście", "en": "Exit"},
     "action_undo": {"pl": "Cofnij", "en": "Undo"},
     "action_redo": {"pl": "Ponów", "en": "Redo"},
@@ -25162,6 +25166,20 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             self._update_easy_stage(self.easy_current_stage)
         if hasattr(self, "viewer"):
             self.viewer.set_language(self.language)
+        if hasattr(self, "combo_stretch_bottom"):
+            self.combo_stretch_bottom.setToolTip(self.tr("view_stretch_tooltip", "Choose Linear, AutoStretch, or Histogram"))
+        if hasattr(self, "btn_grid_overlay_bottom"):
+            label = self.tr("view_grid_tooltip", "Show or hide the coordinate grid")
+            self.btn_grid_overlay_bottom.setToolTip(label)
+            self.btn_grid_overlay_bottom.setAccessibleName(label)
+        if hasattr(self, "btn_object_overlay_bottom"):
+            label = self.tr("view_objects_tooltip", "Show or hide object labels")
+            self.btn_object_overlay_bottom.setToolTip(label)
+            self.btn_object_overlay_bottom.setAccessibleName(label)
+        for channel, button in getattr(self, "bottom_channel_preview_checks", {}).items():
+            label = self.tr("view_channel_tooltip", "Preview channel {channel} in grayscale").format(channel=channel.upper())
+            button.setToolTip(label)
+            button.setAccessibleName(label)
         if (
             hasattr(self, "status_operation_label")
             and self.status_operation_label.text() in {"Gotowy", "Ready"}
@@ -25201,6 +25219,12 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         for button_name, icon_file in icon_files.items():
             button = getattr(self, button_name, None)
             if button is None:
+                continue
+            if button_name == "btn_hist_top":
+                icon_path = os.path.join(get_runtime_base_dir(), "assets", "icons", "view_controls", "histogram.png")
+                if os.path.exists(icon_path):
+                    button.setIcon(QIcon(icon_path))
+                    button.setIconSize(QSize(23, 23))
                 continue
             icon_path = os.path.join(icons_dir, icon_file)
             if os.path.exists(icon_path):
@@ -28877,6 +28901,11 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         self.combo_stretch_bottom.addItem("Linear", "linear")
         self.combo_stretch_bottom.addItem("AutoStretch", "autostretch")
         self.combo_stretch_bottom.addItem("Histogram", "histogram")
+        view_icon_dir = os.path.join(get_runtime_base_dir(), "assets", "icons", "view_controls")
+        self.combo_stretch_bottom.setIconSize(QSize(25, 25))
+        self.combo_stretch_bottom.setItemIcon(0, QIcon(os.path.join(view_icon_dir, "stretch_mode.png")))
+        self.combo_stretch_bottom.setItemIcon(1, QIcon(os.path.join(view_icon_dir, "stretch_mode.png")))
+        self.combo_stretch_bottom.setItemIcon(2, QIcon(os.path.join(view_icon_dir, "histogram.png")))
         self.combo_stretch_bottom.setCurrentIndex(0)
         self._bottom_stretch_mode_pending = "linear"
         self._bottom_stretch_preview_timer = QTimer(self)
@@ -28891,23 +28920,42 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         self.btn_stretch_channels.setToolTip("Channels currently linked; click to unlink")
         self.btn_stretch_channels.toggled.connect(self._on_stretch_channels_link_toggled)
         bottom_layout.addWidget(self.btn_stretch_channels)
-        self.btn_grid_overlay_bottom = QCheckBox("Siatka")
+        self.btn_grid_overlay_bottom = QToolButton()
+        self.btn_grid_overlay_bottom.setCheckable(True)
+        self.btn_grid_overlay_bottom.setAutoRaise(True)
+        self.btn_grid_overlay_bottom.setIcon(QIcon(os.path.join(view_icon_dir, "overlay_grid.png")))
+        self.btn_grid_overlay_bottom.setIconSize(QSize(34, 34))
+        self.btn_grid_overlay_bottom.setFixedSize(40, 40)
+        self.btn_grid_overlay_bottom.setAccessibleName(self.tr("view_grid_tooltip", "Grid overlay"))
         self.btn_grid_overlay_bottom.setEnabled(False)
         self.btn_grid_overlay_bottom.setChecked(True)
-        self.btn_grid_overlay_bottom.setToolTip("Pokaż lub ukryj siatkę współrzędnych")
+        self.btn_grid_overlay_bottom.setToolTip(self.tr("view_grid_tooltip", "Show or hide the coordinate grid"))
         self.btn_grid_overlay_bottom.toggled.connect(self._on_plate_dialog_grid_toggled)
         bottom_layout.addWidget(self.btn_grid_overlay_bottom)
-        self.btn_object_overlay_bottom = QCheckBox("Obiekty")
+        self.btn_object_overlay_bottom = QToolButton()
+        self.btn_object_overlay_bottom.setCheckable(True)
+        self.btn_object_overlay_bottom.setAutoRaise(True)
+        self.btn_object_overlay_bottom.setIcon(QIcon(os.path.join(view_icon_dir, "overlay_objects.png")))
+        self.btn_object_overlay_bottom.setIconSize(QSize(34, 34))
+        self.btn_object_overlay_bottom.setFixedSize(40, 40)
+        self.btn_object_overlay_bottom.setAccessibleName(self.tr("view_objects_tooltip", "Object labels"))
         self.btn_object_overlay_bottom.setEnabled(False)
         self.btn_object_overlay_bottom.setChecked(True)
-        self.btn_object_overlay_bottom.setToolTip("Pokaż lub ukryj etykiety obiektów")
+        self.btn_object_overlay_bottom.setToolTip(self.tr("view_objects_tooltip", "Show or hide object labels"))
         self.btn_object_overlay_bottom.toggled.connect(self._on_plate_dialog_annotate_toggled)
         bottom_layout.addWidget(self.btn_object_overlay_bottom)
         self.bottom_channel_preview_checks = {}
         self._bottom_preview_channel = None
         for channel in ("R", "G", "B"):
-            check = QCheckBox(channel)
-            check.setToolTip(f"Podgląd kanału {channel} w skali szarości")
+            check = QToolButton()
+            check.setCheckable(True)
+            check.setAutoRaise(True)
+            check.setIcon(QIcon(os.path.join(view_icon_dir, f"channel_{channel.lower()}.png")))
+            check.setIconSize(QSize(34, 34))
+            check.setFixedSize(40, 40)
+            channel_tooltip = self.tr("view_channel_tooltip", "Preview channel {channel} in grayscale").format(channel=channel)
+            check.setAccessibleName(channel_tooltip)
+            check.setToolTip(channel_tooltip)
             check.toggled.connect(
                 lambda checked, key=channel.lower(): self._on_bottom_channel_preview_toggled(key, checked)
             )
