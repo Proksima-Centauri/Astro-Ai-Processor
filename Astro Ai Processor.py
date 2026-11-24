@@ -311,7 +311,7 @@ I18N = {
     "dashboard_theme": {"pl": "Motyw", "en": "Theme"},
     "dashboard_accent": {"pl": "Kolor", "en": "Accent"},
     "dashboard_language": {"pl": "Język", "en": "Language"},
-    "dashboard_zoom_controls_position": {"pl": "Położenie kontrolek powiększenia", "en": "Zoom controls position"},
+    "dashboard_zoom_controls_position": {"pl": "Położenie kontrolek podglądu", "en": "Preview controls position"},
     "dashboard_zoom_position_top": {"pl": "Góra obrazu", "en": "Image top"},
     "dashboard_zoom_position_bottom": {"pl": "Dół obrazu", "en": "Image bottom"},
     "dashboard_zoom_position_left": {"pl": "Lewa krawędź obrazu", "en": "Image left edge"},
@@ -25220,12 +25220,6 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             button = getattr(self, button_name, None)
             if button is None:
                 continue
-            if button_name == "btn_hist_top":
-                icon_path = os.path.join(get_runtime_base_dir(), "assets", "icons", "view_controls", "histogram.png")
-                if os.path.exists(icon_path):
-                    button.setIcon(QIcon(icon_path))
-                    button.setIconSize(QSize(23, 23))
-                continue
             icon_path = os.path.join(icons_dir, icon_file)
             if os.path.exists(icon_path):
                 button.setIcon(top_bar_svg_icon_with_accent(icon_path, accent_color))
@@ -28913,7 +28907,6 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         self._bottom_stretch_preview_timer.setInterval(120)
         self._bottom_stretch_preview_timer.timeout.connect(self._apply_bottom_stretch_debounced)
         self.combo_stretch_bottom.activated.connect(self._on_bottom_stretch_selected)
-        bottom_layout.addWidget(self.combo_stretch_bottom)
         self.btn_stretch_channels = QPushButton("Unlink Channels")
         self.btn_stretch_channels.setCheckable(True)
         self.btn_stretch_channels.setChecked(True)
@@ -28931,7 +28924,6 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         self.btn_grid_overlay_bottom.setChecked(True)
         self.btn_grid_overlay_bottom.setToolTip(self.tr("view_grid_tooltip", "Show or hide the coordinate grid"))
         self.btn_grid_overlay_bottom.toggled.connect(self._on_plate_dialog_grid_toggled)
-        bottom_layout.addWidget(self.btn_grid_overlay_bottom)
         self.btn_object_overlay_bottom = QToolButton()
         self.btn_object_overlay_bottom.setCheckable(True)
         self.btn_object_overlay_bottom.setAutoRaise(True)
@@ -28943,7 +28935,6 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         self.btn_object_overlay_bottom.setChecked(True)
         self.btn_object_overlay_bottom.setToolTip(self.tr("view_objects_tooltip", "Show or hide object labels"))
         self.btn_object_overlay_bottom.toggled.connect(self._on_plate_dialog_annotate_toggled)
-        bottom_layout.addWidget(self.btn_object_overlay_bottom)
         self.bottom_channel_preview_checks = {}
         self._bottom_preview_channel = None
         for channel in ("R", "G", "B"):
@@ -28960,7 +28951,25 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
                 lambda checked, key=channel.lower(): self._on_bottom_channel_preview_toggled(key, checked)
             )
             self.bottom_channel_preview_checks[channel.lower()] = check
-            bottom_layout.addWidget(check)
+        self.btn_histogram_overlay = QToolButton()
+        self.btn_histogram_overlay.setAutoRaise(True)
+        self.btn_histogram_overlay.setIcon(QIcon(os.path.join(view_icon_dir, "histogram.png")))
+        self.btn_histogram_overlay.setIconSize(QSize(34, 34))
+        self.btn_histogram_overlay.setFixedSize(40, 40)
+        self.btn_histogram_overlay.setToolTip(self.tr("action_histogram", "Histogram"))
+        self.btn_histogram_overlay.setAccessibleName(self.tr("action_histogram", "Histogram"))
+        self.btn_histogram_overlay.clicked.connect(self.show_histogram_window)
+        overlay_controls = (
+            self.combo_stretch_bottom,
+            self.btn_histogram_overlay,
+            self.btn_grid_overlay_bottom,
+            self.btn_object_overlay_bottom,
+            *self.bottom_channel_preview_checks.values(),
+        )
+        for control in overlay_controls:
+            self.viewer.zoom_controls_layout.addWidget(control)
+        self.viewer._zoom_control_buttons = (*self.viewer._zoom_control_buttons, *overlay_controls)
+        self.viewer.set_zoom_controls_position(self.zoom_controls_position)
         bottom_layout.addStretch(1)
         self.mode_switch = QFrame(bottom_panel)
         self.mode_switch.setObjectName("modeSwitch")
@@ -34126,6 +34135,8 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             self.action_stretch.setEnabled(has_img)
         if hasattr(self, "combo_stretch_bottom"):
             self.combo_stretch_bottom.setEnabled(has_img)
+        if hasattr(self, "btn_histogram_overlay"):
+            self.btn_histogram_overlay.setEnabled(has_img)
         if hasattr(self, "btn_stretch_channels"):
             self.btn_stretch_channels.setEnabled(has_img)
         if hasattr(self, "action_delete_layer"):
