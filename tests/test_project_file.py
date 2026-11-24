@@ -22,7 +22,7 @@ def test_project_round_trip_preserves_float32_arrays(tmp_path):
         "latest_plate_solve_result": {"ra": 12.5, "solution": [1, 2]},
         "layer_titles": {"stars": "Stars"},
     }
-    path = tmp_path / "sample.aap"
+    path = tmp_path / "sample.astroproj"
     save_project(path, state)
     loaded = load_project(path)
     for key in ("original_img", "magic_img"):
@@ -48,21 +48,21 @@ def _write_metadata(path, metadata, extra=None):
 
 
 def test_corrupt_zip_raises_clear_error(tmp_path):
-    path = tmp_path / "broken.aap"
+    path = tmp_path / "broken.astroproj"
     path.write_bytes(b"not a zip")
     with pytest.raises(ProjectFileError, match="ZIP"):
         load_project(path)
 
 
 def test_unknown_format_rejected(tmp_path):
-    path = tmp_path / "unknown.aap"
+    path = tmp_path / "unknown.astroproj"
     _write_metadata(path, {"format": "other", "format_version": 1})
     with pytest.raises(ProjectFileError, match="not an Astro"):
         load_project(path)
 
 
 def test_newer_version_rejected(tmp_path):
-    path = tmp_path / "future.aap"
+    path = tmp_path / "future.astroproj"
     _write_metadata(path, {"format": PROJECT_FORMAT, "format_version": 999})
     with pytest.raises(ProjectFileError, match="newer format"):
         load_project(path)
@@ -70,7 +70,7 @@ def test_newer_version_rejected(tmp_path):
 
 @pytest.mark.parametrize("member", ["../escape.npy", "/absolute.npy", "arrays/../../escape.npy", "C:/escape.npy"])
 def test_zip_slip_rejected(tmp_path, member):
-    path = tmp_path / "unsafe.aap"
+    path = tmp_path / "unsafe.astroproj"
     _write_metadata(path, {"format": PROJECT_FORMAT, "format_version": 1, "state": {}}, {member: b"x"})
     with pytest.raises(ProjectFileError, match="unsafe ZIP path"):
         load_project(path)

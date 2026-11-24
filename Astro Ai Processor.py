@@ -441,7 +441,7 @@ I18N = {
     "project_save": {"pl": "Zapisz projekt", "en": "Save Project"},
     "project_save_as": {"pl": "Zapisz projekt jako...", "en": "Save Project As..."},
     "project_open": {"pl": "Otwórz projekt...", "en": "Open Project..."},
-    "project_filter": {"pl": "Projekt Astro AI Processor (*.aap)", "en": "Astro AI Processor Project (*.aap)"},
+    "project_filter": {"pl": "Projekt Astro AI Processor (*.astroproj)", "en": "Astro AI Processor Project (*.astroproj)"},
     "project_saved": {"pl": "Projekt zapisano.", "en": "Project saved."},
     "project_opened": {"pl": "Projekt otwarto.", "en": "Project opened."},
     "project_save_error": {"pl": "Nie udało się zapisać projektu: {error}", "en": "Could not save project: {error}"},
@@ -33579,7 +33579,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
     def save_project_as(self):
         path, _ = self._show_save_file_dialog(
             self.tr("project_save_as", "Save Project As..."),
-            self.tr("project_filter", "Astro AI Processor Project (*.aap)"),
+            self.tr("project_filter", "Astro AI Processor Project (*.astroproj)"),
         )
         path = (path or "").strip()
         if not path:
@@ -33622,7 +33622,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
     def open_project(self):
         path, _ = self._show_open_file_dialog(
             self.tr("project_open", "Open Project..."),
-            self.tr("project_filter", "Astro AI Processor Project (*.aap)"),
+            self.tr("project_filter", "Astro AI Processor Project (*.astroproj)"),
         )
         if path:
             self.open_project_from_path(path)

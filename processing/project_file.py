@@ -14,7 +14,7 @@ from pathlib import Path, PurePosixPath
 import cv2
 import numpy as np
 
-PROJECT_EXTENSION = ".aap"
+PROJECT_EXTENSION = ".astroproj"
 PROJECT_FORMAT = "astro-ai-processor-project"
 PROJECT_FORMAT_VERSION = 1
 MAX_PROJECT_FILE_BYTES = 2 * 1024 * 1024 * 1024
@@ -65,7 +65,7 @@ def _image_png(array):
 
 
 def save_project(path, state):
-    """Atomically write a state dictionary as a compressed .aap ZIP."""
+    """Atomically write a state dictionary as a compressed .astroproj ZIP."""
     target = Path(path).expanduser().absolute()
     target.parent.mkdir(parents=True, exist_ok=True)
     now = _timestamp()
