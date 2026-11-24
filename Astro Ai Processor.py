@@ -449,7 +449,8 @@ I18N = {
     "view_grid_tooltip": {"pl": "Pokaż lub ukryj siatkę współrzędnych", "en": "Show or hide the coordinate grid"},
     "view_objects_tooltip": {"pl": "Pokaż lub ukryj etykiety obiektów", "en": "Show or hide object labels"},
     "view_channel_tooltip": {"pl": "Podgląd kanału {channel} w skali szarości", "en": "Preview the {channel} channel in grayscale"},
-    "view_stretch_tooltip": {"pl": "Przełącz Linear, AutoStretch lub Histogram", "en": "Choose Linear, AutoStretch, or Histogram"},
+    "view_stretch_to_linear": {"pl": "Przełącz na widok liniowy", "en": "Switch to Linear view"},
+    "view_stretch_to_autostretch": {"pl": "Przełącz na widok AutoStretch", "en": "Switch to AutoStretch view"},
     "action_exit": {"pl": "Wyjście", "en": "Exit"},
     "action_undo": {"pl": "Cofnij", "en": "Undo"},
     "action_redo": {"pl": "Ponów", "en": "Redo"},
@@ -24434,16 +24435,28 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         self.apply_preview_processing()
         self.log("GHS dialog opened.")
 
-    def _on_bottom_stretch_selected(self, index):
-        if not hasattr(self, "combo_stretch_bottom"):
-            return
-        mode = self.combo_stretch_bottom.itemData(index)
-        self._bottom_stretch_mode_pending = str(mode or "linear")
+    def _on_stretch_mode_button_toggled(self, autostretch):
+        self._bottom_stretch_mode_pending = "autostretch" if autostretch else "linear"
         self._update_viewer_status()
         if hasattr(self, "_bottom_stretch_preview_timer") and self._bottom_stretch_preview_timer is not None:
             self._bottom_stretch_preview_timer.start()
         else:
             self.apply_stretch(mode=self._bottom_stretch_mode_pending, commit=False)
+
+    def _sync_stretch_mode_button(self):
+        button = getattr(self, "btn_stretch_mode", None)
+        if button is None:
+            return
+        autostretch = str(getattr(self, "display_stretch_mode", "linear")) == "autostretch"
+        button.blockSignals(True)
+        button.setChecked(autostretch)
+        button.blockSignals(False)
+        tooltip = self.tr(
+            "view_stretch_to_linear" if autostretch else "view_stretch_to_autostretch",
+            "Switch to Linear view" if autostretch else "Switch to AutoStretch view",
+        )
+        button.setToolTip(tooltip)
+        button.setAccessibleName(tooltip)
 
     def _apply_bottom_stretch_debounced(self):
         pending_mode = str(getattr(self, "_bottom_stretch_mode_pending", "linear") or "linear")
@@ -24477,10 +24490,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         self.display_stretch_mode = selected_mode
         set_global_display_stretch(selected_mode, self.display_stretch_linked)
         self._bottom_stretch_mode_pending = selected_mode
-        if hasattr(self, "combo_stretch_bottom"):
-            selected_index = self.combo_stretch_bottom.findData(selected_mode)
-            if selected_index >= 0 and self.combo_stretch_bottom.currentIndex() != selected_index:
-                self.combo_stretch_bottom.setCurrentIndex(selected_index)
+        self._sync_stretch_mode_button()
         self._update_viewer_status()
         mode_label = {"linear": "Linear", "autostretch": "AutoStretch", "histogram": "Histogram"}[selected_mode]
         if bool(commit):
@@ -25121,8 +25131,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             if hasattr(self, "top_actions_bar"):
                 self.top_actions_bar._update_overflow()
 
-        if hasattr(self, "combo_stretch_bottom"):
-            self.combo_stretch_bottom.setToolTip("Stretch mode")
+        self._sync_stretch_mode_button()
         if hasattr(self, "btn_stretch_channels"):
             self.btn_stretch_channels.setToolTip(
                 "Channels currently linked; click to unlink" if self.display_stretch_linked
@@ -25166,8 +25175,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             self._update_easy_stage(self.easy_current_stage)
         if hasattr(self, "viewer"):
             self.viewer.set_language(self.language)
-        if hasattr(self, "combo_stretch_bottom"):
-            self.combo_stretch_bottom.setToolTip(self.tr("view_stretch_tooltip", "Choose Linear, AutoStretch, or Histogram"))
+        self._sync_stretch_mode_button()
         if hasattr(self, "btn_grid_overlay_bottom"):
             label = self.tr("view_grid_tooltip", "Show or hide the coordinate grid")
             self.btn_grid_overlay_bottom.setToolTip(label)
@@ -28890,23 +28898,19 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         bottom_layout.setContentsMargins(10, 6, 10, 6)
         bottom_layout.setSpacing(8)
 
-        self.combo_stretch_bottom = QComboBox()
-        self.combo_stretch_bottom.setToolTip("Stretch mode")
-        self.combo_stretch_bottom.addItem("Linear", "linear")
-        self.combo_stretch_bottom.addItem("AutoStretch", "autostretch")
-        self.combo_stretch_bottom.addItem("Histogram", "histogram")
         view_icon_dir = os.path.join(get_runtime_base_dir(), "assets", "icons", "view_controls")
-        self.combo_stretch_bottom.setIconSize(QSize(25, 25))
-        self.combo_stretch_bottom.setItemIcon(0, QIcon(os.path.join(view_icon_dir, "stretch_mode.png")))
-        self.combo_stretch_bottom.setItemIcon(1, QIcon(os.path.join(view_icon_dir, "stretch_mode.png")))
-        self.combo_stretch_bottom.setItemIcon(2, QIcon(os.path.join(view_icon_dir, "histogram.png")))
-        self.combo_stretch_bottom.setCurrentIndex(0)
+        self.btn_stretch_mode = QToolButton()
+        self.btn_stretch_mode.setCheckable(True)
+        self.btn_stretch_mode.setAutoRaise(True)
+        self.btn_stretch_mode.setIcon(QIcon(os.path.join(view_icon_dir, "stretch_mode.png")))
+        self.btn_stretch_mode.setIconSize(QSize(54, 54))
+        self.btn_stretch_mode.setFixedSize(60, 60)
+        self.btn_stretch_mode.toggled.connect(self._on_stretch_mode_button_toggled)
         self._bottom_stretch_mode_pending = "linear"
         self._bottom_stretch_preview_timer = QTimer(self)
         self._bottom_stretch_preview_timer.setSingleShot(True)
         self._bottom_stretch_preview_timer.setInterval(120)
         self._bottom_stretch_preview_timer.timeout.connect(self._apply_bottom_stretch_debounced)
-        self.combo_stretch_bottom.activated.connect(self._on_bottom_stretch_selected)
         self.btn_stretch_channels = QPushButton("Unlink Channels")
         self.btn_stretch_channels.setCheckable(True)
         self.btn_stretch_channels.setChecked(True)
@@ -28917,8 +28921,8 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         self.btn_grid_overlay_bottom.setCheckable(True)
         self.btn_grid_overlay_bottom.setAutoRaise(True)
         self.btn_grid_overlay_bottom.setIcon(QIcon(os.path.join(view_icon_dir, "overlay_grid.png")))
-        self.btn_grid_overlay_bottom.setIconSize(QSize(34, 34))
-        self.btn_grid_overlay_bottom.setFixedSize(40, 40)
+        self.btn_grid_overlay_bottom.setIconSize(QSize(54, 54))
+        self.btn_grid_overlay_bottom.setFixedSize(60, 60)
         self.btn_grid_overlay_bottom.setAccessibleName(self.tr("view_grid_tooltip", "Grid overlay"))
         self.btn_grid_overlay_bottom.setEnabled(False)
         self.btn_grid_overlay_bottom.setChecked(True)
@@ -28928,8 +28932,8 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         self.btn_object_overlay_bottom.setCheckable(True)
         self.btn_object_overlay_bottom.setAutoRaise(True)
         self.btn_object_overlay_bottom.setIcon(QIcon(os.path.join(view_icon_dir, "overlay_objects.png")))
-        self.btn_object_overlay_bottom.setIconSize(QSize(34, 34))
-        self.btn_object_overlay_bottom.setFixedSize(40, 40)
+        self.btn_object_overlay_bottom.setIconSize(QSize(54, 54))
+        self.btn_object_overlay_bottom.setFixedSize(60, 60)
         self.btn_object_overlay_bottom.setAccessibleName(self.tr("view_objects_tooltip", "Object labels"))
         self.btn_object_overlay_bottom.setEnabled(False)
         self.btn_object_overlay_bottom.setChecked(True)
@@ -28942,8 +28946,8 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             check.setCheckable(True)
             check.setAutoRaise(True)
             check.setIcon(QIcon(os.path.join(view_icon_dir, f"channel_{channel.lower()}.png")))
-            check.setIconSize(QSize(34, 34))
-            check.setFixedSize(40, 40)
+            check.setIconSize(QSize(54, 54))
+            check.setFixedSize(60, 60)
             channel_tooltip = self.tr("view_channel_tooltip", "Preview channel {channel} in grayscale").format(channel=channel)
             check.setAccessibleName(channel_tooltip)
             check.setToolTip(channel_tooltip)
@@ -28954,13 +28958,13 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         self.btn_histogram_overlay = QToolButton()
         self.btn_histogram_overlay.setAutoRaise(True)
         self.btn_histogram_overlay.setIcon(QIcon(os.path.join(view_icon_dir, "histogram.png")))
-        self.btn_histogram_overlay.setIconSize(QSize(34, 34))
-        self.btn_histogram_overlay.setFixedSize(40, 40)
+        self.btn_histogram_overlay.setIconSize(QSize(54, 54))
+        self.btn_histogram_overlay.setFixedSize(60, 60)
         self.btn_histogram_overlay.setToolTip(self.tr("action_histogram", "Histogram"))
         self.btn_histogram_overlay.setAccessibleName(self.tr("action_histogram", "Histogram"))
         self.btn_histogram_overlay.clicked.connect(self.show_histogram_window)
         overlay_controls = (
-            self.combo_stretch_bottom,
+            self.btn_stretch_mode,
             self.btn_histogram_overlay,
             self.btn_grid_overlay_bottom,
             self.btn_object_overlay_bottom,
@@ -29573,10 +29577,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         self.viewer = viewer
         self._restore_image_document_state(self._image_document_states.get(subwindow, {}))
         set_global_display_stretch(self.display_stretch_mode, self.display_stretch_linked)
-        if hasattr(self, "combo_stretch_bottom"):
-            stretch_index = self.combo_stretch_bottom.findData(self.display_stretch_mode)
-            if stretch_index >= 0:
-                self.combo_stretch_bottom.setCurrentIndex(stretch_index)
+        self._sync_stretch_mode_button()
         if hasattr(self, "btn_stretch_channels"):
             self.btn_stretch_channels.blockSignals(True)
             self.btn_stretch_channels.setChecked(bool(self.display_stretch_linked))
@@ -29909,7 +29910,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         self.status_zoom_label.setText(
             f"{'Zoom' if english else 'Powiększenie'}: {zoom * 100:.0f}%"
         )
-        mode = str(self.combo_stretch_bottom.currentData() or "linear")
+        mode = str(getattr(self, "display_stretch_mode", "linear") or "linear")
         self.status_stretch_label.setText(
             f"{'Stretch' if english else 'Tryb stretch'}: {mode}"
         )
@@ -31183,9 +31184,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             self.display_stretch_mode = "linear"
             self._bottom_stretch_mode_pending = "linear"
             set_global_display_stretch("linear", self.display_stretch_linked)
-            stretch_index = self.combo_stretch_bottom.findData("linear")
-            if stretch_index >= 0:
-                self.combo_stretch_bottom.setCurrentIndex(stretch_index)
+            self._sync_stretch_mode_button()
 
             # Aktualizacja widoku
             was_syncing = self._zoom_sync_in_progress
@@ -33600,6 +33599,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         for key in fields:
             if key in state:
                 setattr(self, key, state[key])
+        self._sync_stretch_mode_button()
         self.overlay_layer_pixmaps = {}
         for key, rgba in (state.get("overlay_layer_pixmaps") or {}).items():
             if isinstance(rgba, np.ndarray) and rgba.ndim == 3 and rgba.shape[2] == 4:
@@ -34133,8 +34133,8 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             self.action_deepsnr.setEnabled(has_any_image)
         if hasattr(self, "action_stretch"):
             self.action_stretch.setEnabled(has_img)
-        if hasattr(self, "combo_stretch_bottom"):
-            self.combo_stretch_bottom.setEnabled(has_img)
+        if hasattr(self, "btn_stretch_mode"):
+            self.btn_stretch_mode.setEnabled(has_img)
         if hasattr(self, "btn_histogram_overlay"):
             self.btn_histogram_overlay.setEnabled(has_img)
         if hasattr(self, "btn_stretch_channels"):

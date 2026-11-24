@@ -99,13 +99,20 @@ image_path = os.path.join("tests", "fixtures", "color16_5x5.tiff")
 
 assert window.load_image_from_path(image_path)
 assert window.display_stretch_mode == "linear"
-assert window.combo_stretch_bottom.currentData() == "linear"
+assert not window.btn_stretch_mode.isChecked()
+controls = window.viewer._zoom_control_buttons
+assert len(controls) == 10
+assert all((button.width(), button.height()) == (60, 60) for button in controls)
+assert all(button.iconSize() == module.QSize(54, 54) for button in controls)
 
-window.apply_stretch("autostretch", commit=False)
+window.btn_stretch_mode.click()
+window._bottom_stretch_preview_timer.stop()
+window._apply_bottom_stretch_debounced()
 assert window.display_stretch_mode == "autostretch"
+assert window.btn_stretch_mode.isChecked()
 assert window.load_image_from_path(image_path)
 assert window.display_stretch_mode == "linear"
-assert window.combo_stretch_bottom.currentData() == "linear"
+assert not window.btn_stretch_mode.isChecked()
 assert module.GLOBAL_DISPLAY_STRETCH_MODE == "linear"
 
 window.close()
