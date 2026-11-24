@@ -27793,6 +27793,32 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
                 widget.deleteLater()
 
         recent_paths = []
+        project_card_count = 0
+        for project_path in getattr(self, "recent_project_paths", []):
+            if not isinstance(project_path, str) or not os.path.isfile(project_path):
+                continue
+            try:
+                with zipfile.ZipFile(project_path, "r") as archive:
+                    thumbnail_info = archive.getinfo("thumbnail.png")
+                    if thumbnail_info.file_size > 8 * 1024 * 1024:
+                        continue
+                    thumbnail_data = archive.read(thumbnail_info)
+                pixmap = QPixmap()
+                pixmap.loadFromData(thumbnail_data, "PNG")
+                if pixmap.isNull():
+                    continue
+                title = os.path.splitext(os.path.basename(project_path))[0].replace("_", " ")
+                card = DashboardImageCard(
+                    project_path, title, os.path.basename(project_path), PROJECT_EXTENSION,
+                    pixmap, f"{title} project {project_path}", False, self.dashboard_page,
+                )
+                card.activated.connect(self.open_project_from_path)
+                card.set_dashboard_theme(bool(self.dark_mode))
+                self._add_dashboard_card(layout, card, len(recent_paths))
+                self.dashboard_cards_by_tab["projects"].append(card)
+                project_card_count += 1
+            except Exception:
+                continue
         for path in getattr(self, "recent_image_paths", []):
             if not isinstance(path, str):
                 continue
@@ -27802,13 +27828,14 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
                 if self._folder_image_paths(path):
                     recent_paths.append(path)
         recent_paths = recent_paths[:8]
-        if not recent_paths:
+        if not recent_paths and not project_card_count:
             self.dashboard_empty_label.setVisible(True)
             layout.addWidget(self.dashboard_empty_label, 0, 0, 1, 2)
             self._filter_dashboard_cards()
             return
         self.dashboard_empty_label.setVisible(False)
-        for index, path in enumerate(recent_paths):
+        for image_index, path in enumerate(recent_paths):
+            index = project_card_count + image_index
             if os.path.isdir(path):
                 image_paths = self._folder_image_paths(path)
                 try:
