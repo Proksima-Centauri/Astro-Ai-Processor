@@ -1,7 +1,7 @@
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=Astro AI Processor
+Name=DSOpus
 Comment=Astrophotography processing application
 Exec=astro-ai-processor %F
 MimeType=application/x-astro-ai-processor-project;

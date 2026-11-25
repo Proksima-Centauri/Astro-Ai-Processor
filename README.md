@@ -1,12 +1,12 @@
 
 <p align="center">
-  <img src="favicon-32.png" alt="Astro AI Processor application icon" width="120" />
+  <img src="favicon-32.png" alt="DSOpus application icon" width="120" />
 </p>
-# Astro AI Processor 
+# DSOpus
 
-> **Astro AI Processor is a desktop astrophotography image processing application.**
+> **DSOpus is a desktop astrophotography image processing application.**
 
-Astro AI Processor processes and analyzes astrophotography images with FITS support, astronomy-specific analysis, plate solving, star tools, denoising, and traditional image-editing tools.
+DSOpus processes and analyzes astrophotography images with FITS support, astronomy-specific analysis, plate solving, star tools, denoising, and traditional image-editing tools.
 
 
 This repository keeps its documentation in this README.
@@ -17,11 +17,11 @@ Altair uses the Cloudflare Worker in [`worker/README.md`](worker/README.md). It 
 
 All installations use the production Worker URL by default. Developers can override it with `ASTRO_AI_BACKEND_URL` or the local `astro_ai_backend_url` application setting. Users do not need to configure the service URL or an OpenRouter key. See the Worker guide for local development, requests, availability limits, and anonymous-client security limitations. A distributed desktop client cannot authenticate itself with an embedded shared secret.
 
-## What is Astro AI Processor?
+## What is DSOpus?
 
-Astro AI Processor is a desktop application for processing and analyzing astrophotography images. It combines traditional image-processing tools with astronomy-specific analysis and AI-powered processing features.
+DSOpus is a desktop application for processing and analyzing astrophotography images. It combines traditional image-processing tools with astronomy-specific analysis and AI-powered processing features.
 
-Astro AI Processor combines classic editing tools (Levels, Curves, Histogram, Blur, Crop, Rotate) with astronomy-specific features: star analysis (FWHM/SNR), astronomical plate solving, StarNet++ star removal, deepSNR denoising, frame mosaics, and the 3D FLY animation filter.
+DSOpus combines classic editing tools (Levels, Curves, Histogram, Blur, Crop, Rotate) with astronomy-specific features: star analysis (FWHM/SNR), astronomical plate solving, StarNet++ star removal, deepSNR denoising, frame mosaics, and the 3D FLY animation filter.
 
 ## Key features
 
@@ -188,4 +188,4 @@ Common issues:
 
 ## License
 
-Astro AI Processor is licensed under the GNU General Public License v3.0. See [LICENSE](LICENSE) for details.
+DSOpus is licensed under the GNU General Public License v3.0. See [LICENSE](LICENSE) for details.

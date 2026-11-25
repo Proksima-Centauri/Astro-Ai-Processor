@@ -281,8 +281,8 @@ except ImportError:
 from deep_sky_catalog import DEEP_SKY_CATALOG
 
 I18N = {
-    "app_title": {"pl": "Astro AI Processor", "en": "Astro AI Processor"},
-    "dashboard_title": {"pl": "Witaj w Astro AI Processor", "en": "Welcome to Astro AI Processor"},
+    "app_title": {"pl": "DSOpus", "en": "DSOpus"},
+    "dashboard_title": {"pl": "Witaj w DSOpus", "en": "Welcome to DSOpus"},
     "dashboard_subtitle": {"pl": "Otwórz obraz albo wybierz jeden z ostatnio używanych.", "en": "Open an image or choose one of your recent files."},
     "open_folder_title": {"pl": "Otwórz folder z obrazami", "en": "Open image folder"},
     "dashboard_folder": {"pl": "Folder z obrazami", "en": "Image folder"},
@@ -325,7 +325,7 @@ I18N = {
     "dashboard_clear_config_confirm_title": {"pl": "Wyczyścić konfigurację?", "en": "Clear configuration?"},
     "dashboard_clear_config_confirm_body": {"pl": "Spowoduje to przywrócenie domyślnych ustawień aplikacji, w tym języka, motywu, ścieżek modeli, klucza API i listy ostatnich plików. Nie zostaną usunięte pliki użytkownika. Czy kontynuować?", "en": "This restores the application's default settings, including language, theme, model paths, API key, and recent-file list. User files will not be deleted. Continue?"},
     "dashboard_config_cleared": {"pl": "Przywrócono domyślne ustawienia konfiguracji", "en": "Configuration defaults restored"},
-    "first_run_title": {"pl": "Skonfiguruj Astro AI Processor", "en": "Set up Astro AI Processor"},
+    "first_run_title": {"pl": "Skonfiguruj DSOpus", "en": "Set up DSOpus"},
     "first_run_subtitle": {"pl": "Wybierz język i motyw. Te ustawienia możesz później zmienić.", "en": "Choose a language and theme. You can change them later."},
     "first_run_continue": {"pl": "Dalej", "en": "Continue"},
     "onboarding_next": {"pl": "Dalej", "en": "Next"},
@@ -441,7 +441,7 @@ I18N = {
     "project_save": {"pl": "Zapisz projekt", "en": "Save Project"},
     "project_save_as": {"pl": "Zapisz projekt jako...", "en": "Save Project As..."},
     "project_open": {"pl": "Otwórz projekt...", "en": "Open Project..."},
-    "project_filter": {"pl": "Projekt Astro AI Processor (*.astroproj)", "en": "Astro AI Processor Project (*.astroproj)"},
+    "project_filter": {"pl": "Projekt DSOpus (*.astroproj)", "en": "DSOpus Project (*.astroproj)"},
     "project_saved": {"pl": "Projekt zapisano.", "en": "Project saved."},
     "project_opened": {"pl": "Projekt otwarto.", "en": "Project opened."},
     "project_save_error": {"pl": "Nie udało się zapisać projektu: {error}", "en": "Could not save project: {error}"},
@@ -459,7 +459,7 @@ I18N = {
     "action_new_workspace": {"pl": "Nowa przestrzeń...", "en": "New Workspace..."},
     "action_preferences": {"pl": "Preferencje", "en": "Preferences"},
     "check_updates": {"pl": "Sprawdź aktualizacje", "en": "Check for updates"},
-    "update_available_banner": {"pl": "Dostępna aktualizacja Astro AI Processor: {version}", "en": "Astro AI Processor update available: {version}"},
+    "update_available_banner": {"pl": "Dostępna aktualizacja DSOpus: {version}", "en": "DSOpus update available: {version}"},
     "update_download": {"pl": "Pobierz aktualizację", "en": "Download update"},
     "update_downloading": {"pl": "Pobieranie aktualizacji… {percent}%", "en": "Downloading update… {percent}%"},
     "update_installing": {"pl": "Instalowanie aktualizacji. Aplikacja uruchomi się ponownie.", "en": "Installing update. The app will restart."},
@@ -1421,13 +1421,13 @@ def ensure_linux_desktop_entry() -> None:
             startup_wm_class = os.path.splitext(os.path.basename(sys.executable))[0]
         else:
             exec_cmd = f'python3 "{os.path.abspath(__file__)}"'
-            startup_wm_class = "Astro AI Processor"
+            startup_wm_class = "DSOpus"
 
         desktop_entry = "\n".join([
             "[Desktop Entry]",
             "Type=Application",
             "Version=1.0",
-            "Name=Astro AI Processor",
+            "Name=DSOpus",
             f"Exec={exec_cmd} %F",
             f"Icon={target_icon}",
             "Terminal=false",
@@ -21126,8 +21126,8 @@ class FirstRunSetupDialog(QDialog):
 
     def _update_language(self):
         self.language = str(self.language_combo.currentData() or "pl")
-        self.setWindowTitle(tr_text(self.language, "first_run_title", "Set up Astro AI Processor"))
-        self.title_label.setText(tr_text(self.language, "first_run_title", "Set up Astro AI Processor"))
+        self.setWindowTitle(tr_text(self.language, "first_run_title", "Set up DSOpus"))
+        self.title_label.setText(tr_text(self.language, "first_run_title", "Set up DSOpus"))
         self.subtitle_label.setText(
             tr_text(
                 self.language,
@@ -21956,7 +21956,7 @@ class AstroApp(QMainWindow):
         self.update_download_result_ready.connect(self._handle_update_download_finished)
         self._update_download_in_progress = False
 
-        self.setWindowTitle("Astro AI Processor")
+        self.setWindowTitle("DSOpus")
 
         icon_path = get_app_icon_path()
 
@@ -22593,7 +22593,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             self.update_download_button.setEnabled(True)
             error = str(result.get("error") or "Unknown download error")
             self.update_banner_label.setText(
-                self.tr("update_available_banner", "Astro AI Processor update available: {version}").format(
+                self.tr("update_available_banner", "DSOpus update available: {version}").format(
                     version=info.get("version", "")
                 )
             )
@@ -22611,7 +22611,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
             self.update_download_button.setEnabled(True)
             error = str(exc)
             self.update_banner_label.setText(
-                self.tr("update_available_banner", "Astro AI Processor update available: {version}").format(
+                self.tr("update_available_banner", "DSOpus update available: {version}").format(
                     version=info.get("version", "")
                 )
             )
@@ -22765,7 +22765,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         self._notified_update_versions.add(version)
         if hasattr(self, "update_banner_label"):
             self.update_banner_label.setText(
-                self.tr("update_available_banner", "Astro AI Processor update available: {version}").format(version=version)
+                self.tr("update_available_banner", "DSOpus update available: {version}").format(version=version)
             )
             self.update_banner.show()
         self.log(f"New version available: {version} ({self.update_program_os})", "success")
@@ -23798,7 +23798,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         QMessageBox.about(
             self,
             self.tr("action_about", "About"),
-            f"<h3>Astro AI Processor</h3><p>Version {APP_VERSION}</p>",
+            f"<h3>DSOpus</h3><p>Version {APP_VERSION}</p>",
         )
 
     def apply_correction_from_dialog(self):
@@ -24980,7 +24980,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
                     pass
 
     def _update_ui_language(self):
-        self.setWindowTitle(self.tr("app_title", "Astro AI Processor"))
+        self.setWindowTitle(self.tr("app_title", "DSOpus"))
 
         action_map = [
             ("action_open", "action_open", "Open"),
@@ -26560,7 +26560,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         content_layout = QVBoxLayout(content)
         content_layout.setContentsMargins(0, 0, 0, 0)
         content_layout.setSpacing(10)
-        self.dashboard_title_label = QLabel(self.tr("dashboard_title", "Welcome to Astro AI Processor"), content)
+        self.dashboard_title_label = QLabel(self.tr("dashboard_title", "Welcome to DSOpus"), content)
         self.dashboard_title_label.setWordWrap(True)
         self.dashboard_title_label.setStyleSheet("font-size: 28px; font-weight: 650; color: #f0f3f8;")
         self.dashboard_subtitle_label = QLabel(
@@ -26995,7 +26995,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
         if not hasattr(self, "dashboard_title_label"):
             return
         if not getattr(self, "_dashboard_has_navigated", False):
-            self.dashboard_title_label.setText(self.tr("dashboard_title", "Welcome to Astro AI Processor"))
+            self.dashboard_title_label.setText(self.tr("dashboard_title", "Welcome to DSOpus"))
             self.dashboard_subtitle_label.setText(
                 self.tr("dashboard_subtitle", "Open an image or choose one of your recent files.")
             )
@@ -33636,7 +33636,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
     def save_project_as(self):
         path, _ = self._show_save_file_dialog(
             self.tr("project_save_as", "Save Project As..."),
-            self.tr("project_filter", "Astro AI Processor Project (*.astroproj)"),
+            self.tr("project_filter", "DSOpus Project (*.astroproj)"),
         )
         path = (path or "").strip()
         if not path:
@@ -33679,7 +33679,7 @@ rm -rf "$BACKUP" "$STAGE" "$WORK_DIR"
     def open_project(self):
         path, _ = self._show_open_file_dialog(
             self.tr("project_open", "Open Project..."),
-            self.tr("project_filter", "Astro AI Processor Project (*.astroproj)"),
+            self.tr("project_filter", "DSOpus Project (*.astroproj)"),
         )
         if path:
             self.open_project_from_path(path)
@@ -34245,8 +34245,8 @@ def main():
             pass
     app = QApplication(sys.argv)
     ensure_linux_desktop_entry()
-    app.setApplicationName("Astro AI Processor")
-    app.setApplicationDisplayName("Astro AI Processor")
+    app.setApplicationName("DSOpus")
+    app.setApplicationDisplayName("DSOpus")
     app_icon_path = get_app_icon_path()
     if app_icon_path:
         app_icon = QIcon(app_icon_path)

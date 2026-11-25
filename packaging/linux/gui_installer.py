@@ -10,7 +10,7 @@ from tkinter import BooleanVar, StringVar, Tk, filedialog, messagebox, ttk
 
 
 APP_NAME = "Astro AI Processor"
-APP_DISPLAY_NAME = "Astro AI Processor"
+APP_DISPLAY_NAME = "DSOpus"
 APP_ID = "astro-ai-processor"
 BUNDLE_DIR_NAME = "Astro AI Processor"
 
@@ -118,7 +118,7 @@ class InstallerUI:
 
         ttk.Label(
             frame,
-            text="Instalator Astro AI Processor",
+            text="Instalator DSOpus",
             font=("Sans", 14, "bold"),
         ).grid(row=0, column=0, columnspan=3, sticky="w")
 
@@ -158,7 +158,7 @@ class InstallerUI:
         if src is None:
             messagebox.showerror(
                 "Blad",
-                "Nie znaleziono paczki aplikacji. Instalator musi miec dostep do folderu 'Astro AI Processor'.",
+                "Nie znaleziono paczki aplikacji. Instalator musi miec dostep do folderu aplikacji.",
             )
             return
 
