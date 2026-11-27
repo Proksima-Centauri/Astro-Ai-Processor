@@ -14,47 +14,8 @@ Then open <http://localhost:8000>. Opening `index.html` directly also works, tho
 
 ## Publish with GitHub Pages
 
-1. Push the repository branch containing the `website/` directory to GitHub.
-2. Add a workflow at `.github/workflows/pages.yml` in the repository root. GitHub's branch-based Pages setting does not offer `/website` as a publish folder, so use the Actions workflow below to publish that directory as a Pages artifact.
-3. In **Settings → Pages**, set the source to **GitHub Actions**.
-4. Push the workflow to the selected branch. GitHub Actions will publish the site at the URL shown in Pages settings.
-
-```yaml
-name: Publish website
-
-on:
-  push:
-    branches: [main]
-    paths:
-      - "website/**"
-      - ".github/workflows/pages.yml"
-  workflow_dispatch:
-
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
-concurrency:
-  group: pages
-  cancel-in-progress: true
-
-jobs:
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: website
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
-```
+1. In **Settings → Pages**, set the source to **GitHub Actions**. GitHub's branch-based Pages setting only offers the repository root and `/docs`, so this repository uses the workflow at `.github/workflows/pages.yml` to publish `website/`.
+2. Push changes to `website/` or run **Publish website** from the Actions tab. GitHub Actions will publish the site at the URL shown in Pages settings.
 
 All website links to scripts, styles, images, video, and icons are relative, so the site works under the repository subpath used by GitHub Pages. Windows, Linux, macOS Apple silicon, and macOS Intel buttons link directly to the release assets referenced by the repository's main `index.html`.
 
