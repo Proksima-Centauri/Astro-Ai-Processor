@@ -1,2 +1,2 @@
-** linguist-detectable=false
-**/*.py linguist-detectable=true
+** linguist-documentation=true
+**/*.py linguist-documentation=false
