@@ -1,6 +1,2 @@
-*.html linguist-detectable=false
-*.htm linguist-detectable=false
-*.js linguist-detectable=false
-*.mjs linguist-detectable=false
-*.cjs linguist-detectable=false
-*.jsx linguist-detectable=false
+** linguist-detectable=false
+**/*.py linguist-detectable=true
