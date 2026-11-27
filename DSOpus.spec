@@ -15,7 +15,7 @@ from build_skyshot import build_skyshot
 skyshot_binary, skyshot_binary_notices = build_skyshot(PROJECT_ROOT, Path(_skyshot_build_temp.name))
 
 a = Analysis(
-    ['Astro Ai Processor.py'],
+    ['app.py'],
     pathex=[],
     binaries=[(str(skyshot_binary), ".")],
     datas=[

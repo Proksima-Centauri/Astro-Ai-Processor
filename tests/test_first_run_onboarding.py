@@ -19,7 +19,7 @@ os.environ["HOME"] = home.name
 os.environ["XDG_CONFIG_HOME"] = os.path.join(home.name, "config")
 os.environ["XDG_DATA_HOME"] = os.path.join(home.name, "data")
 
-spec = importlib.util.spec_from_file_location("astro_app_onboarding_test", "Astro Ai Processor.py")
+spec = importlib.util.spec_from_file_location("astro_app_onboarding_test", "app.py")
 module = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = module
 spec.loader.exec_module(module)
@@ -50,7 +50,7 @@ assert window.language == "en"
 assert window.theme_name == "Graphite"
 tour = window._first_run_tour
 assert tour.isVisible()
-assert tour.card_title.text() == "Welcome to Astro AI Processor"
+assert tour.card_title.text() == "Welcome to DSOpus"
 assert tour._highlight_rect.isValid()
 assert tour._accent == module.get_accent_colors(window.accent_name)
 editor_step = next(

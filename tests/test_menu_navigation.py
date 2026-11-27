@@ -16,7 +16,7 @@ home = tempfile.TemporaryDirectory()
 os.environ["HOME"] = home.name
 os.environ["XDG_CONFIG_HOME"] = os.path.join(home.name, "config")
 os.environ["XDG_DATA_HOME"] = os.path.join(home.name, "data")
-spec = importlib.util.spec_from_file_location("astro_app_menu_test", "Astro Ai Processor.py")
+spec = importlib.util.spec_from_file_location("astro_app_menu_test", "app.py")
 module = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = module
 spec.loader.exec_module(module)

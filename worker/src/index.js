@@ -150,7 +150,7 @@ export default {
       const upstream = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
         signal: upstreamAbort.signal,
-        headers: { "authorization": `Bearer ${env.OPENROUTER_API_KEY}`, "content-type": "application/json", "http-referer": env.APP_URL || "https://github.com/Proksima-Centauri/Astro-Ai-Processor", "x-title": "DSOpus" },
+        headers: { "authorization": `Bearer ${env.OPENROUTER_API_KEY}`, "content-type": "application/json", "http-referer": env.APP_URL || "https://github.com/Proksima-Centauri/DSOpus", "x-title": "DSOpus" },
         body: JSON.stringify({
           model: env.OPENROUTER_MODEL || DEFAULT_MODEL,
           messages: body.messages,

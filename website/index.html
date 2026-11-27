@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#070a12">
+  <meta name="description" content="DSOpus is a desktop astrophotography image processing application. Reveal more in your deep-sky images with astronomy-focused tools for Windows and Linux.">
+  <meta property="og:title" content="DSOpus — Beyond What the Eye Can See">
+  <meta property="og:description" content="Professional astrophotography processing. Designed to reveal the hidden beauty of the universe.">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="assets/images/hero.webp">
+  <title>DSOpus — Beyond What the Eye Can See</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="favicon.ico" sizes="any">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="manifest" href="site.webmanifest">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="comparisons.css">
+  <link rel="stylesheet" href="downloads.css">
+</head>
+<body>
+  <header class="site-header" id="top">
+    <a class="wordmark" href="#top" aria-label="DSOpus home"><span class="brand-icon">D<i></i></span><span>DSOpus</span></a>
+    <button class="menu-toggle" aria-label="Open navigation" aria-expanded="false"><span></span><span></span></button>
+    <nav class="navigation" aria-label="Main navigation">
+      <a href="#universe">The universe</a><a href="#tools">Capabilities</a><a href="#explore">Explore</a><a href="#software">The software</a>
+      <a class="nav-download" href="https://github.com/Proksima-Centauri/DSOpus/releases/latest">Download <span>↗</span></a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="hero-image" aria-hidden="true"></div><div class="hero-shade" aria-hidden="true"></div>
+      <div class="hero-copy">
+        <p class="eyebrow"><span class="eyebrow-line"></span> ASTROPHOTOGRAPHY, REIMAGINED</p>
+        <h1 id="hero-title">Beyond what<br>the eye can <em>see.</em></h1>
+        <p class="hero-description">Professional astrophotography processing. Designed to reveal the hidden beauty of the universe.</p>
+        <div class="hero-actions"><a class="button button-primary" href="#download">Download DSOpus <span>↓</span></a><a class="button button-quiet" href="#universe">Discover DSOpus <span>↓</span></a></div>
+      </div>
+      <div class="hero-caption"><span>NGC 281 · The Pacman Nebula</span><span>Processed with DSOpus</span></div>
+      <a class="scroll-cue" href="#universe" aria-label="Scroll to discover"><span></span></a>
+    </section>
+
+    <section class="intro section-pad reveal" id="universe">
+      <p class="eyebrow">A NEW WAY TO SEE</p>
+      <h2>There is more out there.<br><span>Bring it into focus.</span></h2>
+      <p class="intro-text">From the first stretch of a faint nebula to the final color in a galaxy’s arms, DSOpus gives your images a considered place to take shape.</p>
+      <div class="stateline"><span>Built for the night sky</span><i></i><span>Made for the people who look up</span></div>
+    </section>
+
+    <section class="feature-image reveal" aria-label="Deep sky image of NGC 281">
+      <img src="assets/images/hero.webp" alt="Detailed deep-sky view of the Pacman Nebula, NGC 281" loading="lazy">
+      <div class="image-note"><span>01 / THE UNIVERSE</span><span>Light-years, brought closer.</span></div>
+    </section>
+
+    <section class="tools-section section-pad" id="tools">
+      <div class="section-heading reveal"><p class="eyebrow">REVEAL THE INVISIBLE</p><h2>Make the subtle<br><span>unmistakable.</span></h2><p>Purpose-built tools help you draw out faint structure, refine stars, and shape the signal already in your data.</p></div>
+      <div class="comparison-grid" id="comparison-grid" aria-label="Before and after image comparisons"></div>
+      <p class="fine-print reveal">All before-and-after images are genuine project samples. Star Shrink is built into DSOpus. deepSNR and StarNet++ require separately installed command-line tools. Background extraction, sharpening, and Astro Upscale run within DSOpus.</p>
+    </section>
+
+    <section class="intelligence" id="altair">
+      <div class="intelligence-art reveal"><div class="orbit orbit-one"></div><div class="orbit orbit-two"></div><div class="planet"></div><div class="spark s1">✦</div><div class="spark s2">✧</div><div class="art-label">ALTAIR <span>· AI ASSISTANT</span></div></div>
+      <div class="intelligence-copy reveal"><p class="eyebrow">INTELLIGENCE MEETS ASTRONOMY</p><h2>Meet Altair.<br><span>Your astronomy-aware companion.</span></h2><p>Ask questions about your active image, get help with DSOpus workflows, and search your image library by object name. Altair keeps chat history on your computer.</p><p class="fine-print">Altair connects to a hosted service and requires an internet connection. The configured model is NVIDIA Nemotron 3.5 Lightning through OpenRouter. Service availability and provider limits apply.</p><a class="text-link" href="https://github.com/Proksima-Centauri/DSOpus/blob/main/worker/README.md">How Altair works <span>↗</span></a></div>
+    </section>
+
+    <section class="precision section-pad" id="precision">
+      <div class="section-heading centered reveal"><p class="eyebrow">PRECISION PROCESSING</p><h2>Every adjustment,<br><span>with intention.</span></h2><p>From familiar image controls to astronomy-specific analysis, the tools are there when you need them.</p></div>
+      <div class="precision-layout reveal">
+        <div class="precision-photo"><img src="assets/images/background-after.webp" alt="A C11 astrophotography sample after background extraction" loading="lazy"><span class="photo-tag">BACKGROUND EXTRACTION · PROJECT SAMPLE</span></div>
+        <div class="precision-list">
+          <div><span class="index">01</span><h3>Tone &amp; color</h3><p>Levels, Curves, Histogram, GHS, RGB and HSL correction.</p></div>
+          <div><span class="index">02</span><h3>Image analysis</h3><p>Inspect FWHM, signal-to-noise ratio, and background noise.</p></div>
+          <div><span class="index">03</span><h3>Star tools</h3><p>Star Shrink is built in. StarNet++ integration can create starless images when the external CLI is installed.</p></div>
+          <div><span class="index">04</span><h3>More detail</h3><p>Background extraction, sharpening, and non-generative Astro Upscale using Lanczos or bicubic resampling.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="explore-section" id="explore">
+      <div class="explore-intro section-pad reveal"><p class="eyebrow">EXPLORE THE UNIVERSE</p><h2>From a single frame<br>to a wider <em>perspective.</em></h2></div>
+      <div class="explore-grid">
+        <article class="explore-item reveal"><div class="explore-mark">⌖</div><p class="eyebrow">LOCAL PLATE SOLVING</p><h3>Know where<br>you’re looking.</h3><p>Skyshot Solver can identify image coordinates locally using a compatible catalogue index. Existing FITS WCS can also be reused.</p><span class="dependency">Requires Skyshot CLI + catalogue index</span></article>
+        <article class="explore-item reveal"><div class="explore-mark mosaic-mark">▦</div><p class="eyebrow">FRAME MOSAICS</p><h3>Bring frames<br>together.</h3><p>Stitch multiple frames into a larger mosaic inside the desktop application.</p><span class="dependency">Image processing runs locally</span></article>
+        <article class="explore-item explore-video reveal"><video src="assets/3d-fly.mp4" autoplay muted loop playsinline aria-label="DSOpus 3D FLY sample animation"></video><div class="video-wash"></div><div class="video-copy"><p class="eyebrow">3D FLY</p><h3>Move through<br>your image.</h3><p>Build an animated clip from image layers, with optional StarNet++ star removal and optional audio.</p><span class="dependency">Audio attachment requires ffmpeg</span></div></article>
+      </div>
+    </section>
+
+    <section class="software section-pad" id="software">
+      <div class="section-heading reveal"><p class="eyebrow">THE SOFTWARE</p><h2>A dedicated space<br><span>for your sky.</span></h2><p>DSOpus is a desktop application for Windows and Linux, with FITS, PNG, JPG and TIFF support. Explore the live interface in the project repository.</p><a class="text-link" href="https://github.com/Proksima-Centauri/DSOpus">Explore the source on GitHub <span>↗</span></a></div>
+      <div class="software-stage reveal"><img src="assets/images/hero.webp" alt="NGC 281 processed image from the DSOpus project sample set" loading="lazy"><div class="stage-overlay"><span>DSOPUS · IMAGE PROCESSING</span><button class="expand-image" data-gallery="hero" aria-label="View sample image fullscreen">↗</button></div><div class="stage-title">A closer look<br>at the cosmos.</div></div>
+      <p class="fine-print software-note">The repository does not currently include a verified application-interface screenshot. This section shows an authentic project image sample instead.</p>
+    </section>
+
+    <section class="download-section" id="download">
+      <div class="download-glow"></div><div class="download-content reveal"><p class="eyebrow">YOUR NEXT CLEAR NIGHT</p><h2>Make room<br>for <em>wonder.</em></h2><p>Bring your astrophotography workflow a little closer to the stars.</p>
+        <div class="platform-downloads" aria-label="Download DSOpus for your operating system">
+          <a class="platform-link" href="https://github.com/Proksima-Centauri/DSOpus/releases/download/v1.0.1-beta.2/Astro-AI-Processor-windows.zip" aria-label="Download DSOpus for Windows">
+            <svg class="platform-icon windows-icon" viewBox="0 0 40 40" aria-hidden="true"><path d="M3 7.5 17 5.5v13H3z"/><path d="M19 5.2 37 2.5v16H19z"/><path d="M3 20h14v13L3 31z"/><path d="M19 20h18v17.5L19 34.8z"/></svg>
+            <span class="platform-label"><strong>Windows</strong><small>Download <i>↗</i></small></span>
+          </a>
+          <a class="platform-link" href="https://github.com/Proksima-Centauri/DSOpus/releases/download/v1.0.1-beta.2/Astro-AI-Processor-linux.tar.gz" aria-label="Download DSOpus for Linux">
+            <img class="platform-icon linux-icon" src="assets/images/linux.png" alt="" aria-hidden="true">
+            <span class="platform-label"><strong>Linux</strong><small>Download <i>↗</i></small></span>
+          </a>
+          <a class="platform-link" href="https://github.com/Proksima-Centauri/DSOpus/releases/download/v1.0.1-beta.2/Astro-AI-Processor-macos-arm64.zip" aria-label="Download DSOpus for macOS Apple silicon">
+            <svg class="platform-icon apple-icon" viewBox="0 0 40 40" aria-hidden="true"><path d="M25.8 10.4c1.6-1.9 1.4-4.1 1.4-4.1s-2.4.1-4 2c-1.5 1.7-1.3 3.7-1.3 3.7s2.2.2 3.9-1.6ZM31.6 26.7c-1 2.2-1.5 3.2-2.8 5.1-1.8 2.6-4.4 5.8-7.6 5.8-2.8 0-3.5-1.8-7.3-1.8s-4.6 1.8-7.3 1.8c-3.1 0-5.5-2.9-7.3-5.5-5-7.2-5.5-15.7-2.4-20.2 2.2-3.2 5.7-5 9-5 3.4 0 5.5 1.8 8.2 1.8 2.6 0 4.2-1.8 8.2-1.8 3 0 6.2 1.6 8.4 4.3-7.4 4.1-6.2 14.7.9 15.5Z" transform="translate(4 1) scale(.82)"/></svg>
+            <span class="platform-label"><strong>macOS <small class="architecture">Apple silicon</small></strong><small>Download <i>↗</i></small></span>
+          </a>
+          <a class="platform-link" href="https://github.com/Proksima-Centauri/DSOpus/releases/download/v1.0.1-beta.2/Astro-AI-Processor-macos-intel.zip" aria-label="Download DSOpus for macOS Intel">
+            <svg class="platform-icon apple-icon" viewBox="0 0 40 40" aria-hidden="true"><path d="M25.8 10.4c1.6-1.9 1.4-4.1 1.4-4.1s-2.4.1-4 2c-1.5 1.7-1.3 3.7-1.3 3.7s2.2.2 3.9-1.6ZM31.6 26.7c-1 2.2-1.5 3.2-2.8 5.1-1.8 2.6-4.4 5.8-7.6 5.8-2.8 0-3.5-1.8-7.3-1.8s-4.6 1.8-7.3 1.8c-3.1 0-5.5-2.9-7.3-5.5-5-7.2-5.5-15.7-2.4-20.2 2.2-3.2 5.7-5 9-5 3.4 0 5.5 1.8 8.2 1.8 2.6 0 4.2-1.8 8.2-1.8 3 0 6.2 1.6 8.4 4.3-7.4 4.1-6.2 14.7.9 15.5Z" transform="translate(4 1) scale(.82)"/></svg>
+            <span class="platform-label"><strong>macOS <small class="architecture">Intel</small></strong><small>Download <i>↗</i></small></span>
+          </a>
+        </div>
+        <span class="download-meta">Direct downloads from GitHub Releases</span></div>
+      <div class="download-orbit" aria-hidden="true"><div class="download-core"></div><i></i></div>
+    </section>
+  </main>
+  <footer class="site-footer"><a class="wordmark" href="#top"><span class="brand-icon">D<i></i></span><span>DSOpus</span></a><p>For the love of the night sky.</p><div><a href="https://github.com/Proksima-Centauri/DSOpus">GitHub</a><a href="https://github.com/Proksima-Centauri/DSOpus/blob/main/LICENSE">GPL-3.0</a><a href="https://github.com/Proksima-Centauri/DSOpus/blob/main/README.md">Documentation</a></div><small>© 2026 DSOpus contributors</small></footer>
+  <dialog class="gallery-dialog" aria-label="Image viewer"><button class="gallery-close" aria-label="Close fullscreen image">×</button><button class="gallery-prev" aria-label="Previous image">←</button><figure><img src="" alt=""><figcaption></figcaption></figure><button class="gallery-next" aria-label="Next image">→</button></dialog>
+  <script src="script.js" defer></script>
+</body>
+</html>

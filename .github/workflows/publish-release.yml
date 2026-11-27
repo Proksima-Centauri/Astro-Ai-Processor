@@ -23,7 +23,7 @@ jobs:
       - id: version
         shell: bash
         run: |
-          version=$(python -c 'import ast; tree=ast.parse(open("Astro Ai Processor.py", encoding="utf-8").read()); node=next(n for n in tree.body if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "APP_VERSION" for t in n.targets)); print(ast.literal_eval(node.value))')
+          version=$(python -c 'import ast; tree=ast.parse(open("app.py", encoding="utf-8").read()); node=next(n for n in tree.body if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "APP_VERSION" for t in n.targets)); print(ast.literal_eval(node.value))')
           if [[ -z "$version" ]]; then
             echo "APP_VERSION was not found" >&2
             exit 1
@@ -72,7 +72,7 @@ jobs:
           python -m pip install -r requirements.txt
           python -m pip install -r requirements-dev.txt pyinstaller
       - name: Build application
-        run: pyinstaller --noconfirm --clean "Astro Ai Processor.spec"
+        run: pyinstaller --noconfirm --clean "DSOpus.spec"
       - name: Package Windows build
         if: matrix.platform == 'windows'
         shell: pwsh

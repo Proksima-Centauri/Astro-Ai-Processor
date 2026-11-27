@@ -10,7 +10,7 @@ def test_command_palette_fuzzy_matching_ranks_best_match_first():
 import importlib.util
 import sys
 
-spec = importlib.util.spec_from_file_location("astro_app_command_palette_test", "Astro Ai Processor.py")
+spec = importlib.util.spec_from_file_location("astro_app_command_palette_test", "app.py")
 module = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = module
 spec.loader.exec_module(module)
@@ -56,7 +56,7 @@ os.environ["HOME"] = home.name
 os.environ["XDG_CONFIG_HOME"] = os.path.join(home.name, "config")
 os.environ["XDG_DATA_HOME"] = os.path.join(home.name, "data")
 
-spec = importlib.util.spec_from_file_location("astro_app_palette_coverage_test", "Astro Ai Processor.py")
+spec = importlib.util.spec_from_file_location("astro_app_palette_coverage_test", "app.py")
 module = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = module
 spec.loader.exec_module(module)

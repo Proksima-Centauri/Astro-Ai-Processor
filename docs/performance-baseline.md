@@ -60,7 +60,7 @@ Temporary artifacts are outside the application repository.
 
 ## Structure and data flow
 
-`Astro Ai Processor.py` combines most GUI dialogs, `AstroApp` document state,
+`app.py` combines most GUI dialogs, `AstroApp` document state,
 viewer/history/layers, image I/O, command console, model orchestration, ONNX tile
 processing, stacking/mosaic/video workers and external-tool subprocesses.
 

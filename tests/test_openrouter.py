@@ -21,7 +21,7 @@ create_chat_completion = CLIENT.create_chat_completion
 resolve_backend_url = CLIENT.resolve_backend_url
 
 
-SPEC = importlib.util.spec_from_file_location("astro_openrouter_tests", ROOT / "Astro Ai Processor.py")
+SPEC = importlib.util.spec_from_file_location("astro_openrouter_tests", ROOT / "app.py")
 APP = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = APP
 try:

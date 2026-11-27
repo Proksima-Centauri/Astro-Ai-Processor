@@ -5,7 +5,7 @@ Opisuje, co robi kazdy etap filtra 3D FLY i jak uzyskac poprawny render.
 
 ## Szybki workflow
 
-1. Etap 1 `usun gwiazdy` (opcjonalnie): uruchom StarNet++, jesli chcesz czyste tlo bez gwiazd.
+1. Etap 1 `usun gwiazdy` (wymagany): uruchom StarNet++; bez tego etapy nie zostana odblokowane.
 2. Etap 2 `zaznacz sekcje`: potnij obraz na warstwy (`Wytnij`) albo `Wczytaj warstwy` z dysku.
 3. Etap 3 `wygladzanie krawedzi`: wybierz warstwe, ustaw blur, kliknij `Zastosuj`.
 4. Etap 4 `laczenie w klip`: ustaw czas i FPS.
@@ -16,6 +16,9 @@ Opisuje, co robi kazdy etap filtra 3D FLY i jak uzyskac poprawny render.
 ## Etap 1 - usun gwiazdy
 
 - `Usun gwiazdy`: uruchamia StarNet++ dla obrazu zrodlowego.
+- Podczas pracy widoczny jest dialog postepu; po zakonczeniu podglad i zaznaczanie stref korzystaja z obrazu bez gwiazd.
+- Aplikacja zapisuje StarMask z roznicy obrazu oryginalnego i bez gwiazd oraz folder trzech masek gwiazd pogrupowanych wedlug rozmiaru.
+- Folder warstw mozna wskazac w etapie 5 `dodaj gwiazdy`.
 - `Zaawansowane ustawienia` -> `Stride`:
   - tylko wartosci parzyste,
   - zakres 2-512,

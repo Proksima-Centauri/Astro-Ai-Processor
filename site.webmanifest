@@ -2,14 +2,14 @@
   "name": "DSOpus",
   "short_name": "DSOpus",
   "description": "Desktop astrophotography image processing application",
-  "start_url": "/Astro-Ai-Processor/",
-  "scope": "/Astro-Ai-Processor/",
+  "start_url": "/DSOpus/",
+  "scope": "/DSOpus/",
   "display": "standalone",
   "background_color": "#080912",
   "theme_color": "#080912",
   "icons": [
     {
-      "src": "/Astro-Ai-Processor/favicon-32.png",
+      "src": "/DSOpus/favicon-32.png",
       "sizes": "256x256",
       "type": "image/png"
     }

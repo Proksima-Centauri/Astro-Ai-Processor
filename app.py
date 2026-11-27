@@ -75,7 +75,7 @@ ALTAIR_3D_FLY_GUIDE_FILE = "3d_fly_help.md"
 DEFAULT_DEEPSNR_ARGS = "-i \"{input}\" -o \"{output}\" -q -m 2"
 DEFAULT_DEEPSNR_STRENGTH = 2
 APP_VERSION = "1.0.1-beta.2"
-APP_UPDATE_PAGE_URL = "https://proksima-centauri.github.io/Astro-Ai-Processor/"
+APP_UPDATE_PAGE_URL = "https://proksima-centauri.github.io/DSOpus/"
 ALTAIR_DEFAULT_MAX_TOKENS = 900
 ALTAIR_DEFAULT_TEMPERATURE = 0.2
 
@@ -5365,6 +5365,7 @@ class Fly3DDialog(QDialog):
         self._edge_blur_brush_painting = False
         self._edge_blur_brush_action = "add"
         self._updating_stage_gate = False
+        self._star_removal_complete = False
         self.language = (
             "en" if str(getattr(self.parent(), "language", "pl")).lower().startswith("en") else "pl"
         )
@@ -5373,7 +5374,7 @@ class Fly3DDialog(QDialog):
         apply_standard_layout_margins(root)
 
         self.stage_names = [
-            "1 usun gwiazdy (opcjonalnie)",
+            "1 usun gwiazdy (wymagane)",
             "2 zaznacz sekcje",
             "3 wygladzanie krawedzi",
             "4 laczenie w klip",
@@ -5437,11 +5438,9 @@ class Fly3DDialog(QDialog):
         self.starless_preview_label.setStyleSheet("border: 1px solid #3b4c5d; background: #12171c;")
         stage0_layout.addWidget(self.starless_preview_label, 1)
         self.stage1_guidance = QLabel(
-            "Optional: remove stars before creating zones. Otherwise, continue to stage 2; "
-            "zone selection is required before later stages."
+            "Remove stars with StarNet++ to continue. The starless image will be used for zone selection."
             if self.language == "en"
-            else "Etap 1 jest opcjonalny. Usun gwiazdy przed podzialem stref albo przejdz do etapu 2; "
-            "podzial obrazu jest wymagany przed dalszymi etapami."
+            else "Usun gwiazdy przez StarNet++, aby przejsc dalej. Obraz bez gwiazd posluzy do zaznaczenia stref."
         )
         self.stage1_guidance.setWordWrap(True)
         stage0_layout.addWidget(self.stage1_guidance)
@@ -5706,12 +5705,14 @@ class Fly3DDialog(QDialog):
 
         self.chk_add_stars = QCheckBox("Dodaj gwiazdy do klipu")
         self.chk_add_stars.setChecked(True)
+        self.chk_add_stars.toggled.connect(lambda _checked: self._refresh_motion_layers(keep_selection=True))
         stage4_layout.addWidget(self.chk_add_stars)
 
         stars_mask_row = QHBoxLayout()
         stars_mask_row.addWidget(QLabel("Plik/folder warstw:"))
         self.edit_stars_mask_path = QLineEdit("")
         self.edit_stars_mask_path.setPlaceholderText("Wybierz plik StarMask lub folder z warstwami")
+        self.edit_stars_mask_path.textChanged.connect(lambda _text: self._refresh_motion_layers(keep_selection=True))
         self.btn_stars_mask = QPushButton("Plik...")
         self.btn_stars_mask.clicked.connect(self._pick_stars_mask_path)
         stars_mask_row.addWidget(self.edit_stars_mask_path, 1)
@@ -6002,6 +6003,8 @@ class Fly3DDialog(QDialog):
         self._refresh_clip_timeline_layers(keep_index=False)
 
     def _is_stage1_complete(self) -> bool:
+        if not bool(getattr(self, "_star_removal_complete", False)):
+            return False
         if len(getattr(self, "cut_items", [])) > 0:
             return True
         unlocked = np.logical_not(self.zone_widget.locked_mask)
@@ -6011,23 +6014,25 @@ class Fly3DDialog(QDialog):
         return bool(np.all(np.logical_or(np.logical_not(unlocked), assigned)))
 
     def _update_stage_gate(self):
-        complete = self._is_stage1_complete()
-        for idx in range(Fly3DStage.EDGE_SMOOTHING, self.stage_nav.count()):
+        starless_ready = bool(getattr(self, "_star_removal_complete", False))
+        zones_ready = self._is_stage1_complete()
+        for idx in range(Fly3DStage.ZONE_SELECTION, self.stage_nav.count()):
             item = self.stage_nav.item(idx)
             if item is None:
                 continue
             flags = item.flags()
-            if complete:
+            can_enter = starless_ready if idx == Fly3DStage.ZONE_SELECTION else zones_ready
+            if can_enter:
                 item.setFlags(flags | Qt.ItemIsEnabled | Qt.ItemIsSelectable)
             else:
                 item.setFlags((flags | Qt.ItemIsSelectable) & ~Qt.ItemIsEnabled)
-        if not complete and self.stage_nav.currentRow() > Fly3DStage.ZONE_SELECTION:
+        if not starless_ready and self.stage_nav.currentRow() > Fly3DStage.STAR_REMOVAL:
             self._updating_stage_gate = True
-            self.stage_nav.setCurrentRow(Fly3DStage.ZONE_SELECTION)
-            self.stage_stack.setCurrentIndex(Fly3DStage.ZONE_SELECTION)
+            self.stage_nav.setCurrentRow(Fly3DStage.STAR_REMOVAL)
+            self.stage_stack.setCurrentIndex(Fly3DStage.STAR_REMOVAL)
             self._updating_stage_gate = False
-            self._update_run_button_visibility(Fly3DStage.ZONE_SELECTION)
-            self._update_cut_sections_visibility(Fly3DStage.ZONE_SELECTION)
+            self._update_run_button_visibility(Fly3DStage.STAR_REMOVAL)
+            self._update_cut_sections_visibility(Fly3DStage.STAR_REMOVAL)
         self._update_edge_preview()
         if hasattr(self, "stage_progress_bar"):
             self._update_stage_navigation(self.stage_nav.currentRow())
@@ -6040,7 +6045,10 @@ class Fly3DDialog(QDialog):
             self.stage_nav.setCurrentRow(target)
 
     def _stage_validation_error(self, stage: int) -> str:
-        if stage == Fly3DStage.ZONE_SELECTION and not self._is_stage1_complete():
+        if stage in (Fly3DStage.ZONE_SELECTION, Fly3DStage.EDGE_SMOOTHING) and not self._star_removal_complete:
+            return ("Run StarNet++ star removal before continuing." if self.language == "en"
+                    else "Najpierw wykonaj usuwanie gwiazd przez StarNet++.")
+        if stage == Fly3DStage.EDGE_SMOOTHING and not self._is_stage1_complete():
             return (
                 "Complete zone selection before continuing."
                 if self.language == "en"
@@ -6745,7 +6753,7 @@ class Fly3DDialog(QDialog):
         if original_u8.shape[:2] != starless_u8.shape[:2]:
             starless_u8 = cv2.resize(starless_u8, (original_u8.shape[1], original_u8.shape[0]), interpolation=cv2.INTER_AREA)
 
-        diff = cv2.subtract(original_u8, starless_u8)
+        diff = cv2.absdiff(original_u8, starless_u8)
         mask_gray = cv2.cvtColor(diff, cv2.COLOR_BGR2GRAY)
         if mask_gray.size == 0:
             return mask_gray
@@ -6755,6 +6763,22 @@ class Fly3DDialog(QDialog):
         if int(np.max(mask_gray)) > 0:
             mask_gray = cv2.normalize(mask_gray, None, 0, 255, cv2.NORM_MINMAX)
         return mask_gray
+
+    def _write_star_size_layers(self, mask: np.ndarray, mask_path: str) -> str:
+        """Save detected star pixels in three size bands for the 3D FLY star layers."""
+        output_dir = os.path.splitext(mask_path)[0] + "_layers"
+        os.makedirs(output_dir, exist_ok=True)
+        binary = (np.asarray(mask) > 3).astype(np.uint8)
+        count, labels, stats, _centroids = cv2.connectedComponentsWithStats(binary, 8)
+        bands = [np.zeros(binary.shape, dtype=np.uint8) for _ in range(3)]
+        for component in range(1, count):
+            area = int(stats[component, cv2.CC_STAT_AREA])
+            band = 0 if area <= 8 else (1 if area <= 48 else 2)
+            bands[band][labels == component] = mask[labels == component]
+        for filename, layer in zip(("1_small_stars.png", "2_medium_stars.png", "3_large_stars.png"), bands):
+            if not safe_imwrite(os.path.join(output_dir, filename), layer):
+                return ""
+        return os.path.abspath(output_dir)
 
     def _remove_stars_now(self):
         app = self.parent()
@@ -6775,8 +6799,6 @@ class Fly3DDialog(QDialog):
             if hasattr(app, "starnet_prestretch_linear"):
                 app.starnet_prestretch_linear = selected_prestretch_linear
 
-        original_before_starless = self.source_image.copy()
-
         stride = int(self.spin_starless_stride.value()) if hasattr(self, "spin_starless_stride") else 16
         stride = max(2, min(512, stride))
         if stride % 2 != 0:
@@ -6784,33 +6806,39 @@ class Fly3DDialog(QDialog):
             if stride > 512:
                 stride = 512
 
-        QApplication.setOverrideCursor(Qt.WaitCursor)
-        try:
-            starless, err = run_starnet_sync_for_image(
-                self.source_image.copy(),
-                starnet_path,
-                stride,
-                prestretch_linear=bool(getattr(app, "starnet_prestretch_linear", False)) if app is not None else False,
-            )
-        finally:
-            QApplication.restoreOverrideCursor()
+        self.btn_remove_stars.setEnabled(False)
+        progress = MagicProgressDialog(self)
+        progress.setWindowTitle("Usuwanie gwiazd — StarNet++")
+        progress.set_close_locked(True)
+        progress.update_progress("Przygotowuję StarNet++…", 0, 0)
+        worker = StarNetWorker(
+            self.source_image.copy(), starnet_path, stride,
+            prestretch_linear=bool(getattr(app, "starnet_prestretch_linear", False)) if app is not None else False,
+        )
+        self._star_removal_worker = worker
+        worker.progress_signal.connect(progress.update_progress)
+        worker.finished_signal.connect(lambda result, error: self._finish_star_removal(result, error, progress))
+        worker.start()
+        progress.exec()
 
-        if err:
-            QMessageBox.warning(self, "Usun gwiazdy", err)
+    def _finish_star_removal(self, starless, err: str, progress):
+        if hasattr(progress, "force_close"):
+            progress.force_close()
+        self.btn_remove_stars.setEnabled(True)
+        if err or not isinstance(starless, np.ndarray):
+            QMessageBox.warning(self, "Usun gwiazdy", err or "StarNet++ nie zwrocil poprawnego obrazu.")
             return
-        if not isinstance(starless, np.ndarray):
-            QMessageBox.warning(self, "Usun gwiazdy", "StarNet++ nie zwrocil poprawnego obrazu.")
-            return
-
         starless_u8 = normalize_to_uint8_bgr(starless)
         auto_mask_path = ""
+        layers_path = ""
         if hasattr(self, "edit_stars_mask_path"):
-            starmask_u8 = self._build_starmask_from_starless(original_before_starless, starless_u8)
+            starmask_u8 = self._build_starmask_from_starless(self.source_image.copy(), starless_u8)
             if isinstance(starmask_u8, np.ndarray) and starmask_u8.size > 0 and int(np.count_nonzero(starmask_u8)) > 0:
                 candidate = self._auto_starmask_output_path()
                 if safe_imwrite(candidate, starmask_u8):
                     auto_mask_path = os.path.abspath(candidate)
-                    self.edit_stars_mask_path.setText(auto_mask_path)
+                    layers_path = self._write_star_size_layers(starmask_u8, candidate)
+                    self.edit_stars_mask_path.setText(layers_path or auto_mask_path)
 
         self.source_image = starless_u8
         h, w = self.source_image.shape[:2]
@@ -6823,9 +6851,14 @@ class Fly3DDialog(QDialog):
         self._update_edge_preview()
         self._refresh_clip_timeline_layers(keep_index=True)
         self._refresh_motion_layers(keep_selection=True)
+        self._star_removal_complete = True
+        self.btn_remove_stars.setEnabled(False)
+        self._update_stage_gate()
         message = "Gotowe. Gwiazdy zostaly usuniete."
         if auto_mask_path:
             message += f"\nWygenerowano StarMask: {auto_mask_path}"
+        if layers_path:
+            message += f"\nWarstwy gwiazd wedlug rozmiaru: {layers_path}"
         QMessageBox.information(self, "Usun gwiazdy", message)
 
     def _hole_size_limits(self) -> tuple[int, int]:
@@ -6854,13 +6887,12 @@ class Fly3DDialog(QDialog):
         return sorted(int(zone_id) for zone_id in ids)
 
     def _get_motion_layer_keys(self):
-        zone_ids = self._get_motion_zone_ids()
-        if zone_ids:
-            return zone_ids
-        keys = []
+        keys = list(self._get_motion_zone_ids())
         for idx, path in enumerate(self.cut_items):
             if os.path.exists(path):
                 keys.append(f"cut:{idx}")
+        if bool(getattr(self, "chk_add_stars", None) and self.chk_add_stars.isChecked()):
+            keys.extend(("stars:behind", "stars:foreground"))
         return keys
 
     def _estimate_cut_layer_preview_placement(self, path: str):
@@ -6868,6 +6900,30 @@ class Fly3DDialog(QDialog):
             return None
         if not isinstance(self.preview_image, np.ndarray) or self.preview_image.size == 0:
             return None
+
+        try:
+            with open(path + ".json", "r", encoding="utf-8") as metadata_file:
+                metadata = json.load(metadata_file)
+            src_h, src_w = self.source_image.shape[:2]
+            if int(metadata.get("canvas_width", src_w)) == src_w and int(metadata.get("canvas_height", src_h)) == src_h:
+                layer = safe_imread(path, cv2.IMREAD_UNCHANGED)
+                if layer is not None and layer.ndim == 3:
+                    alpha = layer[:, :, 3] if layer.shape[2] >= 4 else np.full(layer.shape[:2], 255, dtype=np.uint8)
+                    ys, xs = np.where(alpha > 0)
+                    if ys.size:
+                        y0, y1 = int(ys.min()), int(ys.max()) + 1
+                        x0, x1 = int(xs.min()), int(xs.max()) + 1
+                        ph, pw = self.preview_image.shape[:2]
+                        sx, sy = pw / float(src_w), ph / float(src_h)
+                        px, py = int(round(int(metadata["x"]) * sx)), int(round(int(metadata["y"]) * sy))
+                        tw, th = max(1, int(round((x1-x0)*sx))), max(1, int(round((y1-y0)*sy)))
+                        placement = {"preview_shape": tuple(self.preview_image.shape[:2]), "x": px, "y": py,
+                                     "mask": cv2.resize(alpha[y0:y1, x0:x1], (tw, th), interpolation=cv2.INTER_NEAREST),
+                                     "rgb": cv2.resize(layer[y0:y1, x0:x1, :3], (tw, th), interpolation=cv2.INTER_AREA)}
+                        self._cut_layer_preview_cache[path] = placement
+                        return placement
+        except (OSError, ValueError, KeyError, TypeError):
+            pass
 
         preview_shape = tuple(self.preview_image.shape[:2])
         cached = self._cut_layer_preview_cache.get(path)
@@ -7062,7 +7118,8 @@ class Fly3DDialog(QDialog):
         self.combo_motion_layer_props.blockSignals(True)
         self.combo_motion_layer_props.clear()
         for idx, layer_key in enumerate(layer_keys, start=1):
-            self.combo_motion_layer_props.addItem(f"Warstwa {idx}", str(layer_key))
+            label = {"stars:behind": "Gwiazdy za mgławicą", "stars:foreground": "Gwiazdy przed mgławicą"}.get(str(layer_key), f"Warstwa {idx}")
+            self.combo_motion_layer_props.addItem(label, str(layer_key))
         self.combo_motion_layer_props.blockSignals(False)
 
         if current is None or str(current) not in {str(k) for k in layer_keys}:
@@ -7123,7 +7180,7 @@ class Fly3DDialog(QDialog):
         key = self.combo_motion_layer_props.itemData(index)
         if key is None:
             return
-        self.selected_motion_zone = key if str(key).startswith("cut:") else int(key)
+        self.selected_motion_zone = key if str(key).startswith(("cut:", "stars:")) else int(key)
         self._sync_motion_props_widgets()
         self._update_motion_preview()
 
@@ -7378,7 +7435,7 @@ class Fly3DDialog(QDialog):
                         curve_speed_scale=float(behavior.get("curve_speed_scale", 1.0) or 1.0),
                     )
                 )
-        else:
+        if self.cut_items:  # Build cutouts alongside painted zone layers.
             for behavior in behaviors:
                 layer_key = str(behavior.get("layer_key") or "")
                 if not layer_key.startswith("cut:"):
@@ -7499,6 +7556,17 @@ class Fly3DDialog(QDialog):
         progress_dialog.show()
         progress_dialog.update_progress("Generowanie podgladu klipu...", 0, 0)
 
+        stars_overlay = {
+            "enabled": bool(getattr(self, "chk_add_stars", None) and self.chk_add_stars.isChecked()),
+            "count": int(self.spin_stars_count.value()) if hasattr(self, "spin_stars_count") else 900,
+            "speed": float(self.spin_stars_speed.value()) if hasattr(self, "spin_stars_speed") else 1.2,
+            "near_ratio": float(self.spin_stars_near_ratio.value()) if hasattr(self, "spin_stars_near_ratio") else 0.28,
+            "size": float(self.spin_stars_size.value()) if hasattr(self, "spin_stars_size") else 1.0,
+            "mask_path": str(self.edit_stars_mask_path.text() or "").strip() if hasattr(self, "edit_stars_mask_path") else "",
+        }
+        preview_star_renderer = Fly3DWorker(self.preview_image, {"stars_overlay": stars_overlay, "stars_seed": 472911})
+        preview_starfield = preview_star_renderer._build_starfield_config(w, h)
+
         QApplication.setOverrideCursor(Qt.WaitCursor)
         try:
             frames = []
@@ -7509,6 +7577,9 @@ class Fly3DDialog(QDialog):
                 global_x = -8.0 * ease
                 global_y = 5.0 * ease
                 composed, _ = _warp_layer_with_motion(background, np.ones((h, w), dtype=np.float32), global_x, global_y, global_zoom)
+
+                preview_star_renderer._draw_starfield_frame(composed, preview_starfield, phase, plane="background")
+                foreground_alpha = np.zeros((h, w), dtype=np.float32)
 
                 for layer in layers:
                     depth_gain = 1.0 + float(layer.depth) * 0.7
@@ -7522,9 +7593,14 @@ class Fly3DDialog(QDialog):
                         move_y = float(layer.move_y) * ease * depth_gain
                     zoom = float(layer.zoom) * ease * (1.0 + 0.4 * float(layer.depth))
                     warped_img, warped_alpha = _warp_layer_with_motion(layer.image, layer.alpha, move_x, move_y, zoom)
+                    foreground_alpha = np.maximum(foreground_alpha, warped_alpha)
                     alpha3 = warped_alpha[:, :, np.newaxis]
                     composed = (composed.astype(np.float32) * (1.0 - alpha3) + warped_img.astype(np.float32) * alpha3)
                     composed = np.clip(composed, 0, 255).astype(np.uint8)
+
+                preview_star_renderer._draw_starfield_frame(
+                    composed, preview_starfield, phase, plane="foreground", alpha_mask=foreground_alpha
+                )
 
                 frames.append(composed)
                 progress_value = int(round((frame_idx + 1) * 100.0 / max(1, frame_count)))
@@ -7669,6 +7745,47 @@ class Fly3DDialog(QDialog):
                     else:
                         cv2.putText(frame, f"zoom {zoom_speed:+.2f}", (cx + 8, cy - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 1, cv2.LINE_AA)
                     self.motion_zone_centers[key] = {"center": (cx, cy), "tip": (tx, ty)}
+
+        # Show the two star planes in the stage 6 motion preview as well as in
+        # the exported animation. StarMask brightness separates near/far points.
+        if bool(getattr(self, "chk_add_stars", None) and self.chk_add_stars.isChecked()):
+            star_path = str(self.edit_stars_mask_path.text() or "").strip() if hasattr(self, "edit_stars_mask_path") else ""
+            candidates = []
+            if os.path.isfile(star_path):
+                candidates = [star_path]
+            elif os.path.isdir(star_path):
+                candidates = [os.path.join(star_path, name) for name in sorted(os.listdir(star_path))
+                              if os.path.splitext(name)[1].lower() in {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp"}]
+            for order, star_file in enumerate(candidates):
+                star_img = safe_imread(star_file, cv2.IMREAD_UNCHANGED)
+                if star_img is None:
+                    continue
+                if star_img.ndim == 2:
+                    star_gray = star_img
+                elif star_img.ndim == 3:
+                    star_gray = cv2.cvtColor(star_img[:, :, :3], cv2.COLOR_BGR2GRAY)
+                else:
+                    continue
+                if star_gray.shape[:2] != frame.shape[:2]:
+                    star_gray = cv2.resize(star_gray, (frame.shape[1], frame.shape[0]), interpolation=cv2.INTER_AREA)
+                ys, xs = np.where(star_gray > 48)
+                if not ys.size:
+                    continue
+                threshold = float(np.quantile(star_gray[ys, xs], 0.72))
+                near = star_gray[ys, xs] >= threshold
+                # Keep the preview light: render a deterministic sample rather
+                # than every mask pixel, while still distinguishing both planes.
+                sample_stride = max(1, int(math.ceil(ys.size / 2400.0)))
+                for i in range(0, ys.size, sample_stride):
+                    y, x = int(ys[i]), int(xs[i])
+                    if has_zone_map and zone_map[y, x] >= 0 and near[i]:
+                        continue
+                    val = int(np.clip(star_gray[y, x], 120, 255))
+                    color = (val, val, min(255, val + 8)) if near[i] else (val, val, val)
+                    cv2.circle(frame, (x, y), 1 if not near[i] else 2, color, -1, cv2.LINE_AA)
+                # A compact legend makes the two motion layers explicit.
+            cv2.putText(frame, "Gwiazdy za mgławicą  •  Gwiazdy przed mgławicą", (12, 24),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.48, (220, 235, 255), 1, cv2.LINE_AA)
 
         pix = np_to_qpixmap(frame)
         target_size = self.motion_preview_label.size()
@@ -7998,6 +8115,9 @@ class Fly3DDialog(QDialog):
         if not safe_imwrite(out_path, cut_rgba):
             QMessageBox.warning(self, "Wytnij", "Nie udało się zapisać PNG wycinka.")
             return
+
+        with open(out_path + ".json", "w", encoding="utf-8") as metadata_file:
+            json.dump({"x": x0, "y": y0, "canvas_width": src_w, "canvas_height": src_h}, metadata_file)
 
         self.source_image[mask_full_refined] = (255, 255, 255)
 
@@ -11954,6 +12074,24 @@ class Fly3DWorker(QThread):
             return None
 
         h, w = base.shape[:2]
+        # Preserve the source canvas position for cuts created by this dialog.
+        # Content matching is ambiguous on repeated textures and often drifts.
+        try:
+            with open(path + ".json", "r", encoding="utf-8") as metadata_file:
+                metadata = json.load(metadata_file)
+            if int(metadata.get("canvas_width", w)) == w and int(metadata.get("canvas_height", h)) == h:
+                x0 = int(np.clip(int(metadata["x"]), 0, max(0, w - cut_rgb.shape[1])))
+                y0 = int(np.clip(int(metadata["y"]), 0, max(0, h - cut_rgb.shape[0])))
+                x1, y1 = min(w, x0 + cut_rgb.shape[1]), min(h, y0 + cut_rgb.shape[0])
+                src_w, src_h = x1 - x0, y1 - y0
+                src_rgb, src_mask = cut_rgb[:src_h, :src_w], cut_alpha[:src_h, :src_w] > 0
+                layer_image = np.zeros_like(base)
+                layer_image[y0:y1, x0:x1][src_mask] = src_rgb[src_mask]
+                layer_mask = np.zeros((h, w), dtype=bool)
+                layer_mask[y0:y1, x0:x1] = src_mask
+                return layer_image, layer_mask, {"x0": x0, "y0": y0, "x1": x1, "y1": y1, "src_mask": src_mask.astype(np.uint8)}
+        except (OSError, ValueError, KeyError, TypeError):
+            pass
         gray_base = cv2.cvtColor(base, cv2.COLOR_BGR2GRAY)
         gray_cut = cv2.cvtColor(cut_rgb, cv2.COLOR_BGR2GRAY)
         mask_u8 = np.where(cut_alpha > 0, 255, 0).astype(np.uint8)
@@ -12188,12 +12326,13 @@ class Fly3DWorker(QThread):
             "source_layers": int(len(source_paths)),
         }
 
-    def _draw_starfield_frame(self, frame: np.ndarray, starfield: dict, phase: float, prev_phase: float | None = None):
+    def _draw_starfield_frame(self, frame: np.ndarray, starfield: dict, phase: float, prev_phase: float | None = None, plane: str = "all", alpha_mask: np.ndarray | None = None):
         if not isinstance(frame, np.ndarray) or frame.size == 0:
             return
         if not isinstance(starfield, dict) or not starfield.get("enabled"):
             return
 
+        draw_target = frame if alpha_mask is None else np.zeros_like(frame)
         h, w = frame.shape[:2]
         cx = float(starfield["center_x"])
         cy = float(starfield["center_y"])
@@ -12231,20 +12370,31 @@ class Fly3DWorker(QThread):
 
         for idx in np.where(valid)[0]:
             prox = float(proximity[idx])
+            is_near = bool(near_mask[idx])
+            if plane == "foreground" and not is_near:
+                continue
+            if plane == "background" and is_near:
+                continue
             twinkle = 0.72 + 0.28 * math.sin(float(twinkle_phase[idx]) + phase * 24.0)
             value = int(np.clip(brightness[idx] * twinkle, 90.0, 255.0))
             radius = int(max(1, round(float(radius_px[idx]))))
             x = int(round(float(x_pos[idx])))
             y = int(round(float(y_pos[idx])))
+            if alpha_mask is not None and (y < 0 or x < 0 or y >= alpha_mask.shape[0] or x >= alpha_mask.shape[1] or alpha_mask[y, x] > 0):
+                continue
 
             if prev_phase is not None and prev_valid is not None and prev_x_pos is not None and prev_y_pos is not None:
                 if bool(near_mask[idx]) and bool(prev_valid[idx]) and prev_local_phase is not None and float(local_phase[idx]) >= float(prev_local_phase[idx]):
                     px = int(round(float(prev_x_pos[idx])))
                     py = int(round(float(prev_y_pos[idx])))
                     trail_val = int(np.clip(value * (0.65 + 0.35 * prox), 80, 255))
-                    cv2.line(frame, (px, py), (x, y), (trail_val, trail_val, min(255, trail_val + 8)), 1, cv2.LINE_AA)
+                    cv2.line(draw_target, (px, py), (x, y), (trail_val, trail_val, min(255, trail_val + 8)), 1, cv2.LINE_AA)
 
-            cv2.circle(frame, (x, y), radius, (value, value, min(255, value + 10)), -1, cv2.LINE_AA)
+            cv2.circle(draw_target, (x, y), radius, (value, value, min(255, value + 10)), -1, cv2.LINE_AA)
+
+        if alpha_mask is not None:
+            allowed = alpha_mask <= 0
+            frame[allowed] = draw_target[allowed]
 
     def run(self):
         if self.source_img is None:
@@ -12336,6 +12486,8 @@ class Fly3DWorker(QThread):
         if zone_map is not None:
             for behavior in behaviors_sorted:
                 zone_id = int(behavior.get("zone", -1))
+                if zone_id < 0:
+                    continue
                 raw_mask = zone_map == zone_id
                 if not np.any(raw_mask):
                     continue
@@ -12375,7 +12527,7 @@ class Fly3DWorker(QThread):
                         curve_speed_scale=float(behavior.get("curve_speed_scale", 1.0) or 1.0),
                     )
                 )
-        else:
+        if self.cut_items:  # Build cutouts alongside painted zone layers.
             for behavior in behaviors_sorted:
                 layer_key = str(behavior.get("layer_key") or "")
                 if not layer_key.startswith("cut:"):
@@ -12502,6 +12654,7 @@ class Fly3DWorker(QThread):
                     global_zoom,
                 )
 
+                self._draw_starfield_frame(composed, starfield, phase, prev_phase=prev_phase, plane="background")
                 for layer in layers:
                     depth_gain = 1.0 + layer.depth * 0.7
                     if isinstance(layer.curve_points, list) and len(layer.curve_points) >= 2:
@@ -12518,7 +12671,9 @@ class Fly3DWorker(QThread):
                     composed = (composed.astype(np.float32) * (1.0 - alpha3) + warped_img.astype(np.float32) * alpha3)
                     composed = np.clip(composed, 0, 255).astype(np.uint8)
 
-                self._draw_starfield_frame(composed, starfield, phase, prev_phase=prev_phase)
+                # Distant stars sit behind the nebula layers. Near stars are
+                # rendered above them only where the layer alpha is transparent.
+                self._draw_starfield_frame(composed, starfield, phase, prev_phase=prev_phase, plane="foreground", alpha_mask=occupied.astype(np.uint8))
 
                 if export_gif:
                     gif_frames.append(composed.copy())
@@ -20639,40 +20794,100 @@ class CommandPaletteItemDelegate(QStyledItemDelegate):
     CATEGORY_ROLE = Qt.UserRole + 2
     ENABLED_ROLE = Qt.UserRole + 3
 
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        asset_dir = Path(get_runtime_base_dir()) / "assets" / "icons" / "command_palette"
+        self.badge_glass = QPixmap(str(asset_dir / "badge_glass.png"))
+        self.select_glass = QPixmap(str(asset_dir / "select_glass.png"))
+
+    @staticmethod
+    def _draw_horizontal_slice(painter, target_rect, pixmap, source_cap, target_cap):
+        if pixmap.isNull() or target_rect.width() <= 0 or target_rect.height() <= 0:
+            return False
+        source_cap = min(int(source_cap), pixmap.width() // 2 - 1)
+        target_cap = min(float(target_cap), target_rect.width() / 2.0 - 1.0)
+        source_center = pixmap.width() - 2 * source_cap
+        target_center = target_rect.width() - 2.0 * target_cap
+        if source_center <= 0 or target_center <= 0:
+            painter.drawPixmap(target_rect, pixmap, QRectF(pixmap.rect()))
+            return True
+
+        source_height = float(pixmap.height())
+        y = float(target_rect.y())
+        height = float(target_rect.height())
+        x = float(target_rect.x())
+        width = float(target_rect.width())
+        painter.drawPixmap(
+            QRectF(x, y, target_cap, height), pixmap,
+            QRectF(0, 0, source_cap, source_height),
+        )
+        painter.drawPixmap(
+            QRectF(x + target_cap, y, target_center, height), pixmap,
+            QRectF(source_cap, 0, source_center, source_height),
+        )
+        painter.drawPixmap(
+            QRectF(x + target_cap + target_center, y, target_cap, height), pixmap,
+            QRectF(pixmap.width() - source_cap, 0, source_cap, source_height),
+        )
+        return True
+
     def sizeHint(self, option, index):
         return QSize(max(100, option.rect.width()), 50)
 
     def paint(self, painter: QPainter, option, index):
         painter.save()
         painter.setRenderHint(QPainter.Antialiasing, True)
+        painter.setRenderHint(QPainter.SmoothPixmapTransform, True)
         rect = option.rect.adjusted(3, 1, -3, -1)
         selected = bool(option.state & QStyle.State_Selected)
         hovered = bool(option.state & QStyle.State_MouseOver)
         if selected:
-            painter.setBrush(QColor("#202c46"))
-            painter.setPen(QColor("#273957"))
+            painter.save()
+            painter.setOpacity(0.32)
+            select_rect = QRectF(rect.adjusted(-6, -5, 3, 5))
+            drew_select_glass = self._draw_horizontal_slice(
+                painter, select_rect, self.select_glass, 64, select_rect.height() * 0.5
+            )
+            painter.restore()
+            if not drew_select_glass:
+                highlight = QLinearGradient(rect.left(), rect.top(), rect.left(), rect.bottom())
+                highlight.setColorAt(0.0, QColor(242, 250, 255, 225))
+                highlight.setColorAt(0.06, QColor(170, 209, 231, 100))
+                highlight.setColorAt(0.52, QColor(113, 159, 190, 65))
+                highlight.setColorAt(0.94, QColor(180, 215, 237, 100))
+                highlight.setColorAt(1.0, QColor(242, 250, 255, 230))
+                painter.setBrush(highlight)
+                painter.setPen(QColor(242, 250, 255, 245))
+                painter.drawRoundedRect(rect, 13, 13)
         elif hovered:
-            painter.setBrush(QColor("#1b2230"))
-            painter.setPen(Qt.NoPen)
+            painter.setBrush(QColor(201, 231, 248, 55))
+            painter.setPen(QColor(220, 241, 252, 100))
+            painter.drawRoundedRect(rect, 9, 9)
         else:
-            painter.setBrush(Qt.NoBrush)
-            painter.setPen(Qt.NoPen)
-        painter.drawRoundedRect(rect, 8, 8)
-
+            separator_pen = QPen(QColor(223, 239, 250, 12))
+            separator_pen.setWidthF(0.7)
+            painter.setPen(separator_pen)
+            painter.drawLine(rect.left(), rect.bottom(), rect.right(), rect.bottom())
         icon = index.data(Qt.DecorationRole)
         icon_rect = QRect(rect.left() + 12, rect.top() + 15, 20, 20)
         if isinstance(icon, QIcon) and not icon.isNull():
-            icon.paint(painter, icon_rect, Qt.AlignCenter)
+            icon_pixmap = icon.pixmap(icon_rect.size())
+            icon_painter = QPainter(icon_pixmap)
+            icon_painter.setCompositionMode(QPainter.CompositionMode_SourceIn)
+            icon_painter.fillRect(icon_pixmap.rect(), QColor("#d9effb"))
+            icon_painter.end()
+            painter.drawPixmap(icon_rect, icon_pixmap)
 
         category = str(index.data(self.CATEGORY_ROLE) or "")
         font = QFont(option.font)
+        font.setFamily("Inter")
         font.setPointSize(10)
-        font.setBold(True)
+        font.setWeight(QFont.Weight.DemiBold)
         painter.setFont(font)
         metrics = painter.fontMetrics()
-        badge_width = max(50, metrics.horizontalAdvance(category) + 16) if category else 0
-        badge_rect = QRect(rect.right() - badge_width - 12, rect.top() + 14, badge_width, 22)
-        text_left = icon_rect.right() + 12
+        badge_width = max(56, metrics.horizontalAdvance(category) + 26) if category else 0
+        badge_rect = QRect(rect.right() - badge_width - 9, rect.top() + 12, badge_width, 24)
+        text_left = icon_rect.right() + 11
         text_right = badge_rect.left() - 10 if category else rect.right() - 12
         title_rect = QRect(text_left, rect.top() + 5, max(8, text_right - text_left), 20)
         title = metrics.elidedText(str(index.data(Qt.DisplayRole) or ""), Qt.ElideRight, title_rect.width())
@@ -20681,7 +20896,9 @@ class CommandPaletteItemDelegate(QStyledItemDelegate):
         painter.drawText(title_rect, Qt.AlignLeft | Qt.AlignVCenter, title)
 
         description_font = QFont(option.font)
+        description_font.setFamily("Inter")
         description_font.setPointSize(8)
+        description_font.setBold(False)
         painter.setFont(description_font)
         description_metrics = painter.fontMetrics()
         description_rect = QRect(text_left, rect.top() + 25, max(8, text_right - text_left), 18)
@@ -20690,15 +20907,24 @@ class CommandPaletteItemDelegate(QStyledItemDelegate):
             Qt.ElideRight,
             description_rect.width(),
         )
-        painter.setPen(QColor("#8492a8" if enabled else "#586477"))
+        painter.setPen(
+            QColor("#edf6fc" if selected or hovered else "#d2e0e9" if enabled else "#8595a3")
+        )
         painter.drawText(description_rect, Qt.AlignLeft | Qt.AlignVCenter, description)
 
         if category:
-            painter.setBrush(QColor("#171e2b"))
-            painter.setPen(QColor("#2b3b55"))
-            painter.drawRoundedRect(badge_rect, 10, 10)
+            painter.save()
+            painter.setOpacity(0.20)
+            drew_badge_glass = self._draw_horizontal_slice(
+                painter, QRectF(badge_rect), self.badge_glass, 68, badge_rect.height() * 0.5
+            )
+            painter.restore()
+            if not drew_badge_glass:
+                painter.setBrush(QColor(149, 181, 202, 110))
+                painter.setPen(QColor(224, 243, 253, 210))
+                painter.drawRoundedRect(badge_rect, 10, 10)
             painter.setFont(description_font)
-            painter.setPen(QColor("#8da4c2"))
+            painter.setPen(QColor("#f7fbfe"))
             painter.drawText(badge_rect, Qt.AlignCenter, category)
         painter.restore()
 
@@ -20746,31 +20972,63 @@ class CommandPaletteDialog(QDialog):
         self.language = "en" if str(language).lower().startswith("en") else "pl"
         self.setObjectName("commandPaletteDialog")
         self.setWindowFlags(Qt.Popup | Qt.FramelessWindowHint)
+        self.setAttribute(Qt.WA_TranslucentBackground, True)
+        self.setAutoFillBackground(False)
         self.setModal(True)
-        self.setFixedSize(620, 466)
+        self.setFixedSize(633, 474)
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         self.card = QFrame(self)
         self.card.setObjectName("commandPaletteCard")
+        self.card.setAttribute(Qt.WA_TranslucentBackground, True)
+        self.card.setAutoFillBackground(False)
+        self.background_blur = QLabel(self.card)
+        self.background_blur.setObjectName("commandPaletteBackgroundBlur")
+        self.background_blur.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+        self.background_blur.setGeometry(0, 0, 633, 474)
+        self.background_blur.setScaledContents(True)
+        self.background_art = QLabel(self.card)
+        self.background_art.setObjectName("commandPaletteBackgroundArt")
+        self.background_art.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+        self.background_art.setPixmap(
+            QPixmap(str(Path(get_runtime_base_dir()) / "assets" / "icons" / "command_palette" / "bg.png"))
+        )
+        self.background_art.setScaledContents(True)
+        self.background_art.setGeometry(0, 0, 633, 474)
+        self.background_blur.lower()
+        self.background_art.raise_()
+        self.background_tint = QLabel(self.card)
+        self.background_tint.setObjectName("commandPaletteBackgroundTint")
+        self.background_tint.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+        self.background_tint.setGeometry(0, 0, 633, 474)
+        tint_pixmap = QPixmap(633, 474)
+        tint_pixmap.fill(Qt.transparent)
+        tint_painter = QPainter(tint_pixmap)
+        tint_painter.setOpacity(0.052)
+        tint_painter.fillRect(tint_pixmap.rect(), QColor("#b9cde0"))
+        tint_painter.end()
+        self.background_tint.setPixmap(tint_pixmap)
+        self.background_tint.setScaledContents(True)
         layout = QVBoxLayout(self.card)
-        layout.setContentsMargins(2, 2, 2, 2)
+        layout.setContentsMargins(8, 5, 8, 5)
         layout.setSpacing(0)
         outer.addWidget(self.card)
 
         search_row = QFrame(self.card)
         search_row.setObjectName("commandPaletteSearchRow")
+        search_row.setFixedHeight(46)
         search_layout = QHBoxLayout(search_row)
-        search_layout.setContentsMargins(16, 7, 12, 7)
-        search_layout.setSpacing(10)
+        search_layout.setContentsMargins(10, 5, 8, 5)
+        search_layout.setSpacing(14)
         search_icon = QLabel(search_row)
         search_icon.setObjectName("commandPaletteSearchIcon")
         search_icon.setFixedWidth(20)
         search_icon.setPixmap(
             svg_icon_from_text(
                 '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">'
-                '<circle cx="10.5" cy="10.5" r="6.5" stroke="#3fc2ec" stroke-width="1.8"/>'
-                '<path d="m15.5 15.5 5 5" stroke="#3fc2ec" stroke-width="1.8" stroke-linecap="round"/>'
+                '<circle cx="10.5" cy="10.5" r="6.5" stroke="#d9effb" stroke-width="1.8"/>'
+                '<path d="m15.5 15.5 5 5" stroke="#d9effb" stroke-width="1.8" stroke-linecap="round"/>'
                 '</svg>',
                 18,
             ).pixmap(18, 18)
@@ -20791,13 +21049,13 @@ class CommandPaletteDialog(QDialog):
 
         divider = QFrame(self.card)
         divider.setObjectName("commandPaletteDivider")
-        divider.setFixedHeight(1)
+        divider.setFixedHeight(0)
         layout.addWidget(divider)
 
         self.tools_label = QLabel(self.card)
         self.tools_label.setObjectName("commandPaletteSection")
-        self.tools_label.setContentsMargins(16, 0, 12, 0)
-        self.tools_label.setFixedHeight(30)
+        self.tools_label.setContentsMargins(14, 0, 12, 0)
+        self.tools_label.setFixedHeight(23)
         layout.addWidget(self.tools_label)
 
         self.tools_list = CommandPaletteListWidget(self, self.card)
@@ -20808,17 +21066,19 @@ class CommandPaletteDialog(QDialog):
 
         self.ask_section_label = QLabel(self.card)
         self.ask_section_label.setObjectName("commandPaletteSection")
-        self.ask_section_label.setContentsMargins(16, 0, 12, 0)
-        self.ask_section_label.setFixedHeight(28)
+        self.ask_section_label.setContentsMargins(14, 0, 12, 1)
+        self.ask_section_label.setAlignment(Qt.AlignLeft | Qt.AlignBottom)
+        self.ask_section_label.setFixedHeight(14)
         layout.addWidget(self.ask_section_label)
 
         self.ask_button = QPushButton(self.card)
         self.ask_button.setObjectName("commandPaletteAsk")
+        self.ask_button.setFixedHeight(50)
         self.ask_button.setCursor(Qt.PointingHandCursor)
         self.ask_button.setFocusPolicy(Qt.StrongFocus)
         ask_layout = QHBoxLayout(self.ask_button)
-        ask_layout.setContentsMargins(14, 4, 14, 4)
-        ask_layout.setSpacing(12)
+        ask_layout.setContentsMargins(14, 12, 14, 0)
+        ask_layout.setSpacing(10)
         self.ask_icon = QLabel(self.ask_button)
         self.ask_icon.setObjectName("commandPaletteAskIcon")
         self.ask_icon.setFixedSize(30, 30)
@@ -20842,8 +21102,9 @@ class CommandPaletteDialog(QDialog):
 
         footer = QFrame(self.card)
         footer.setObjectName("commandPaletteFooter")
+        footer.setFixedHeight(28)
         footer_layout = QHBoxLayout(footer)
-        footer_layout.setContentsMargins(14, 7, 14, 7)
+        footer_layout.setContentsMargins(14, 7, 16, 7)
         footer_layout.setSpacing(16)
         self.footer_navigation = QLabel(footer)
         self.footer_enter = QLabel(footer)
@@ -20861,35 +21122,38 @@ class CommandPaletteDialog(QDialog):
         self.search_edit.settingsRequested.connect(self.open_settings)
         self.ask_button.installEventFilter(self)
         self.set_accent(getattr(parent, "accent_name", "Ultra Blue"))
+        search_art_path = (
+            Path(get_runtime_base_dir()) / "assets" / "icons" / "command_palette" / "search_glass.png"
+        ).as_posix()
         self.setStyleSheet(
             "QDialog#commandPaletteDialog { background: transparent; }"
-            "QFrame#commandPaletteCard { background: #151a24; color: #e5eaf2; "
-            "border: 1px solid #33415a; border-radius: 13px; }"
-            "QFrame#commandPaletteSearchRow { background: #141923; border: 0; border-radius: 12px 12px 0 0; }"
-            "QLabel#commandPaletteSearchIcon { color: #3fc2ec; background: transparent; border: 0; font-size: 25px; font-weight: 400; }"
-            "QLineEdit#commandPaletteSearchEdit { background: transparent; border: 0; color: #e8edf6; "
-            "font-size: 14px; selection-background-color: #30466c; }"
-            "QPushButton#commandPaletteEscape { background: #171e2a; color: #99a8c0; "
-            "border: 1px solid #30405a; border-radius: 5px; padding: 3px 8px; }"
-            "QPushButton#commandPaletteEscape:hover { color: #e8edf6; border-color: #58708f; }"
-            "QFrame#commandPaletteDivider { background: #2c3546; border: 0; }"
-            "QLabel#commandPaletteSection { color: #8797b0; background: #151a24; border: 0; "
+            "QFrame#commandPaletteCard { background: transparent; color: #e5eaf2; border: 0; }"
+            "QLabel#commandPaletteBackgroundBlur, QLabel#commandPaletteBackgroundArt, QLabel#commandPaletteBackgroundTint { background: transparent; border: 0; }"
+            f"QFrame#commandPaletteSearchRow {{ background: transparent; border: 0; border-image: url('{search_art_path}') 0 0 0 0 stretch stretch; margin: 0 6px; }}"
+            "QLabel#commandPaletteSearchIcon { color: #eef8ff; background: transparent; border: 0; font-size: 25px; font-weight: 400; }"
+            "QLineEdit#commandPaletteSearchEdit { background: transparent; border: 0; color: #f0f7fc; "
+            "font-size: 14px; selection-background-color: rgba(125, 182, 216, 190); }"
+            "QPushButton#commandPaletteEscape { background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 rgba(224,242,252,190), stop:0.5 rgba(132,171,196,150), stop:1 rgba(207,230,244,195)); color: #f6fbff; "
+            "border: 1px solid rgba(239,249,255,220); border-radius: 10px; padding: 3px 13px; }"
+            "QPushButton#commandPaletteEscape:hover { color: #ffffff; border-color: #ffffff; }"
+            "QFrame#commandPaletteDivider { background: transparent; border: 0; }"
+            "QLabel#commandPaletteSection { color: #dceaf4; background: transparent; border: 0; "
             "font-size: 9px; font-weight: 700; letter-spacing: 1px; }"
-            "QListWidget#commandPaletteTools { background: #151a24; border: 0; outline: 0; "
-            "padding: 0 5px; }"
+            "QListWidget#commandPaletteTools { background: transparent; border: 0; outline: 0; "
+            "padding: 0 14px 0 5px; }"
             "QListWidget#commandPaletteTools::item { border: 0; }"
-            "QScrollBar:vertical { background: #151a24; width: 7px; margin: 0; }"
-            "QScrollBar::handle:vertical { background: #35445b; border-radius: 3px; min-height: 20px; }"
+            "QScrollBar:vertical { background: transparent; width: 7px; margin: 0; }"
+            "QScrollBar::handle:vertical { background: rgba(218, 237, 249, 135); border-radius: 3px; min-height: 20px; }"
             "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }"
-            "QPushButton#commandPaletteAsk { text-align: left; color: #dce5f2; background: #151a24; "
+            "QPushButton#commandPaletteAsk { text-align: left; color: #dce5f2; background: transparent; "
             "border: 0; border-radius: 8px; margin: 0 7px 5px; }"
-            "QPushButton#commandPaletteAsk:hover, QPushButton#commandPaletteAsk:focus { background: #202c46; }"
+            "QPushButton#commandPaletteAsk:hover, QPushButton#commandPaletteAsk:focus { background: rgba(205, 232, 247, 48); border: 1px solid rgba(230, 247, 255, 110); }"
             "QLabel#commandPaletteAskIcon { color: #3fc2ec; background: transparent; border: 0; font-size: 18px; }"
             "QLabel#commandPaletteAskTitle { color: #dce5f2; background: transparent; border: 0; font-size: 12px; font-weight: 600; }"
             "QLabel#commandPaletteAskDescription { color: #8292a9; background: transparent; border: 0; font-size: 10px; }"
-            "QFrame#commandPaletteFooter { background: #171d29; border-top: 1px solid #2a3446; "
+            "QFrame#commandPaletteFooter { background: transparent; border-top: 1px solid rgba(229, 244, 253, 125); "
             "border-left: 0; border-right: 0; border-bottom: 0; border-radius: 0 0 12px 12px; }"
-            "QFrame#commandPaletteFooter QLabel { color: #8292a9; background: transparent; border: 0; font-size: 10px; }"
+            "QFrame#commandPaletteFooter QLabel { color: #d4e2ec; background: transparent; border: 0; font-size: 10.5px; }"
         )
         self.set_language(self.language)
 
@@ -20921,9 +21185,12 @@ class CommandPaletteDialog(QDialog):
             self.ask_icon.setText("▣")
             return
         self.ask_icon.setText("")
-        self.ask_icon.setPixmap(
-            pixmap.scaled(self.ask_icon.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
-        )
+        tinted_pixmap = pixmap.scaled(self.ask_icon.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        icon_painter = QPainter(tinted_pixmap)
+        icon_painter.setCompositionMode(QPainter.CompositionMode_SourceIn)
+        icon_painter.fillRect(tinted_pixmap.rect(), QColor("#cfeafa"))
+        icon_painter.end()
+        self.ask_icon.setPixmap(tinted_pixmap)
 
     def set_entries(self, entries):
         self.entries = list(entries or [])
@@ -21061,6 +21328,22 @@ class CommandPaletteDialog(QDialog):
             x = min(max(bounds.left(), center.x() - self.width() // 2), bounds.right() - self.width() + 1)
             y = min(max(bounds.top(), center.y() - self.height() // 2), bounds.bottom() - self.height() + 1)
             self.move(x, y)
+            screen = screen or QApplication.primaryScreen()
+            if screen is not None:
+                screen_origin = screen.geometry().topLeft()
+                backdrop = screen.grabWindow(
+                    0, x - screen_origin.x(), y - screen_origin.y(), self.width(), self.height()
+                )
+                if not backdrop.isNull():
+                    image = backdrop.toImage().convertToFormat(QImage.Format_RGBA8888)
+                    image = image.scaled(self.width(), self.height(), Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
+                    backdrop_bgr = qimage_to_bgr_array(image)
+                    blurred_bgr = cv2.GaussianBlur(backdrop_bgr, (0, 0), sigmaX=40, sigmaY=40)
+                    blurred_image = QImage(
+                        blurred_bgr.data, blurred_bgr.shape[1], blurred_bgr.shape[0],
+                        blurred_bgr.strides[0], QImage.Format_BGR888,
+                    ).copy()
+                    self.background_blur.setPixmap(QPixmap.fromImage(blurred_image))
         QTimer.singleShot(0, self.search_edit.setFocus)
         return self.exec()
 
@@ -21417,6 +21700,9 @@ class AstroApp(QMainWindow):
         if self.magic_img is None:
             return
 
+        # Until the full-resolution worker completes, processed_img still
+        # belongs to the previous source/adjustments.
+        self._full_processing_dirty = True
         self._interactive_before_key = None
 
         self.cancel_params_preview()
@@ -21834,17 +22120,36 @@ class AstroApp(QMainWindow):
             deepsnr_strength=self.deepsnr_strength,
         )
 
+        processing_worker = getattr(self, "_processing_worker", None)
+        if (
+            getattr(self, "_full_processing_dirty", False)
+            or getattr(self, "_pending_processing_job", None) is not None
+            or (processing_worker is not None and processing_worker.isRunning())
+        ):
+            # Background Extraction updates magic_img immediately, but its
+            # full-resolution processed_img is produced asynchronously. Flush
+            # that work before choosing the DeepSNR export source.
+            self.apply_full_processing()
+
+        # Preserve the established DeepSNR input: the rendered image with the
+        # current tonal adjustments, which produces the expected dark sky.
         input_path = self._export_temp_image_for_external_tool("deepsnr")
         if not input_path:
             self.log("deepSNR skipped: no image loaded.", "warning")
             return False
 
         self._deepsnr_input_image_u8 = None
+        self._deepsnr_compare_before_image = None
         try:
             exported_input = safe_imread(input_path)
             self._deepsnr_input_image_u8 = normalize_to_uint8_bgr(exported_input)
+            if isinstance(self.processed_img, np.ndarray):
+                # Keep the current rendered result for the comparison slider.
+                # Retain its original precision and avoid another full-size copy.
+                self._deepsnr_compare_before_image = self.processed_img
         except Exception:
             self._deepsnr_input_image_u8 = None
+            self._deepsnr_compare_before_image = None
 
         output_dir = tempfile.mkdtemp(prefix="astro_deepsnr_output_")
         output_path = os.path.join(output_dir, "deepsnr_output.tif")
@@ -21906,7 +22211,7 @@ class AstroApp(QMainWindow):
                 try:
                     repaired = False
                     input_u8 = getattr(self, "_deepsnr_input_image_u8", None)
-                    compare_before_u8 = None if input_u8 is None else input_u8.copy()
+                    compare_before_image = getattr(self, "_deepsnr_compare_before_image", None)
                     output_raw = safe_imread(output_path)
                     output_u8 = normalize_to_uint8_bgr(output_raw)
                     if input_u8 is not None and output_u8 is not None:
@@ -21915,18 +22220,20 @@ class AstroApp(QMainWindow):
                             safe_imwrite(output_path, repaired_u8)
                 except Exception:
                     repaired = False
-                    compare_before_u8 = None
+                    compare_before_image = None
                 self.load_image_from_path(output_path)
-                if compare_before_u8 is not None and self.processed_img is not None:
-                    compare_after_u8 = self.apply_channel_visibility(self.processed_img)
-                    compare_before_display = self.apply_channel_visibility(compare_before_u8)
+                if compare_before_image is not None and self.processed_img is not None:
+                    # Compare both sides in linear display mode. The image load
+                    # above resets the view stretch, as it does for other files.
+                    compare_after_display = self.apply_channel_visibility(self.processed_img)
+                    compare_before_display = self.apply_channel_visibility(compare_before_image)
                     if (
                         compare_before_display is not None
-                        and compare_after_u8 is not None
-                        and compare_before_display.shape[:2] == compare_after_u8.shape[:2]
+                        and compare_after_display is not None
+                        and compare_before_display.shape[:2] == compare_after_display.shape[:2]
                     ):
-                        self.viewer.set_before(np_to_qpixmap(compare_before_display))
-                        self.viewer.set_after(np_to_qpixmap(compare_after_u8))
+                        self.viewer.set_before(np_to_qpixmap(compare_before_display, apply_display_stretch=False))
+                        self.viewer.set_after(np_to_qpixmap(compare_after_display, apply_display_stretch=False))
                         self.viewer.slider.setValue(50)
                         self.viewer.set_compare_enabled(True)
                         self.log("deepSNR: enabled Before/After slider for comparison.", "info")
@@ -21936,9 +22243,11 @@ class AstroApp(QMainWindow):
             else:
                 self.log("deepSNR finished but output file was not created.", "warning")
             self._deepsnr_input_image_u8 = None
+            self._deepsnr_compare_before_image = None
             return
 
         self._deepsnr_input_image_u8 = None
+        self._deepsnr_compare_before_image = None
         self.log("deepSNR finished.", "success")
 
     def _on_deepsnr_worker_thread_finished(self):
@@ -22242,7 +22551,7 @@ class AstroApp(QMainWindow):
         self.astro_ai_backend_url = resolve_backend_url(config.get("astro_ai_backend_url"))
         APP_PREFERENCES["astro_ai_backend_url"] = self.astro_ai_backend_url
         self.update_api_base = str(
-            config.get("update_api_base") or os.environ.get("ASTRO_UPDATE_API_BASE", "https://proksima-centauri.github.io/Astro-Ai-Processor")
+            config.get("update_api_base") or os.environ.get("ASTRO_UPDATE_API_BASE", "https://proksima-centauri.github.io/DSOpus")
         ).strip().rstrip("/")
         self.update_app_id = str(
             config.get("update_app_id") or os.environ.get("ASTRO_UPDATE_APP_ID", "astro-ai-processor")
@@ -22363,7 +22672,7 @@ class AstroApp(QMainWindow):
             return supplied
         if not tag.lower().startswith("v"):
             tag = "v" + tag
-        return f"https://github.com/Proksima-Centauri/Astro-Ai-Processor/releases/download/{urllib.parse.quote(tag, safe='')}/{asset}"
+        return f"https://github.com/Proksima-Centauri/DSOpus/releases/download/{urllib.parse.quote(tag, safe='')}/{asset}"
 
     def _record_update_decision(self, decision: str, info: dict):
         if str(info.get("api") or "") != "new":

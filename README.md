@@ -64,7 +64,7 @@ pip install -r requirements.txt
 ## Run
 
 ```bash
-python3 "Astro Ai Processor.py"
+python3 "app.py"
 ```
 
 ## Linux bundle installer (.desktop support)
@@ -89,7 +89,7 @@ chmod +x packaging/linux/build-gui-installer.sh
 ./packaging/linux/build-gui-installer.sh --source "dist/Astro AI Processor"
 ```
 
-2. Distribute `dist/Astro-Ai-Processor-Installer-Linux`.
+2. Distribute `dist/DSOpus-Installer-Linux`.
 
 ## Publishing a release
 
@@ -152,7 +152,7 @@ synthetic index from the source demo cannot solve real images.
 
 ## 3D FLY quick guide
 
-1. Stage 1 `remove stars` (optional): run StarNet++.
+1. Stage 1 `remove stars` (required): run StarNet++; later stages unlock after it finishes.
 2. Stage 2 `mark sections`: cut layer zones (`Cut`) or use `Load layers`.
 3. Stage 3 `edge smoothing`: select a layer, set blur, click `Apply`.
 4. Stage 4 `clip setup`: set duration and FPS.
@@ -180,7 +180,7 @@ Common issues:
 
 ## Project structure
 
-- `Astro Ai Processor.py` - main app file.
+- `app.py` - main app file.
 - `deep_sky_catalog.py` - offline deep-sky object catalog.
 - `3d_fly_help.md` - detailed 3D FLY manual.
 - `requirements.txt` - Python dependencies.

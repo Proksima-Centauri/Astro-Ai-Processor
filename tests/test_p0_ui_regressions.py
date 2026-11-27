@@ -14,7 +14,7 @@ import tempfile
 
 import numpy as np
 
-spec = importlib.util.spec_from_file_location("astro_app_p0_test", "Astro Ai Processor.py")
+spec = importlib.util.spec_from_file_location("astro_app_p0_test", "app.py")
 module = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = module
 spec.loader.exec_module(module)

@@ -5,7 +5,7 @@ workers_dev = true
 
 [vars]
 OPENROUTER_MODEL = "nvidia/nemotron-3.5-lightning:free"
-APP_URL = "https://github.com/Proksima-Centauri/Astro-Ai-Processor"
+APP_URL = "https://github.com/Proksima-Centauri/DSOpus"
 ALLOWED_ORIGINS = ""
 
 # Per-IP abuse control. Choose a unique integer namespace ID for your account.

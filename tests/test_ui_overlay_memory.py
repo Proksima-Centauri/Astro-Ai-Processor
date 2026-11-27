@@ -14,7 +14,7 @@ import sys
 import tempfile
 from unittest.mock import patch
 
-spec = importlib.util.spec_from_file_location("astro_app_overlay_test", "Astro Ai Processor.py")
+spec = importlib.util.spec_from_file_location("astro_app_overlay_test", "app.py")
 module = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = module
 spec.loader.exec_module(module)
@@ -50,7 +50,7 @@ os.environ["HOME"] = temporary_home.name
 os.environ["XDG_CONFIG_HOME"] = temporary_home.name + "/config"
 os.environ["XDG_DATA_HOME"] = temporary_home.name + "/data"
 window = module.AstroApp()
-assert window.windowTitle() == "Astro AI Processor"
+assert window.windowTitle() == "DSOpus"
 assert window.topbar_splitter.handleWidth() == 5
 assert window.topbar_splitter.styleSheet() == ""
 assert "QSplitter::handle:vertical" in app.styleSheet()

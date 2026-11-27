@@ -6,7 +6,7 @@ REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
 
 SOURCE_DIR="${REPO_ROOT}/dist/Astro AI Processor"
 OUTPUT_DIR="${REPO_ROOT}/dist"
-INSTALLER_NAME="Astro-Ai-Processor-Installer-Linux"
+INSTALLER_NAME="DSOpus-Installer-Linux"
 PYTHON_BIN=""
 
 print_help() {

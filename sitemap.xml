@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://proksima-centauri.github.io/Astro-Ai-Processor/</loc>
+    <loc>https://proksima-centauri.github.io/DSOpus/</loc>
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://proksima-centauri.github.io/Astro-Ai-Processor/about.html</loc>
+    <loc>https://proksima-centauri.github.io/DSOpus/about.html</loc>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://proksima-centauri.github.io/Astro-Ai-Processor/docs/</loc>
+    <loc>https://proksima-centauri.github.io/DSOpus/docs/</loc>
     <priority>0.8</priority>
   </url>
 </urlset>

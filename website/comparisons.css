@@ -1,0 +1,55 @@
+/* Keep both comparison images at the same size while revealing them with a clip. */
+#tools .compare-overlay {
+  width: 100% !important;
+  border-right: 0;
+}
+
+#tools .compare-overlay::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 1px;
+  height: 100%;
+  background: rgba(255, 255, 255, .9);
+}
+
+#tools .compare-overlay img {
+  width: 100%;
+}
+
+/* Let the before/after examples read as image work, not small cards. */
+@media (min-width: 621px) {
+  #tools .comparison-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 54px;
+  }
+
+  #tools .comparison-card {
+    width: 100%;
+    max-width: 1320px;
+    justify-self: center;
+  }
+
+  #tools .compare-frame {
+    aspect-ratio: 1.82;
+  }
+
+  #tools .comparison-caption {
+    padding: 22px 0;
+  }
+
+  #tools .comparison-caption h3 {
+    font-size: 20px;
+  }
+
+  #tools .comparison-caption p {
+    font-size: 13px;
+  }
+}
+
+@media (min-width: 621px) and (max-width: 900px) {
+  #tools .compare-overlay img {
+    width: 100%;
+  }
+}

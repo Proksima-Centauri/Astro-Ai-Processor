@@ -7,7 +7,7 @@ import numpy as np
 from PyQt6.QtCore import QCoreApplication
 
 
-APP_PATH = Path(__file__).resolve().parents[1] / "Astro Ai Processor.py"
+APP_PATH = Path(__file__).resolve().parents[1] / "app.py"
 APP_MODULE_NAME = "astro_ai_processor_worker_tests"
 APP_SPEC = importlib.util.spec_from_file_location(APP_MODULE_NAME, APP_PATH)
 APP_MODULE = importlib.util.module_from_spec(APP_SPEC)

@@ -1,0 +1,9 @@
+{
+  "name": "DSOpus",
+  "short_name": "DSOpus",
+  "description": "Professional astrophotography processing.",
+  "icons": [{ "src": "apple-touch-icon.png", "sizes": "180x180", "type": "image/png" }],
+  "theme_color": "#070a12",
+  "background_color": "#070a12",
+  "display": "standalone"
+}
